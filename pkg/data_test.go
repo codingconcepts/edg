@@ -183,7 +183,7 @@ func newTestEnv(t *testing.T) *Env {
 	t.Helper()
 
 	env := &Env{
-		oneCache:  map[string]any{},
+		oneCache:  map[uintptr]any{},
 		permCache: map[string]any{},
 		nurandC:   map[int]int{},
 		request:   &Request{},

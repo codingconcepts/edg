@@ -66,7 +66,7 @@ init:
 
   - name: fetch_accounts
     type: query
-    query: SELECT id FROM account
+    query: SELECT id FROM account ORDER BY random()
 
 run_weights:
   check_balance: 50

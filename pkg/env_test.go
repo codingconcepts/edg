@@ -8,7 +8,7 @@ import (
 
 func testEnv(data map[string][]map[string]any) *Env {
 	env := &Env{
-		oneCache:  map[string]any{},
+		oneCache:  map[uintptr]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
 	}
@@ -674,7 +674,7 @@ func TestPickWeighted_NoWeights(t *testing.T) {
 
 func TestClearOneCache(t *testing.T) {
 	env := testEnv(nil)
-	env.oneCache["key"] = "value"
+	env.oneCache[1] = "value"
 
 	env.clearOneCache()
 
@@ -700,7 +700,7 @@ func benchEnv(dataSize int) *Env {
 		rows[i] = map[string]any{"id": i, "name": fmt.Sprintf("item_%d", i)}
 	}
 	env := &Env{
-		oneCache:  map[string]any{},
+		oneCache:  map[uintptr]any{},
 		permCache: map[string]any{},
 		nurandC:   map[int]int{},
 		env:       map[string]any{},

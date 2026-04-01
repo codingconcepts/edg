@@ -179,6 +179,15 @@ func runCmd() *cobra.Command {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
 			defer cancel()
 
+			// Run init queries once and share results across workers.
+			initEnv, err := pkg.NewEnv(db, req)
+			if err != nil {
+				return err
+			}
+			if err := initEnv.Init(ctx); err != nil {
+				return err
+			}
+
 			var (
 				wg       sync.WaitGroup
 				count    atomic.Int64
@@ -226,14 +235,7 @@ func runCmd() *cobra.Command {
 						slog.Error("env error", "worker", i, "error", err)
 						return
 					}
-
-					if err := workerEnv.Init(ctx); err != nil {
-						if ctx.Err() != nil {
-							return
-						}
-						slog.Error("init error", "worker", i, "error", err)
-						return
-					}
+					workerEnv.InitFrom(initEnv)
 
 					for ctx.Err() == nil {
 						if err := workerEnv.RunOnce(ctx); err != nil {

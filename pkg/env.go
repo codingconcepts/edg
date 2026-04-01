@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/expr-lang/expr"
@@ -23,7 +24,7 @@ type Env struct {
 	env      map[string]any
 
 	oneCacheMutex sync.RWMutex
-	oneCache      map[string]any
+	oneCache      map[uintptr]any
 
 	permCacheMutex sync.RWMutex
 	permCache      map[string]any
@@ -38,7 +39,7 @@ type Env struct {
 func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 	env := Env{
 		db:        db,
-		oneCache:  map[string]any{},
+		oneCache:  map[uintptr]any{},
 		permCache: map[string]any{},
 		nurandC:   map[int]int{},
 		request:   r,
@@ -192,6 +193,27 @@ func (e *Env) Down(ctx context.Context) error {
 // Init runs the init queries once (e.g. to seed reference data).
 func (e *Env) Init(ctx context.Context) error {
 	return e.runSection(ctx, e.request.Init, ConfigSectionInit)
+}
+
+// InitFrom copies init query results from another Env, avoiding
+// redundant database queries when multiple workers need the same
+// initial dataset. Each query-type result gets its own slice copy
+// so that refDiff's in-place swaps don't interfere across workers.
+func (e *Env) InitFrom(source *Env) {
+	for _, q := range e.request.Init {
+		if q.Type != QueryTypeQuery {
+			continue
+		}
+		source.envMutex.RLock()
+		data, ok := source.env[q.Name].([]map[string]any)
+		source.envMutex.RUnlock()
+		if !ok {
+			continue
+		}
+		copied := make([]map[string]any, len(data))
+		copy(copied, data)
+		e.SetEnv(q.Name, copied)
+	}
 }
 
 // RunOnce executes one iteration of the run queries. When run_weights
@@ -451,7 +473,7 @@ func gen(s string) any {
 }
 
 func (e *Env) refSame(data []map[string]any) map[string]any {
-	cacheKey := fmt.Sprintf("ref_%p", data)
+	cacheKey := uintptr(unsafe.Pointer(unsafe.SliceData(data)))
 
 	e.oneCacheMutex.RLock()
 	if cached, exists := e.oneCache[cacheKey]; exists {
@@ -513,9 +535,8 @@ func (e *Env) refDiff(name string) map[string]any {
 
 	i := rand.IntN(len(data)-e.uniqIndex) + e.uniqIndex
 
-	// Swap slice elements and update environment.
+	// Swap in place; data shares its backing array with e.env[name].
 	data[i], data[e.uniqIndex] = data[e.uniqIndex], data[i]
-	e.SetEnv(name, data)
 
 	val := data[e.uniqIndex]
 
