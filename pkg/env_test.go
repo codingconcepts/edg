@@ -1,0 +1,692 @@
+package pkg
+
+import (
+	"strings"
+	"testing"
+)
+
+func testEnv(data map[string][]map[string]any) *Env {
+	env := &Env{
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{},
+	}
+	for name, rows := range data {
+		env.env[name] = rows
+	}
+	return env
+}
+
+func sampleRows() []map[string]any {
+	return []map[string]any{
+		{"id": 1, "name": "a"},
+		{"id": 2, "name": "b"},
+		{"id": 3, "name": "c"},
+	}
+}
+
+func TestConstant(t *testing.T) {
+	tests := []struct {
+		name  string
+		input any
+	}{
+		{"string", "hello"},
+		{"int", 42},
+		{"nil", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := constant(tt.input)
+			if got != tt.input {
+				t.Errorf("constant(%v) = %v, want %v", tt.input, got, tt.input)
+			}
+		})
+	}
+}
+
+func TestExpr(t *testing.T) {
+	env := testEnv(nil)
+	env.env["const"] = constant
+	env.env["expr"] = constant
+	env.env["warehouses"] = 5
+
+	q := &Query{
+		Args: []string{"expr(warehouses * 10)", "expr(warehouses + 1)"},
+	}
+	if err := q.CompileArgs(env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	argSets, err := q.GenerateArgs(env)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	args := argSets[0]
+	if args[0] != 50 {
+		t.Errorf("expr(warehouses * 10) = %v, want 50", args[0])
+	}
+	if args[1] != 6 {
+		t.Errorf("expr(warehouses + 1) = %v, want 6", args[1])
+	}
+}
+
+func TestBareArithmetic(t *testing.T) {
+	env := testEnv(nil)
+	env.env["orders"] = 30000
+	env.env["districts"] = 10
+
+	q := &Query{
+		Args: []string{"orders / districts"},
+	}
+	if err := q.CompileArgs(env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	argSets, err := q.GenerateArgs(env)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	got, ok := argSets[0][0].(float64)
+	if !ok {
+		t.Fatalf("orders / districts = %v (%T), want float64", argSets[0][0], argSets[0][0])
+	}
+	if got != 3000 {
+		t.Errorf("orders / districts = %v, want 3000", got)
+	}
+}
+
+func TestGen(t *testing.T) {
+	result := gen("number:1,100")
+	if result == nil {
+		t.Fatal("gen returned nil for valid pattern")
+	}
+
+	result = gen("{number:1,100}")
+	if result == nil {
+		t.Fatal("gen returned nil for already-wrapped pattern")
+	}
+}
+
+func TestWrap(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"number:1,10", "{number:1,10}"},
+		{"{number:1,10}", "{number:1,10}"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := wrap(tt.input); got != tt.want {
+				t.Errorf("wrap(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRefRand(t *testing.T) {
+	rows := sampleRows()
+	env := testEnv(map[string][]map[string]any{"items": rows})
+
+	result := env.refRand("items")
+	if result == nil {
+		t.Fatal("refRand returned nil")
+	}
+
+	if _, ok := result["id"]; !ok {
+		t.Error("refRand result missing 'id' key")
+	}
+}
+
+func TestRefN(t *testing.T) {
+	rows := sampleRows()
+	env := testEnv(map[string][]map[string]any{"items": rows})
+
+	result := env.refN("items", "id", 2, 3)
+	if result == "" {
+		t.Fatal("refN returned empty string")
+	}
+
+	parts := strings.Split(result, ",")
+	if len(parts) < 2 || len(parts) > 3 {
+		t.Errorf("refN returned %d items, want 2-3", len(parts))
+	}
+
+	// All values should be unique.
+	seen := map[string]bool{}
+	for _, v := range parts {
+		if seen[v] {
+			t.Errorf("refN returned duplicate value: %v", v)
+		}
+		seen[v] = true
+	}
+}
+
+func TestRefN_ClampsToDataSize(t *testing.T) {
+	rows := sampleRows() // 3 rows
+	env := testEnv(map[string][]map[string]any{"items": rows})
+
+	result := env.refN("items", "id", 5, 10)
+	parts := strings.Split(result, ",")
+	if len(parts) != 3 {
+		t.Errorf("refN returned %d items, want 3 (clamped to data size)", len(parts))
+	}
+}
+
+func TestRefN_UnknownName(t *testing.T) {
+	env := testEnv(nil)
+	if result := env.refN("nonexistent", "id", 1, 3); result != "" {
+		t.Errorf("refN for unknown name = %v, want empty string", result)
+	}
+}
+
+func TestNURand_InRange(t *testing.T) {
+	env := testEnv(nil)
+	env.nurandC = map[int]int{}
+
+	for range 1000 {
+		v := env.nurand(1023, 1, 3000)
+		if v < 1 || v > 3000 {
+			t.Fatalf("nurand(1023, 1, 3000) = %d, out of range [1, 3000]", v)
+		}
+	}
+}
+
+func TestNURand_NonUniform(t *testing.T) {
+	env := testEnv(nil)
+	env.nurandC = map[int]int{}
+
+	// With A=1023, x=1, y=3000, NURand should produce a non-uniform
+	// distribution. Bucket into 10 bins and verify they aren't all equal.
+	bins := make([]int, 10)
+	for range 10000 {
+		v := env.nurand(1023, 1, 3000)
+		bins[(v-1)*10/3000]++
+	}
+
+	allSame := true
+	for _, b := range bins {
+		if b != bins[0] {
+			allSame = false
+			break
+		}
+	}
+	if allSame {
+		t.Error("nurand produced perfectly uniform distribution; expected non-uniform")
+	}
+}
+
+func TestNURand_ConstantC(t *testing.T) {
+	env := testEnv(nil)
+	env.nurandC = map[int]int{}
+
+	_ = env.nurand(1023, 1, 3000)
+	c1 := env.nurandC[1023]
+
+	// Subsequent calls should use the same C.
+	for range 100 {
+		_ = env.nurand(1023, 1, 3000)
+	}
+	if env.nurandC[1023] != c1 {
+		t.Errorf("NURand C changed: got %d, want %d", env.nurandC[1023], c1)
+	}
+}
+
+func TestNURandN(t *testing.T) {
+	env := testEnv(nil)
+	env.nurandC = map[int]int{}
+
+	result := env.nurandN(8191, 1, 100000, 5, 15)
+	parts := strings.Split(result, ",")
+
+	if len(parts) < 5 || len(parts) > 15 {
+		t.Errorf("nurandN returned %d items, want 5-15", len(parts))
+	}
+
+	seen := map[string]bool{}
+	for _, v := range parts {
+		if seen[v] {
+			t.Errorf("nurandN returned duplicate value: %v", v)
+		}
+		seen[v] = true
+	}
+}
+
+func TestRefRand_UnknownName(t *testing.T) {
+	env := testEnv(nil)
+	if result := env.refRand("nonexistent"); result != nil {
+		t.Errorf("refRand for unknown name = %v, want nil", result)
+	}
+}
+
+func TestRefRand_EmptyData(t *testing.T) {
+	env := testEnv(map[string][]map[string]any{"empty": {}})
+	if result := env.refRand("empty"); result != nil {
+		t.Errorf("refRand for empty data = %v, want nil", result)
+	}
+}
+
+func TestRefSame_ReturnsSameRow(t *testing.T) {
+	rows := sampleRows()
+	env := testEnv(nil)
+
+	first := env.refSame(rows)
+	second := env.refSame(rows)
+
+	if first["id"] != second["id"] {
+		t.Errorf("refSame returned different rows: %v vs %v", first["id"], second["id"])
+	}
+}
+
+func TestRefSame_ClearedBetweenCycles(t *testing.T) {
+	rows := sampleRows()
+	env := testEnv(nil)
+
+	first := env.refSame(rows)
+	env.clearOneCache()
+
+	// After clearing, a new random row is picked. Run enough times to
+	// confirm it doesn't always match (statistically near-certain with 3 rows).
+	different := false
+	for range 20 {
+		second := env.refSame(rows)
+		if first["id"] != second["id"] {
+			different = true
+			break
+		}
+		env.clearOneCache()
+	}
+	if !different {
+		t.Error("refSame returned the same row 20 times after cache clears; expected variation")
+	}
+}
+
+func TestRefPerm_ReturnsSameRowForever(t *testing.T) {
+	env := testEnv(map[string][]map[string]any{"warehouses": sampleRows()})
+
+	first := env.refPerm("warehouses")
+	if first == nil {
+		t.Fatal("refPerm returned nil")
+	}
+
+	for range 10 {
+		got := env.refPerm("warehouses")
+		if got["id"] != first["id"] {
+			t.Errorf("refPerm changed: got %v, want %v", got["id"], first["id"])
+		}
+	}
+}
+
+func TestRefPerm_SurvivesCacheClear(t *testing.T) {
+	env := testEnv(map[string][]map[string]any{"warehouses": sampleRows()})
+
+	first := env.refPerm("warehouses")
+	env.clearOneCache() // oneCache clear should NOT affect permCache
+
+	got := env.refPerm("warehouses")
+	if got["id"] != first["id"] {
+		t.Errorf("refPerm changed after clearOneCache: got %v, want %v", got["id"], first["id"])
+	}
+}
+
+func TestRefPerm_UnknownName(t *testing.T) {
+	env := testEnv(nil)
+	if result := env.refPerm("nonexistent"); result != nil {
+		t.Errorf("refPerm for unknown name = %v, want nil", result)
+	}
+}
+
+func TestRefDiff_ReturnsUniqueRows(t *testing.T) {
+	env := testEnv(map[string][]map[string]any{"items": sampleRows()})
+
+	seen := map[any]bool{}
+	for range 3 {
+		row := env.refDiff("items")
+		if row == nil {
+			t.Fatal("refDiff returned nil")
+		}
+		id := row["id"]
+		if seen[id] {
+			t.Errorf("refDiff returned duplicate id: %v", id)
+		}
+		seen[id] = true
+	}
+
+	if len(seen) != 3 {
+		t.Errorf("expected 3 unique rows, got %d", len(seen))
+	}
+}
+
+func TestRefDiff_ResetsAfterCycle(t *testing.T) {
+	env := testEnv(map[string][]map[string]any{"items": sampleRows()})
+
+	// Exhaust all 3 rows.
+	for range 3 {
+		env.refDiff("items")
+	}
+
+	// Reset and verify we can get rows again.
+	env.resetUniqIndex()
+
+	row := env.refDiff("items")
+	if row == nil {
+		t.Fatal("refDiff returned nil after reset")
+	}
+}
+
+func TestRefDiff_UnknownName(t *testing.T) {
+	env := testEnv(nil)
+	if result := env.refDiff("nonexistent"); result != nil {
+		t.Errorf("refDiff for unknown name = %v, want nil", result)
+	}
+}
+
+func TestSeedArgsCompiled(t *testing.T) {
+	env := testEnv(nil)
+	env.env["const"] = constant
+	env.env["items"] = 100
+
+	seedQuery := &Query{
+		Name: "populate_items",
+		Args: []string{"items"},
+	}
+	if err := seedQuery.CompileArgs(env); err != nil {
+		t.Fatalf("CompileArgs for seed query failed: %v", err)
+	}
+
+	if len(seedQuery.CompiledArgs) != 1 {
+		t.Fatalf("expected 1 compiled arg, got %d", len(seedQuery.CompiledArgs))
+	}
+
+	argSets, err := seedQuery.GenerateArgs(env)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	if len(argSets) != 1 {
+		t.Fatalf("expected 1 arg set, got %d", len(argSets))
+	}
+	if argSets[0][0] != 100 {
+		t.Errorf("seed arg = %v, want 100", argSets[0][0])
+	}
+}
+
+func TestConfigSectionSeedValue(t *testing.T) {
+	if ConfigSectionSeed != "seed" {
+		t.Errorf("ConfigSectionSeed = %q, want %q", ConfigSectionSeed, "seed")
+	}
+}
+
+func TestConfigSectionDeseedValue(t *testing.T) {
+	if ConfigSectionDeseed != "deseed" {
+		t.Errorf("ConfigSectionDeseed = %q, want %q", ConfigSectionDeseed, "deseed")
+	}
+}
+
+func TestExpressions(t *testing.T) {
+	req := &Request{
+		Globals: map[string]any{
+			"customers": 30000,
+			"districts": 10,
+		},
+		Expressions: map[string]string{
+			"cust_per_district": "customers / districts",
+		},
+		Run: []*Query{
+			{Args: []string{"cust_per_district()"}},
+		},
+	}
+
+	env, err := NewEnv(nil, req)
+	if err != nil {
+		t.Fatalf("NewEnv failed: %v", err)
+	}
+
+	argSets, err := req.Run[0].GenerateArgs(env)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	got, ok := argSets[0][0].(float64)
+	if !ok {
+		t.Fatalf("cust_per_district() = %v (%T), want float64", argSets[0][0], argSets[0][0])
+	}
+	if got != 3000 {
+		t.Errorf("cust_per_district() = %v, want 3000", got)
+	}
+}
+
+func TestExpressions_WithArgs(t *testing.T) {
+	req := &Request{
+		Globals: map[string]any{
+			"customers": 30000,
+		},
+		Expressions: map[string]string{
+			"divide": "customers / args[0]",
+		},
+		Run: []*Query{
+			{Args: []string{"divide(10)"}},
+		},
+	}
+
+	env, err := NewEnv(nil, req)
+	if err != nil {
+		t.Fatalf("NewEnv failed: %v", err)
+	}
+
+	argSets, err := req.Run[0].GenerateArgs(env)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	got, ok := argSets[0][0].(float64)
+	if !ok {
+		t.Fatalf("divide(10) = %v (%T), want float64", argSets[0][0], argSets[0][0])
+	}
+	if got != 3000 {
+		t.Errorf("divide(10) = %v, want 3000", got)
+	}
+}
+
+func TestExpressions_InvalidBody(t *testing.T) {
+	req := &Request{
+		Expressions: map[string]string{
+			"bad": "undefined_var +",
+		},
+	}
+
+	_, err := NewEnv(nil, req)
+	if err == nil {
+		t.Fatal("expected error for invalid expression, got nil")
+	}
+}
+
+func TestBatch(t *testing.T) {
+	result := batch(3)
+	if len(result) != 3 {
+		t.Fatalf("batch(3) returned %d sets, want 3", len(result))
+	}
+	for i, row := range result {
+		if len(row) != 1 {
+			t.Fatalf("batch row %d has %d values, want 1", i, len(row))
+		}
+		if row[0] != i {
+			t.Errorf("batch row %d = %v, want %d", i, row[0], i)
+		}
+	}
+}
+
+func TestBatch_Zero(t *testing.T) {
+	result := batch(0)
+	if len(result) != 0 {
+		t.Errorf("batch(0) returned %d sets, want 0", len(result))
+	}
+}
+
+func TestGenerateArgs_Batch(t *testing.T) {
+	env := testEnv(nil)
+	env.env["batch"] = batch
+	env.env["const"] = constant
+	env.env["items"] = 30
+
+	q := &Query{Args: []string{"batch(items / 10)", "const(10)"}}
+	if err := q.CompileArgs(env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	argSets, err := q.GenerateArgs(env)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	if len(argSets) != 3 {
+		t.Fatalf("expected 3 arg sets, got %d", len(argSets))
+	}
+
+	for i, args := range argSets {
+		if args[0] != i {
+			t.Errorf("arg set %d: args[0] = %v, want %d", i, args[0], i)
+		}
+		if args[1] != 10 {
+			t.Errorf("arg set %d: args[1] = %v, want 10", i, args[1])
+		}
+	}
+}
+
+func TestGenBatch(t *testing.T) {
+	result := genBatch(25, 10, "email")
+	if len(result) != 3 {
+		t.Fatalf("genBatch(25, 10) returned %d batches, want 3", len(result))
+	}
+
+	// First two batches should have 10 emails each.
+	for _, i := range []int{0, 1} {
+		csv := result[i][0].(string)
+		parts := strings.Split(csv, ",")
+		if len(parts) != 10 {
+			t.Errorf("batch %d has %d values, want 10", i, len(parts))
+		}
+	}
+
+	// Last batch should have 5 emails (remainder).
+	csv := result[2][0].(string)
+	parts := strings.Split(csv, ",")
+	if len(parts) != 5 {
+		t.Errorf("last batch has %d values, want 5", len(parts))
+	}
+
+	// All emails across all batches should be unique.
+	seen := map[string]bool{}
+	for _, row := range result {
+		for _, v := range strings.Split(row[0].(string), ",") {
+			if seen[v] {
+				t.Errorf("genBatch produced duplicate: %s", v)
+			}
+			seen[v] = true
+		}
+	}
+	if len(seen) != 25 {
+		t.Errorf("genBatch produced %d unique values, want 25", len(seen))
+	}
+}
+
+func TestGenBatch_ExactMultiple(t *testing.T) {
+	result := genBatch(20, 10, "email")
+	if len(result) != 2 {
+		t.Fatalf("genBatch(20, 10) returned %d batches, want 2", len(result))
+	}
+	for i, row := range result {
+		parts := strings.Split(row[0].(string), ",")
+		if len(parts) != 10 {
+			t.Errorf("batch %d has %d values, want 10", i, len(parts))
+		}
+	}
+}
+
+func TestSetEnv(t *testing.T) {
+	env := testEnv(nil)
+	data := sampleRows()
+
+	env.SetEnv("test_data", data)
+
+	raw, ok := env.env["test_data"]
+	if !ok {
+		t.Fatal("SetEnv did not set the key")
+	}
+
+	got := raw.([]map[string]any)
+	if len(got) != len(data) {
+		t.Errorf("SetEnv stored %d rows, want %d", len(got), len(data))
+	}
+}
+
+func TestPickWeighted(t *testing.T) {
+	queries := []*Query{
+		{Name: "heavy"},
+		{Name: "light"},
+	}
+	env := &Env{
+		request: &Request{
+			Run: queries,
+			RunWeights: map[string]int{
+				"heavy": 90,
+				"light": 10,
+			},
+		},
+	}
+
+	counts := map[string]int{}
+	for range 1000 {
+		q := env.pickWeighted()
+		if q == nil {
+			t.Fatal("pickWeighted returned nil")
+		}
+		counts[q.Name]++
+	}
+
+	// With 90/10 weights over 1000 iterations, "heavy" should
+	// appear significantly more than "light".
+	if counts["heavy"] < 800 {
+		t.Errorf("heavy picked %d/1000 times, expected ~900", counts["heavy"])
+	}
+	if counts["light"] < 50 {
+		t.Errorf("light picked %d/1000 times, expected ~100", counts["light"])
+	}
+}
+
+func TestPickWeighted_NoWeights(t *testing.T) {
+	env := &Env{
+		request: &Request{
+			Run:        []*Query{{Name: "a"}},
+			RunWeights: nil,
+		},
+	}
+
+	if q := env.pickWeighted(); q != nil {
+		t.Errorf("pickWeighted with no weights returned %v, want nil", q.Name)
+	}
+}
+
+func TestClearOneCache(t *testing.T) {
+	env := testEnv(nil)
+	env.oneCache["key"] = "value"
+
+	env.clearOneCache()
+
+	if len(env.oneCache) != 0 {
+		t.Errorf("clearOneCache left %d entries", len(env.oneCache))
+	}
+}
+
+func TestResetUniqIndex(t *testing.T) {
+	env := testEnv(nil)
+	env.uniqIndex = 5
+
+	env.resetUniqIndex()
+
+	if env.uniqIndex != 0 {
+		t.Errorf("resetUniqIndex left index at %d", env.uniqIndex)
+	}
+}
