@@ -28,13 +28,13 @@ func main() {
 	log.SetFlags(0)
 
 	root := &cobra.Command{
-		Use:   "tpcc",
-		Short: "TPC-C benchmark runner",
+		Use:   "edg",
+		Short: "Expression-based Data Generator",
 	}
 
 	root.PersistentFlags().StringVar(&flagURL, "url", "", "database connection URL (env: URL)")
-	root.PersistentFlags().StringVar(&configFile, "config", "tpc-c.yaml", "workload YAML config file")
-	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name")
+	root.PersistentFlags().StringVar(&configFile, "config", "", "workload YAML config file")
+	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle]")
 
 	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd())
 
@@ -220,10 +220,7 @@ func runCmd() *cobra.Command {
 			}()
 
 			for i := range workers {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-
+				wg.Go(func() {
 					workerEnv, err := pkg.NewEnv(db, req)
 					if err != nil {
 						slog.Error("env error", "worker", i, "error", err)
@@ -249,7 +246,7 @@ func runCmd() *cobra.Command {
 						}
 						count.Add(1)
 					}
-				}()
+				})
 			}
 
 			slog.Info("running", "workers", workers, "duration", duration)
