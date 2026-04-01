@@ -216,6 +216,71 @@ up:
 	}
 }
 
+func BenchmarkCompileArgs(b *testing.B) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"args_1", []string{"const(42)"}},
+		{"args_3", []string{"const(42)", "ref_rand('items')", "const(42)"}},
+		{"args_5", []string{"const(42)", "ref_rand('items')", "const(42)", "ref_rand('items')", "const(42)"}},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			env := benchEnv(100)
+			env.env["const"] = constant
+			env.env["ref_rand"] = env.refRand
+			b.ResetTimer()
+			for range b.N {
+				q := &Query{Args: tc.args}
+				q.CompileArgs(env)
+			}
+		})
+	}
+}
+
+func BenchmarkGenerateArgs(b *testing.B) {
+	cases := []struct {
+		name    string
+		envSize int
+		args    []string
+		extra   func(env *Env)
+	}{
+		{
+			name:    "scalar",
+			envSize: 100,
+			args:    []string{"const(42)", "ref_rand('items')"},
+			extra: func(env *Env) {
+				env.env["const"] = constant
+				env.env["ref_rand"] = env.refRand
+			},
+		},
+		{
+			name:    "batch",
+			envSize: 0,
+			args:    []string{"batch(3)", "const(10)"},
+			extra: func(env *Env) {
+				env.env["const"] = constant
+				env.env["batch"] = batch
+			},
+		},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			env := benchEnv(tc.envSize)
+			tc.extra(env)
+			q := &Query{Args: tc.args}
+			if err := q.CompileArgs(env); err != nil {
+				b.Fatal(err)
+			}
+			b.ResetTimer()
+			for range b.N {
+				q.GenerateArgs(env)
+			}
+		})
+	}
+}
+
 func TestGenerateArgs_MixedBatchAndScalar(t *testing.T) {
 	env := testEnv(nil)
 	env.env["const"] = constant

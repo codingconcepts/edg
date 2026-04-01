@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -165,7 +166,7 @@ func TestRefN(t *testing.T) {
 }
 
 func TestRefN_ClampsToDataSize(t *testing.T) {
-	rows := sampleRows() // 3 rows
+	rows := sampleRows()
 	env := testEnv(map[string][]map[string]any{"items": rows})
 
 	result := env.refN("items", "id", 5, 10)
@@ -323,7 +324,9 @@ func TestRefPerm_SurvivesCacheClear(t *testing.T) {
 	env := testEnv(map[string][]map[string]any{"warehouses": sampleRows()})
 
 	first := env.refPerm("warehouses")
-	env.clearOneCache() // oneCache clear should NOT affect permCache
+
+	// oneCache clear should NOT affect permCache
+	env.clearOneCache()
 
 	got := env.refPerm("warehouses")
 	if got["id"] != first["id"] {
@@ -688,5 +691,283 @@ func TestResetUniqIndex(t *testing.T) {
 
 	if env.uniqIndex != 0 {
 		t.Errorf("resetUniqIndex left index at %d", env.uniqIndex)
+	}
+}
+
+func benchEnv(dataSize int) *Env {
+	rows := make([]map[string]any, dataSize)
+	for i := range rows {
+		rows[i] = map[string]any{"id": i, "name": fmt.Sprintf("item_%d", i)}
+	}
+	env := &Env{
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		nurandC:   map[int]int{},
+		env:       map[string]any{},
+		request:   &Request{},
+	}
+	env.env["items"] = rows
+	return env
+}
+
+func BenchmarkToInt(b *testing.B) {
+	cases := []struct {
+		name  string
+		input any
+	}{
+		{"int", 42},
+		{"float64", 42.0},
+		{"int64", int64(42)},
+		{"unsupported", "42"},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			for range b.N {
+				toInt(tc.input)
+			}
+		})
+	}
+}
+
+func BenchmarkWrap(b *testing.B) {
+	cases := []struct {
+		name  string
+		input string
+	}{
+		{"needs_wrap", "number:1,100"},
+		{"already_wrapped", "{number:1,100}"},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			for range b.N {
+				wrap(tc.input)
+			}
+		})
+	}
+}
+
+func BenchmarkRefRand(b *testing.B) {
+	cases := []struct {
+		name string
+		rows int
+	}{
+		{"rows_10", 10},
+		{"rows_100", 100},
+		{"rows_1000", 1000},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			env := benchEnv(tc.rows)
+			b.ResetTimer()
+			for range b.N {
+				env.refRand("items")
+			}
+		})
+	}
+}
+
+func BenchmarkRefN(b *testing.B) {
+	cases := []struct {
+		name string
+		rows int
+		n    int
+	}{
+		{"rows_100/n_5", 100, 5},
+		{"rows_100/n_15", 100, 15},
+		{"rows_100/n_50", 100, 50},
+		{"rows_1000/n_5", 1000, 5},
+		{"rows_1000/n_15", 1000, 15},
+		{"rows_1000/n_50", 1000, 50},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			env := benchEnv(tc.rows)
+			b.ResetTimer()
+			for range b.N {
+				env.refN("items", "id", tc.n, tc.n)
+			}
+		})
+	}
+}
+
+func BenchmarkRefSame(b *testing.B) {
+	rows := make([]map[string]any, 100)
+	for i := range rows {
+		rows[i] = map[string]any{"id": i}
+	}
+
+	b.Run("cache_hit", func(b *testing.B) {
+		env := testEnv(nil)
+		env.refSame(rows)
+		b.ResetTimer()
+		for range b.N {
+			env.refSame(rows)
+		}
+	})
+
+	b.Run("cache_miss", func(b *testing.B) {
+		env := testEnv(nil)
+		b.ResetTimer()
+		for range b.N {
+			env.refSame(rows)
+			env.clearOneCache()
+		}
+	})
+
+	b.Run("parallel", func(b *testing.B) {
+		env := testEnv(nil)
+		env.refSame(rows)
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				env.refSame(rows)
+			}
+		})
+	})
+}
+
+func BenchmarkRefPerm(b *testing.B) {
+	b.Run("cache_hit", func(b *testing.B) {
+		env := benchEnv(100)
+		env.refPerm("items")
+		b.ResetTimer()
+		for range b.N {
+			env.refPerm("items")
+		}
+	})
+
+	b.Run("cache_miss", func(b *testing.B) {
+		env := benchEnv(100)
+		b.ResetTimer()
+		for range b.N {
+			env.refPerm("items")
+			env.permCacheMutex.Lock()
+			clear(env.permCache)
+			env.permCacheMutex.Unlock()
+		}
+	})
+
+	b.Run("parallel", func(b *testing.B) {
+		env := benchEnv(100)
+		env.refPerm("items")
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				env.refPerm("items")
+			}
+		})
+	})
+}
+
+func BenchmarkRefDiff(b *testing.B) {
+	cases := []struct {
+		name string
+		rows int
+	}{
+		{"rows_100", 100},
+		{"rows_1000", 1000},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			env := benchEnv(tc.rows)
+			count := 0
+			b.ResetTimer()
+			for range b.N {
+				if count >= tc.rows {
+					env.resetUniqIndex()
+					count = 0
+				}
+				env.refDiff("items")
+				count++
+			}
+		})
+	}
+}
+
+func BenchmarkNurand(b *testing.B) {
+	env := benchEnv(0)
+	env.nurand(1023, 1, 3000)
+
+	b.Run("sequential", func(b *testing.B) {
+		for range b.N {
+			env.nurand(1023, 1, 3000)
+		}
+	})
+
+	b.Run("parallel", func(b *testing.B) {
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				env.nurand(1023, 1, 3000)
+			}
+		})
+	})
+}
+
+func BenchmarkNurandN(b *testing.B) {
+	cases := []struct {
+		name string
+		n    int
+	}{
+		{"n_5", 5},
+		{"n_15", 15},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			env := benchEnv(0)
+			b.ResetTimer()
+			for range b.N {
+				env.nurandN(8191, 1, 100000, tc.n, tc.n)
+			}
+		})
+	}
+}
+
+func BenchmarkPickWeighted(b *testing.B) {
+	cases := []struct {
+		name  string
+		count int
+	}{
+		{"queries_2", 2},
+		{"queries_5", 5},
+		{"queries_10", 10},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			queries := make([]*Query, tc.count)
+			weights := make(map[string]int, tc.count)
+			for i := range tc.count {
+				name := fmt.Sprintf("q%d", i)
+				queries[i] = &Query{Name: name}
+				weights[name] = i + 1
+			}
+			env := &Env{
+				request: &Request{
+					Run:        queries,
+					RunWeights: weights,
+				},
+			}
+			b.ResetTimer()
+			for range b.N {
+				env.pickWeighted()
+			}
+		})
+	}
+}
+
+func BenchmarkGenBatch(b *testing.B) {
+	cases := []struct {
+		name  string
+		total int
+		batch int
+	}{
+		{"total_10/batch_10", 10, 10},
+		{"total_100/batch_10", 100, 10},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			for range b.N {
+				genBatch(tc.total, tc.batch, "number:1,1000")
+			}
+		})
 	}
 }

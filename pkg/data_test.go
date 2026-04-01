@@ -123,6 +123,62 @@ func assertMaps(t *testing.T, got, expected []map[string]any) {
 	}
 }
 
+func BenchmarkReadRows(b *testing.B) {
+	cases := []struct {
+		name string
+		rows int
+		cols int
+	}{
+		{"rows_1/cols_2", 1, 2},
+		{"rows_1/cols_5", 1, 5},
+		{"rows_10/cols_2", 10, 2},
+		{"rows_10/cols_5", 10, 5},
+		{"rows_100/cols_2", 100, 2},
+		{"rows_100/cols_5", 100, 5},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			columns := make([]string, tc.cols)
+			for i := range tc.cols {
+				columns[i] = fmt.Sprintf("Col%d", i)
+			}
+
+			rowData := make([][]any, tc.rows)
+			for i := range tc.rows {
+				row := make([]any, tc.cols)
+				for j := range tc.cols {
+					row[j] = i*tc.cols + j
+				}
+				rowData[i] = row
+			}
+
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				b.Fatalf("creating sqlmock: %v", err)
+			}
+			defer db.Close()
+
+			for range b.N {
+				mockRows := sqlmock.NewRows(columns)
+				for _, r := range rowData {
+					vals := make([]driver.Value, len(r))
+					for i, v := range r {
+						vals[i] = v
+					}
+					mockRows.AddRow(vals...)
+				}
+				mock.ExpectQuery("SELECT").WillReturnRows(mockRows)
+			}
+
+			b.ResetTimer()
+			for range b.N {
+				rows, _ := db.Query("SELECT")
+				ReadRows(rows)
+			}
+		})
+	}
+}
+
 func newTestEnv(t *testing.T) *Env {
 	t.Helper()
 
