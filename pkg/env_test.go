@@ -1,9 +1,15 @@
 package pkg
 
 import (
+	"context"
+	"database/sql/driver"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/DATA-DOG/go-sqlmock"
 )
 
 func testEnv(data map[string][]map[string]any) *Env {
@@ -969,5 +975,440 @@ func BenchmarkGenBatch(b *testing.B) {
 				genBatch(tc.total, tc.batch, "number:1,1000")
 			}
 		})
+	}
+}
+
+func TestRefEach(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "name"}).
+			AddRow(1, "alice").
+			AddRow(2, "bob").
+			AddRow(3, "charlie"),
+	)
+
+	env := &Env{db: db}
+	got := env.refEach("SELECT id, name FROM items")
+
+	if len(got) != 3 {
+		t.Fatalf("refEach returned %d rows, want 3", len(got))
+	}
+	for i, row := range got {
+		if len(row) != 2 {
+			t.Errorf("row %d has %d columns, want 2", i, len(row))
+		}
+	}
+	if got[0][0] != int64(1) {
+		t.Errorf("row 0 col 0 = %v, want 1", got[0][0])
+	}
+	if got[2][1] != "charlie" {
+		t.Errorf("row 2 col 1 = %v, want charlie", got[2][1])
+	}
+}
+
+func TestRefEach_QueryError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT").WillReturnError(fmt.Errorf("connection refused"))
+
+	env := &Env{db: db}
+	got := env.refEach("SELECT 1")
+
+	if got != nil {
+		t.Errorf("refEach with query error = %v, want nil", got)
+	}
+}
+
+func TestRefEach_NoRows(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "name"}),
+	)
+
+	env := &Env{db: db}
+	got := env.refEach("SELECT id, name FROM empty_table")
+
+	if len(got) != 0 {
+		t.Errorf("refEach with no rows = %v, want empty", got)
+	}
+}
+
+func TestPickWeighted_SkipsUnweightedQueries(t *testing.T) {
+	env := &Env{
+		request: &Request{
+			Run: []*Query{{Name: "weighted"}, {Name: "unweighted"}},
+			RunWeights: map[string]int{
+				"weighted": 100,
+			},
+		},
+	}
+
+	for range 100 {
+		q := env.pickWeighted()
+		if q == nil {
+			t.Fatal("pickWeighted returned nil")
+		}
+		if q.Name != "weighted" {
+			t.Errorf("pickWeighted returned %q, want only 'weighted'", q.Name)
+		}
+	}
+}
+
+func TestRunOnce_NoWeights(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectExec("INSERT INTO t1").WillReturnResult(driver.ResultNoRows)
+	mock.ExpectExec("INSERT INTO t2").WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[uintptr]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{},
+		request: &Request{
+			Run: []*Query{
+				{Name: "q1", Type: QueryTypeExec, Query: "INSERT INTO t1 VALUES (1)"},
+				{Name: "q2", Type: QueryTypeExec, Query: "INSERT INTO t2 VALUES (2)"},
+			},
+		},
+	}
+
+	if err := env.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestRunOnce_WithWeights(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	// Only one query should run per call.
+	mock.ExpectExec("INSERT").WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[uintptr]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{},
+		request: &Request{
+			Run: []*Query{
+				{Name: "q1", Type: QueryTypeExec, Query: "INSERT INTO t1 VALUES (1)"},
+				{Name: "q2", Type: QueryTypeExec, Query: "INSERT INTO t2 VALUES (2)"},
+			},
+			RunWeights: map[string]int{
+				"q1": 50,
+				"q2": 50,
+			},
+		},
+	}
+
+	if err := env.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestInitFrom(t *testing.T) {
+	sourceRows := []map[string]any{
+		{"id": 1, "name": "a"},
+		{"id": 2, "name": "b"},
+	}
+
+	source := &Env{
+		oneCache:  map[uintptr]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{"load_items": sourceRows},
+		request:   &Request{},
+	}
+
+	target := &Env{
+		oneCache:  map[uintptr]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{},
+		request: &Request{
+			Init: []*Query{
+				{Name: "load_items", Type: QueryTypeQuery},
+			},
+		},
+	}
+
+	target.InitFrom(source)
+
+	raw, ok := target.env["load_items"]
+	if !ok {
+		t.Fatal("InitFrom did not copy data")
+	}
+	copied := raw.([]map[string]any)
+	if len(copied) != 2 {
+		t.Fatalf("InitFrom copied %d rows, want 2", len(copied))
+	}
+	if copied[0]["id"] != 1 {
+		t.Errorf("copied row 0 id = %v, want 1", copied[0]["id"])
+	}
+}
+
+func TestInitFrom_SkipsExecQueries(t *testing.T) {
+	source := &Env{
+		oneCache:  map[uintptr]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{},
+		request:   &Request{},
+	}
+
+	target := &Env{
+		oneCache:  map[uintptr]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{},
+		request: &Request{
+			Init: []*Query{
+				{Name: "setup", Type: QueryTypeExec},
+			},
+		},
+	}
+
+	target.InitFrom(source)
+
+	if _, ok := target.env["setup"]; ok {
+		t.Error("InitFrom should skip exec-type queries")
+	}
+}
+
+func TestInitFrom_IndependentCopies(t *testing.T) {
+	sourceRows := []map[string]any{
+		{"id": 1},
+		{"id": 2},
+		{"id": 3},
+	}
+
+	source := &Env{
+		oneCache:  map[uintptr]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{"items": sourceRows},
+		request:   &Request{},
+	}
+
+	target := &Env{
+		oneCache:  map[uintptr]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{},
+		request: &Request{
+			Init: []*Query{
+				{Name: "items", Type: QueryTypeQuery},
+			},
+		},
+	}
+
+	target.InitFrom(source)
+
+	// Modifying the target's copy should not affect the source.
+	targetData := target.env["items"].([]map[string]any)
+	targetData[0] = map[string]any{"id": 999}
+
+	if sourceRows[0]["id"] != 1 {
+		t.Error("InitFrom did not create an independent copy; source was mutated")
+	}
+}
+
+func TestRunSection_Exec(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectExec("CREATE TABLE").WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[uintptr]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{},
+		request:   &Request{},
+	}
+
+	queries := []*Query{
+		{Name: "create_t", Type: QueryTypeExec, Query: "CREATE TABLE t (id INT)"},
+	}
+
+	if err := env.runSection(context.Background(), queries, ConfigSectionUp); err != nil {
+		t.Fatalf("runSection error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestRunSection_InlinesArgsForNonRunSection(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	// The seed section inlines $1 → 100, so the executed query should
+	// contain the literal value, not a bind parameter.
+	mock.ExpectExec("INSERT INTO items SELECT generate_series\\(1, 100\\)").
+		WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[uintptr]any{},
+		permCache: map[string]any{},
+		env: map[string]any{
+			"const": constant,
+			"items": 100,
+		},
+		request: &Request{},
+	}
+
+	q := &Query{
+		Name:  "seed_items",
+		Type:  QueryTypeExec,
+		Query: "INSERT INTO items SELECT generate_series(1, $1)",
+		Args:  []string{"items"},
+	}
+	if err := q.CompileArgs(env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	if err := env.runSection(context.Background(), []*Query{q}, ConfigSectionSeed); err != nil {
+		t.Fatalf("runSection error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestRunSection_RunSectionPassesArgs(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectExec("INSERT INTO orders").
+		WithArgs(42).
+		WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[uintptr]any{},
+		permCache: map[string]any{},
+		env: map[string]any{
+			"const": constant,
+		},
+		request: &Request{},
+	}
+
+	q := &Query{
+		Name:  "insert_order",
+		Type:  QueryTypeExec,
+		Query: "INSERT INTO orders VALUES ($1)",
+		Args:  []string{"const(42)"},
+	}
+	if err := q.CompileArgs(env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	if err := env.runSection(context.Background(), []*Query{q}, ConfigSectionRun); err != nil {
+		t.Fatalf("runSection error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestRunSection_WaitRespectsContextCancel(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectExec("INSERT").WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[uintptr]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{},
+		request:   &Request{},
+	}
+
+	q := &Query{
+		Name:  "slow",
+		Type:  QueryTypeExec,
+		Query: "INSERT INTO t VALUES (1)",
+		Wait:  Duration(10 * time.Second),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	err = env.runSection(ctx, []*Query{q}, ConfigSectionRun)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("runSection error = %v, want context.Canceled", err)
+	}
+}
+
+func TestRunSection_QueryStoresResults(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT").WillReturnRows(
+		sqlmock.NewRows([]string{"id"}).AddRow(1).AddRow(2),
+	)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[uintptr]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{},
+		request:   &Request{},
+	}
+
+	queries := []*Query{
+		{Name: "items", Type: QueryTypeQuery, Query: "SELECT id FROM items"},
+	}
+
+	if err := env.runSection(context.Background(), queries, ConfigSectionInit); err != nil {
+		t.Fatalf("runSection error: %v", err)
+	}
+
+	data, ok := env.env["items"].([]map[string]any)
+	if !ok {
+		t.Fatal("runSection did not store query results")
+	}
+	if len(data) != 2 {
+		t.Errorf("stored %d rows, want 2", len(data))
 	}
 }

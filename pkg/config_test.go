@@ -2,6 +2,7 @@ package pkg
 
 import (
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -316,5 +317,41 @@ func TestGenerateArgs_MixedBatchAndScalar(t *testing.T) {
 		if args[2] != 3000 {
 			t.Errorf("arg set %d: args[2] = %v, want 3000", i, args[2])
 		}
+	}
+}
+
+func TestDurationUnmarshalYAML(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    time.Duration
+		wantErr bool
+	}{
+		{"seconds", "wait: 5s", 5 * time.Second, false},
+		{"milliseconds", "wait: 250ms", 250 * time.Millisecond, false},
+		{"minutes", "wait: 2m", 2 * time.Minute, false},
+		{"complex", "wait: 1m30s", 90 * time.Second, false},
+		{"invalid", "wait: notaduration", 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out struct {
+				Wait Duration `yaml:"wait"`
+			}
+			err := yaml.Unmarshal([]byte(tt.input), &out)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Unmarshal error: %v", err)
+			}
+			if time.Duration(out.Wait) != tt.want {
+				t.Errorf("got %v, want %v", time.Duration(out.Wait), tt.want)
+			}
+		})
 	}
 }
