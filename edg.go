@@ -209,8 +209,8 @@ func runCmd() *cobra.Command {
 						tps := float64(c) / elapsed.Seconds()
 						tpm := float64(c) / elapsed.Minutes()
 						slog.Info("progress",
-							"tps", fmt.Sprintf("%.1f", tps),
-							"tpmC", fmt.Sprintf("%.1f", tpm),
+							"qps", fmt.Sprintf("%.1f", tps),
+							"tpm", fmt.Sprintf("%.1f", tpm),
 							"errors", e,
 							"elapsed", elapsed.Round(time.Second))
 					case <-ctx.Done():
@@ -265,7 +265,7 @@ func runCmd() *cobra.Command {
 			fmt.Printf("Workers:      %d\n", workers)
 			fmt.Printf("Transactions: %d\n", total)
 			fmt.Printf("Errors:       %d\n", errors)
-			fmt.Printf("tpmC:         %.1f\n", tpm)
+			fmt.Printf("tpm:          %.1f\n", tpm)
 
 			return nil
 		},
