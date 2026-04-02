@@ -14,7 +14,7 @@ import (
 
 func testEnv(data map[string][]map[string]any) *Env {
 	env := &Env{
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
 	}
@@ -194,7 +194,7 @@ func TestNURand_InRange(t *testing.T) {
 	env.nurandC = map[int]int{}
 
 	for range 1000 {
-		v := env.nurand(1023, 1, 3000)
+		v := env.nuRand(1023, 1, 3000)
 		if v < 1 || v > 3000 {
 			t.Fatalf("nurand(1023, 1, 3000) = %d, out of range [1, 3000]", v)
 		}
@@ -209,7 +209,7 @@ func TestNURand_NonUniform(t *testing.T) {
 	// distribution. Bucket into 10 bins and verify they aren't all equal.
 	bins := make([]int, 10)
 	for range 10000 {
-		v := env.nurand(1023, 1, 3000)
+		v := env.nuRand(1023, 1, 3000)
 		bins[(v-1)*10/3000]++
 	}
 
@@ -229,12 +229,12 @@ func TestNURand_ConstantC(t *testing.T) {
 	env := testEnv(nil)
 	env.nurandC = map[int]int{}
 
-	_ = env.nurand(1023, 1, 3000)
+	_ = env.nuRand(1023, 1, 3000)
 	c1 := env.nurandC[1023]
 
 	// Subsequent calls should use the same C.
 	for range 100 {
-		_ = env.nurand(1023, 1, 3000)
+		_ = env.nuRand(1023, 1, 3000)
 	}
 	if env.nurandC[1023] != c1 {
 		t.Errorf("NURand C changed: got %d, want %d", env.nurandC[1023], c1)
@@ -245,7 +245,7 @@ func TestNURandN(t *testing.T) {
 	env := testEnv(nil)
 	env.nurandC = map[int]int{}
 
-	result := env.nurandN(8191, 1, 100000, 5, 15)
+	result := env.nuRandN(8191, 1, 100000, 5, 15)
 	parts := strings.Split(result, ",")
 
 	if len(parts) < 5 || len(parts) > 15 {
@@ -276,11 +276,10 @@ func TestRefRand_EmptyData(t *testing.T) {
 }
 
 func TestRefSame_ReturnsSameRow(t *testing.T) {
-	rows := sampleRows()
-	env := testEnv(nil)
+	env := testEnv(map[string][]map[string]any{"users": sampleRows()})
 
-	first := env.refSame(rows)
-	second := env.refSame(rows)
+	first := env.refSame("users")
+	second := env.refSame("users")
 
 	if first["id"] != second["id"] {
 		t.Errorf("refSame returned different rows: %v vs %v", first["id"], second["id"])
@@ -288,17 +287,16 @@ func TestRefSame_ReturnsSameRow(t *testing.T) {
 }
 
 func TestRefSame_ClearedBetweenCycles(t *testing.T) {
-	rows := sampleRows()
-	env := testEnv(nil)
+	env := testEnv(map[string][]map[string]any{"users": sampleRows()})
 
-	first := env.refSame(rows)
+	first := env.refSame("users")
 	env.clearOneCache()
 
 	// After clearing, a new random row is picked. Run enough times to
 	// confirm it doesn't always match (statistically near-certain with 3 rows).
 	different := false
 	for range 20 {
-		second := env.refSame(rows)
+		second := env.refSame("users")
 		if first["id"] != second["id"] {
 			different = true
 			break
@@ -307,6 +305,20 @@ func TestRefSame_ClearedBetweenCycles(t *testing.T) {
 	}
 	if !different {
 		t.Error("refSame returned the same row 20 times after cache clears; expected variation")
+	}
+}
+
+func TestRefSame_UnknownName(t *testing.T) {
+	env := testEnv(nil)
+	if result := env.refSame("nonexistent"); result != nil {
+		t.Errorf("refSame for unknown name = %v, want nil", result)
+	}
+}
+
+func TestRefSame_EmptyData(t *testing.T) {
+	env := testEnv(map[string][]map[string]any{"empty": {}})
+	if result := env.refSame("empty"); result != nil {
+		t.Errorf("refSame for empty data = %v, want nil", result)
 	}
 }
 
@@ -680,7 +692,7 @@ func TestPickWeighted_NoWeights(t *testing.T) {
 
 func TestClearOneCache(t *testing.T) {
 	env := testEnv(nil)
-	env.oneCache[1] = "value"
+	env.oneCache["test"] = "value"
 
 	env.clearOneCache()
 
@@ -706,7 +718,7 @@ func benchEnv(dataSize int) *Env {
 		rows[i] = map[string]any{"id": i, "name": fmt.Sprintf("item_%d", i)}
 	}
 	env := &Env{
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		nurandC:   map[int]int{},
 		env:       map[string]any{},
@@ -803,30 +815,30 @@ func BenchmarkRefSame(b *testing.B) {
 	}
 
 	b.Run("cache_hit", func(b *testing.B) {
-		env := testEnv(nil)
-		env.refSame(rows)
+		env := testEnv(map[string][]map[string]any{"items": rows})
+		env.refSame("items")
 		b.ResetTimer()
 		for range b.N {
-			env.refSame(rows)
+			env.refSame("items")
 		}
 	})
 
 	b.Run("cache_miss", func(b *testing.B) {
-		env := testEnv(nil)
+		env := testEnv(map[string][]map[string]any{"items": rows})
 		b.ResetTimer()
 		for range b.N {
-			env.refSame(rows)
+			env.refSame("items")
 			env.clearOneCache()
 		}
 	})
 
 	b.Run("parallel", func(b *testing.B) {
-		env := testEnv(nil)
-		env.refSame(rows)
+		env := testEnv(map[string][]map[string]any{"items": rows})
+		env.refSame("items")
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				env.refSame(rows)
+				env.refSame("items")
 			}
 		})
 	})
@@ -892,18 +904,18 @@ func BenchmarkRefDiff(b *testing.B) {
 
 func BenchmarkNurand(b *testing.B) {
 	env := benchEnv(0)
-	env.nurand(1023, 1, 3000)
+	env.nuRand(1023, 1, 3000)
 
 	b.Run("sequential", func(b *testing.B) {
 		for range b.N {
-			env.nurand(1023, 1, 3000)
+			env.nuRand(1023, 1, 3000)
 		}
 	})
 
 	b.Run("parallel", func(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				env.nurand(1023, 1, 3000)
+				env.nuRand(1023, 1, 3000)
 			}
 		})
 	})
@@ -922,7 +934,7 @@ func BenchmarkNurandN(b *testing.B) {
 			env := benchEnv(0)
 			b.ResetTimer()
 			for range b.N {
-				env.nurandN(8191, 1, 100000, tc.n, tc.n)
+				env.nuRandN(8191, 1, 100000, tc.n, tc.n)
 			}
 		})
 	}
@@ -1080,7 +1092,7 @@ func TestRunOnce_NoWeights(t *testing.T) {
 
 	env := &Env{
 		db:        db,
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
 		request: &Request{
@@ -1111,7 +1123,7 @@ func TestRunOnce_WithWeights(t *testing.T) {
 
 	env := &Env{
 		db:        db,
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
 		request: &Request{
@@ -1141,14 +1153,14 @@ func TestInitFrom(t *testing.T) {
 	}
 
 	source := &Env{
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{"load_items": sourceRows},
 		request:   &Request{},
 	}
 
 	target := &Env{
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
 		request: &Request{
@@ -1175,14 +1187,14 @@ func TestInitFrom(t *testing.T) {
 
 func TestInitFrom_SkipsExecQueries(t *testing.T) {
 	source := &Env{
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
 		request:   &Request{},
 	}
 
 	target := &Env{
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
 		request: &Request{
@@ -1207,14 +1219,14 @@ func TestInitFrom_IndependentCopies(t *testing.T) {
 	}
 
 	source := &Env{
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{"items": sourceRows},
 		request:   &Request{},
 	}
 
 	target := &Env{
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
 		request: &Request{
@@ -1246,7 +1258,7 @@ func TestRunSection_Exec(t *testing.T) {
 
 	env := &Env{
 		db:        db,
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
 		request:   &Request{},
@@ -1278,7 +1290,7 @@ func TestRunSection_InlinesArgsForNonRunSection(t *testing.T) {
 
 	env := &Env{
 		db:        db,
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env: map[string]any{
 			"const": constant,
@@ -1318,7 +1330,7 @@ func TestRunSection_RunSectionPassesArgs(t *testing.T) {
 
 	env := &Env{
 		db:        db,
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env: map[string]any{
 			"const": constant,
@@ -1355,7 +1367,7 @@ func TestRunSection_WaitRespectsContextCancel(t *testing.T) {
 
 	env := &Env{
 		db:        db,
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
 		request:   &Request{},
@@ -1390,7 +1402,7 @@ func TestRunSection_QueryStoresResults(t *testing.T) {
 
 	env := &Env{
 		db:        db,
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
 		request:   &Request{},

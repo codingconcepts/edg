@@ -152,13 +152,13 @@ func BenchmarkReadRows(b *testing.B) {
 				rowData[i] = row
 			}
 
-			db, mock, err := sqlmock.New()
-			if err != nil {
-				b.Fatalf("creating sqlmock: %v", err)
-			}
-			defer db.Close()
-
+			b.ResetTimer()
 			for range b.N {
+				db, mock, err := sqlmock.New()
+				if err != nil {
+					b.Fatalf("creating sqlmock: %v", err)
+				}
+
 				mockRows := sqlmock.NewRows(columns)
 				for _, r := range rowData {
 					vals := make([]driver.Value, len(r))
@@ -168,12 +168,10 @@ func BenchmarkReadRows(b *testing.B) {
 					mockRows.AddRow(vals...)
 				}
 				mock.ExpectQuery("SELECT").WillReturnRows(mockRows)
-			}
 
-			b.ResetTimer()
-			for range b.N {
 				rows, _ := db.Query("SELECT")
 				ReadRows(rows)
+				db.Close()
 			}
 		})
 	}
@@ -183,7 +181,7 @@ func newTestEnv(t *testing.T) *Env {
 	t.Helper()
 
 	env := &Env{
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		nurandC:   map[int]int{},
 		request:   &Request{},

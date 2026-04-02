@@ -10,10 +10,16 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/expr-lang/expr"
+)
+
+const (
+	// rejectionSamplingFactor is the ratio threshold for switching between
+	// rejection sampling and Fisher-Yates in refN. When n < len(data)/factor,
+	// rejection sampling is used to avoid allocating a full indices slice.
+	rejectionSamplingFactor = 4
 )
 
 type Env struct {
@@ -24,7 +30,7 @@ type Env struct {
 	env      map[string]any
 
 	oneCacheMutex sync.RWMutex
-	oneCache      map[uintptr]any
+	oneCache      map[string]any
 
 	permCacheMutex sync.RWMutex
 	permCache      map[string]any
@@ -39,7 +45,7 @@ type Env struct {
 func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 	env := Env{
 		db:        db,
-		oneCache:  map[uintptr]any{},
+		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		nurandC:   map[int]int{},
 		request:   r,
@@ -58,8 +64,8 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 		"ref_diff":  env.refDiff, // Use unique rows across multiple arguments.
 		"ref_each":  env.refEach, // Cycles through each row.
 		"ref_n":     env.refN,    // Pick N unique random field values from a dataset.
-		"nurand":    env.nurand,  // Non-Uniform Random per TPC-C spec.
-		"nurand_n":  env.nurandN, // N unique Non-Uniform Random values (comma-separated).
+		"nurand":    env.nuRand,  // Non-Uniform Random per TPC-C spec.
+		"nurand_n":  env.nuRandN, // N unique Non-Uniform Random values (comma-separated).
 	}
 
 	// Add each global variable to map itself for cleaner access.
@@ -297,21 +303,48 @@ func (e *Env) refN(name string, field string, min, max int) string {
 		n = len(data)
 	}
 
-	// Partial Fisher-Yates on a copy of indices to pick n unique
-	// rows without mutating the source dataset.
+	var parts []string
+	if n*rejectionSamplingFactor < len(data) {
+		parts = rejection(data, field, n)
+	} else {
+		parts = fisherYates(data, field, n)
+	}
+
+	return strings.Join(parts, ",")
+}
+
+// rejection selects n unique random items from data using rejection
+// sampling. Efficient when n is small relative to len(data).
+func rejection(data []map[string]any, field string, n int) []string {
+	parts := make([]string, n)
+	seen := make(map[int]struct{}, n)
+	for i := range n {
+		for {
+			idx := rand.IntN(len(data))
+			if _, ok := seen[idx]; !ok {
+				seen[idx] = struct{}{}
+				parts[i] = fmt.Sprintf("%v", data[idx][field])
+				break
+			}
+		}
+	}
+	return parts
+}
+
+// fisherYates selects n unique random items from data using a partial
+// Fisher-Yates shuffle on a copy of indices.
+func fisherYates(data []map[string]any, field string, n int) []string {
 	indices := make([]int, len(data))
 	for i := range indices {
 		indices[i] = i
 	}
-
 	parts := make([]string, n)
 	for i := range n {
 		j := i + rand.IntN(len(indices)-i)
 		indices[i], indices[j] = indices[j], indices[i]
 		parts[i] = fmt.Sprintf("%v", data[indices[i]][field])
 	}
-
-	return strings.Join(parts, ",")
+	return parts
 }
 
 // getNurandC returns the run-time constant C for a given A value,
@@ -334,26 +367,26 @@ func (e *Env) getNurandC(A int) int {
 	return c
 }
 
-// nurand implements the TPC-C Non-Uniform Random number generator:
+// nuRand implements the TPC-C Non-Uniform Random number generator:
 //
 //	NURand(A, x, y) = (((random(0, A) | random(x, y)) + C) % (y - x + 1)) + x
-func (e *Env) nurand(a, b, c any) int {
+func (e *Env) nuRand(a, b, c any) int {
 	A, x, y := toInt(a), toInt(b), toInt(c)
 	C := e.getNurandC(A)
 	return (((rand.IntN(A+1) | (rand.IntN(y-x+1) + x)) + C) % (y - x + 1)) + x
 }
 
-// nurandN generates N unique NURand values as a comma-separated string,
+// nuRandN generates N unique NURand values as a comma-separated string,
 // where N is chosen randomly in [min, max]. Used for multi-item order
 // lines in New-Order transactions.
-func (e *Env) nurandN(a, b, c, d, f any) string {
+func (e *Env) nuRandN(a, b, c, d, f any) string {
 	A, x, y, min, max := toInt(a), toInt(b), toInt(c), toInt(d), toInt(f)
 	n := min + rand.IntN(max-min+1)
 
 	seen := make(map[int]bool, n)
 	parts := make([]string, 0, n)
 	for len(parts) < n {
-		v := e.nurand(A, x, y)
+		v := e.nuRand(A, x, y)
 		if !seen[v] {
 			seen[v] = true
 			parts = append(parts, fmt.Sprintf("%d", v))
@@ -472,20 +505,27 @@ func gen(s string) any {
 	return val
 }
 
-func (e *Env) refSame(data []map[string]any) map[string]any {
-	cacheKey := uintptr(unsafe.Pointer(unsafe.SliceData(data)))
-
+func (e *Env) refSame(name string) map[string]any {
 	e.oneCacheMutex.RLock()
-	if cached, exists := e.oneCache[cacheKey]; exists {
+	if cached, exists := e.oneCache[name]; exists {
 		e.oneCacheMutex.RUnlock()
 		return cached.(map[string]any)
 	}
 	e.oneCacheMutex.RUnlock()
 
+	raw, ok := e.env[name]
+	if !ok {
+		return nil
+	}
+	data, ok := raw.([]map[string]any)
+	if !ok || len(data) == 0 {
+		return nil
+	}
+
 	result := data[rand.IntN(len(data))]
 
 	e.oneCacheMutex.Lock()
-	e.oneCache[cacheKey] = result
+	e.oneCache[name] = result
 	e.oneCacheMutex.Unlock()
 
 	return result

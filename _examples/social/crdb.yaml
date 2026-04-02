@@ -1,0 +1,338 @@
+globals:
+  users: 10000
+  posts_per_user: 5
+  follows_per_user: 10
+  tags: 50
+
+up:
+
+  - name: create_user_profile
+    query: |-
+      CREATE TABLE IF NOT EXISTS user_profile (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        username STRING NOT NULL,
+        display_name STRING NOT NULL,
+        bio STRING NOT NULL DEFAULT '',
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+  - name: create_post
+    query: |-
+      CREATE TABLE IF NOT EXISTS post (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        author_id UUID NOT NULL REFERENCES user_profile(id),
+        body STRING NOT NULL,
+        like_count INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+  - name: create_follow
+    query: |-
+      CREATE TABLE IF NOT EXISTS follow (
+        follower_id UUID NOT NULL REFERENCES user_profile(id),
+        following_id UUID NOT NULL REFERENCES user_profile(id),
+        created_at TIMESTAMP NOT NULL DEFAULT now(),
+        PRIMARY KEY (follower_id, following_id),
+        CHECK (follower_id != following_id)
+      )
+
+  - name: create_post_like
+    query: |-
+      CREATE TABLE IF NOT EXISTS post_like (
+        post_id UUID NOT NULL REFERENCES post(id),
+        user_id UUID NOT NULL REFERENCES user_profile(id),
+        created_at TIMESTAMP NOT NULL DEFAULT now(),
+        PRIMARY KEY (post_id, user_id)
+      )
+
+  - name: create_comment
+    query: |-
+      CREATE TABLE IF NOT EXISTS comment (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        post_id UUID NOT NULL REFERENCES post(id),
+        author_id UUID NOT NULL REFERENCES user_profile(id),
+        body STRING NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+  - name: create_tag
+    query: |-
+      CREATE TABLE IF NOT EXISTS tag (
+        id INT PRIMARY KEY,
+        name STRING NOT NULL UNIQUE
+      )
+
+  - name: create_post_tag
+    query: |-
+      CREATE TABLE IF NOT EXISTS post_tag (
+        post_id UUID NOT NULL REFERENCES post(id),
+        tag_id INT NOT NULL REFERENCES tag(id),
+        PRIMARY KEY (post_id, tag_id)
+      )
+
+  - name: create_idx_post_author
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_post_author
+      ON post (author_id, created_at DESC)
+
+  - name: create_idx_follow_follower
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_follow_follower
+      ON follow (follower_id)
+
+  - name: create_idx_comment_post
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_comment_post
+      ON comment (post_id, created_at DESC)
+
+seed:
+
+  - name: populate_user_profile
+    args:
+      - users
+    query: |-
+      INSERT INTO user_profile (username, display_name, bio)
+      SELECT
+        'user_' || s::TEXT,
+        substr(md5(random()::FLOAT8::text), 1, 12),
+        substr(md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text), 1, 60)
+      FROM generate_series(1, $1) AS s
+
+  - name: populate_tag
+    args:
+      - tags
+    query: |-
+      INSERT INTO tag (id, name)
+      SELECT s, 'tag-' || s::TEXT
+      FROM generate_series(1, $1) AS s
+
+  - name: populate_post
+    args:
+      - posts_per_user
+    query: |-
+      INSERT INTO post (author_id, body, like_count)
+      SELECT
+        u.id,
+        substr(md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text), 1, 100),
+        floor(random()::FLOAT8 * 100)::INT
+      FROM user_profile u
+      CROSS JOIN generate_series(1, $1) AS s
+
+  - name: populate_post_tag
+    args:
+      - tags
+    query: |-
+      INSERT INTO post_tag (post_id, tag_id)
+      SELECT p.id, (floor(random()::FLOAT8 * $1) + 1)::INT
+      FROM post p
+      CROSS JOIN generate_series(1, 3) AS s
+      ON CONFLICT DO NOTHING
+
+  - name: populate_follow
+    args:
+      - follows_per_user
+    query: |-
+      INSERT INTO follow (follower_id, following_id)
+      SELECT u.id, f.id
+      FROM user_profile u
+      CROSS JOIN LATERAL (
+        SELECT id FROM user_profile
+        WHERE id != u.id
+        ORDER BY random()
+        LIMIT $1
+      ) f
+      ON CONFLICT DO NOTHING
+
+deseed:
+
+  - name: truncate_post_tag
+    type: exec
+    query: TRUNCATE TABLE post_tag
+
+  - name: truncate_comment
+    type: exec
+    query: TRUNCATE TABLE comment
+
+  - name: truncate_post_like
+    type: exec
+    query: TRUNCATE TABLE post_like
+
+  - name: truncate_follow
+    type: exec
+    query: TRUNCATE TABLE follow
+
+  - name: truncate_post
+    type: exec
+    query: TRUNCATE TABLE post
+
+  - name: truncate_tag
+    type: exec
+    query: TRUNCATE TABLE tag
+
+  - name: truncate_user_profile
+    type: exec
+    query: TRUNCATE TABLE user_profile CASCADE
+
+down:
+
+  - name: drop_post_tag
+    type: exec
+    query: DROP TABLE IF EXISTS post_tag
+
+  - name: drop_comment
+    type: exec
+    query: DROP TABLE IF EXISTS comment
+
+  - name: drop_post_like
+    type: exec
+    query: DROP TABLE IF EXISTS post_like
+
+  - name: drop_follow
+    type: exec
+    query: DROP TABLE IF EXISTS follow
+
+  - name: drop_post
+    type: exec
+    query: DROP TABLE IF EXISTS post
+
+  - name: drop_tag
+    type: exec
+    query: DROP TABLE IF EXISTS tag
+
+  - name: drop_user_profile
+    type: exec
+    query: DROP TABLE IF EXISTS user_profile
+
+init:
+
+  - name: fetch_users
+    type: query
+    query: SELECT id, username, display_name FROM user_profile ORDER BY random()
+
+  - name: fetch_posts
+    type: query
+    query: SELECT id FROM post ORDER BY random()
+
+  - name: fetch_tags
+    type: query
+    query: SELECT id, name FROM tag
+
+run_weights:
+  fetch_feed: 30
+  create_post: 10
+  like_post: 25
+  add_comment: 10
+  follow_user: 5
+  trending: 10
+  mutual_friends: 10
+
+run:
+
+  # Fetch posts from users this user follows.
+  # Pattern: fan-out read via multi-JOIN across follow relationships
+  - name: fetch_feed
+    type: query
+    args:
+      - ref_rand('fetch_users').id
+    query: |-
+      SELECT p.id, p.body, p.like_count, p.created_at,
+        u.username, u.display_name
+      FROM post p
+      JOIN follow f ON f.following_id = p.author_id
+      JOIN user_profile u ON u.id = p.author_id
+      WHERE f.follower_id = $1::UUID
+      ORDER BY p.created_at DESC
+      LIMIT 20
+
+  # Create a post and tag it with 1-5 random tags.
+  # Pattern: ref_n for variable-length tag list, writable CTE
+  - name: create_post
+    type: exec
+    args:
+      - ref_rand('fetch_users').id
+      - gen('sentence:10')
+      - ref_n('fetch_tags', 'id', 1, 5)
+    query: |-
+      WITH
+        new_post AS (
+          INSERT INTO post (author_id, body)
+          VALUES ($1::UUID, $2::STRING)
+          RETURNING id
+        )
+      INSERT INTO post_tag (post_id, tag_id)
+      SELECT p.id, t::INT
+      FROM new_post p
+      CROSS JOIN unnest(string_to_array($3, ',')) AS t
+      ON CONFLICT DO NOTHING
+
+  # Like a post (idempotent) and increment the counter.
+  # Pattern: hot-key contention on like_count, UPSERT + conditional update via CTE
+  - name: like_post
+    type: exec
+    args:
+      - ref_rand('fetch_posts').id
+      - ref_rand('fetch_users').id
+    query: |-
+      WITH
+        new_like AS (
+          INSERT INTO post_like (post_id, user_id)
+          VALUES ($1::UUID, $2::UUID)
+          ON CONFLICT DO NOTHING
+          RETURNING post_id
+        )
+      UPDATE post SET like_count = like_count + 1
+      FROM new_like
+      WHERE post.id = new_like.post_id
+
+  # Comment on a post. Uses ref_same to get both id and display_name
+  # from the same random user row.
+  # Pattern: ref_same for consistent multi-field access
+  - name: add_comment
+    type: exec
+    args:
+      - ref_same('fetch_users').id
+      - ref_rand('fetch_posts').id
+      - gen('sentence:8')
+      - ref_same('fetch_users').display_name
+    query: |-
+      INSERT INTO comment (post_id, author_id, body)
+      VALUES ($2::UUID, $1::UUID, $4 || ': ' || $3::STRING)
+
+  # Follow another user (idempotent).
+  # Pattern: UPSERT with ON CONFLICT DO NOTHING
+  - name: follow_user
+    type: exec
+    args:
+      - ref_diff('fetch_users').id
+      - ref_diff('fetch_users').id
+    query: |-
+      INSERT INTO follow (follower_id, following_id)
+      VALUES ($1::UUID, $2::UUID)
+      ON CONFLICT DO NOTHING
+
+  # Find trending posts by like count.
+  # Pattern: global aggregate with ORDER BY + LIMIT
+  - name: trending
+    type: query
+    query: |-
+      SELECT p.id, p.body, p.like_count, u.username
+      FROM post p
+      JOIN user_profile u ON u.id = p.author_id
+      ORDER BY p.like_count DESC
+      LIMIT 10
+
+  # Find mutual follows between two users.
+  # Pattern: ref_diff for two distinct users, self-join on follow table
+  - name: mutual_friends
+    type: query
+    args:
+      - ref_diff('fetch_users').id
+      - ref_diff('fetch_users').id
+    query: |-
+      SELECT u.id, u.username, u.display_name
+      FROM follow f1
+      JOIN follow f2 ON f1.following_id = f2.following_id
+      JOIN user_profile u ON u.id = f1.following_id
+      WHERE f1.follower_id = $1::UUID
+        AND f2.follower_id = $2::UUID
+      LIMIT 20

@@ -1,0 +1,349 @@
+globals:
+  tenants: 10
+  users_per_tenant: 100
+  projects_per_tenant: 5
+  tasks_per_project: 100
+
+up:
+
+  - name: create_tenant
+    query: |-
+      CREATE TABLE IF NOT EXISTS tenant (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name STRING NOT NULL,
+        plan STRING NOT NULL DEFAULT 'free',
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+  - name: create_app_user
+    query: |-
+      CREATE TABLE IF NOT EXISTS app_user (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id UUID NOT NULL REFERENCES tenant(id),
+        email STRING NOT NULL,
+        role STRING NOT NULL DEFAULT 'member',
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+  - name: create_project
+    query: |-
+      CREATE TABLE IF NOT EXISTS project (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id UUID NOT NULL REFERENCES tenant(id),
+        name STRING NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+  - name: create_task
+    query: |-
+      CREATE TABLE IF NOT EXISTS task (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_id UUID NOT NULL REFERENCES project(id),
+        tenant_id UUID NOT NULL REFERENCES tenant(id),
+        title STRING NOT NULL,
+        status STRING NOT NULL DEFAULT 'open',
+        assignee_id UUID REFERENCES app_user(id),
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT now(),
+        updated_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+  - name: create_task_comment
+    query: |-
+      CREATE TABLE IF NOT EXISTS task_comment (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        task_id UUID NOT NULL REFERENCES task(id),
+        tenant_id UUID NOT NULL REFERENCES tenant(id),
+        author_id UUID NOT NULL REFERENCES app_user(id),
+        body STRING NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+  - name: create_billing_usage
+    query: |-
+      CREATE TABLE IF NOT EXISTS billing_usage (
+        tenant_id UUID PRIMARY KEY REFERENCES tenant(id),
+        api_calls INT NOT NULL DEFAULT 0,
+        storage_bytes BIGINT NOT NULL DEFAULT 0,
+        updated_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+  - name: create_idx_task_tenant_status
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_task_tenant_status
+      ON task (tenant_id, status) WHERE deleted_at IS NULL
+
+  - name: create_idx_task_project
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_task_project
+      ON task (project_id, status) WHERE deleted_at IS NULL
+
+  - name: create_idx_app_user_tenant
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_app_user_tenant
+      ON app_user (tenant_id)
+
+  - name: create_idx_task_comment_task
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_task_comment_task
+      ON task_comment (task_id, created_at DESC)
+
+seed:
+
+  - name: populate_tenant
+    args:
+      - tenants
+    query: |-
+      INSERT INTO tenant (name, plan)
+      SELECT
+        'tenant-' || s::TEXT,
+        (ARRAY['free','starter','pro','enterprise'])[floor(random()::FLOAT8 * 4 + 1)::INT]
+      FROM generate_series(1, $1) AS s
+
+  - name: populate_billing_usage
+    query: |-
+      INSERT INTO billing_usage (tenant_id, api_calls, storage_bytes)
+      SELECT id, 0, 0
+      FROM tenant
+
+  - name: populate_app_user
+    args:
+      - ref_each('SELECT id FROM tenant')
+      - users_per_tenant
+    query: |-
+      INSERT INTO app_user (tenant_id, email, role)
+      SELECT
+        $1::UUID,
+        'user_' || s::TEXT || '_' || substr(($1::UUID)::TEXT, 1, 8) || '@example.com',
+        CASE WHEN s = 1 THEN 'admin'
+             WHEN s <= 5 THEN 'manager'
+             ELSE 'member'
+        END
+      FROM generate_series(1, $2) AS s
+
+  - name: populate_project
+    args:
+      - ref_each('SELECT id FROM tenant')
+      - projects_per_tenant
+    query: |-
+      INSERT INTO project (tenant_id, name)
+      SELECT
+        $1::UUID,
+        'project-' || s::TEXT || '-' || substr(($1::UUID)::TEXT, 1, 8)
+      FROM generate_series(1, $2) AS s
+
+  - name: populate_task
+    args:
+      - ref_each('SELECT p.id AS project_id, p.tenant_id FROM project p')
+      - tasks_per_project
+    query: |-
+      INSERT INTO task (project_id, tenant_id, title, status, assignee_id)
+      SELECT
+        $1::UUID,
+        $2::UUID,
+        'task-' || s::TEXT || '-' || substr(($1::UUID)::TEXT, 1, 8),
+        (ARRAY['open','in_progress','review','done'])[floor(random()::FLOAT8 * 4 + 1)::INT],
+        (SELECT id FROM app_user WHERE tenant_id = $2::UUID ORDER BY random() LIMIT 1)
+      FROM generate_series(1, $3) AS s
+
+deseed:
+
+  - name: truncate_task_comment
+    type: exec
+    query: TRUNCATE TABLE task_comment
+
+  - name: truncate_task
+    type: exec
+    query: TRUNCATE TABLE task
+
+  - name: truncate_project
+    type: exec
+    query: TRUNCATE TABLE project
+
+  - name: truncate_billing_usage
+    type: exec
+    query: TRUNCATE TABLE billing_usage
+
+  - name: truncate_app_user
+    type: exec
+    query: TRUNCATE TABLE app_user
+
+  - name: truncate_tenant
+    type: exec
+    query: TRUNCATE TABLE tenant CASCADE
+
+down:
+
+  - name: drop_task_comment
+    type: exec
+    query: DROP TABLE IF EXISTS task_comment
+
+  - name: drop_task
+    type: exec
+    query: DROP TABLE IF EXISTS task
+
+  - name: drop_project
+    type: exec
+    query: DROP TABLE IF EXISTS project
+
+  - name: drop_billing_usage
+    type: exec
+    query: DROP TABLE IF EXISTS billing_usage
+
+  - name: drop_app_user
+    type: exec
+    query: DROP TABLE IF EXISTS app_user
+
+  - name: drop_tenant
+    type: exec
+    query: DROP TABLE IF EXISTS tenant
+
+init:
+
+  - name: fetch_tenants
+    type: query
+    query: SELECT id FROM tenant
+
+  - name: fetch_users
+    type: query
+    query: SELECT id, tenant_id FROM app_user ORDER BY random()
+
+  - name: fetch_projects
+    type: query
+    query: SELECT id, tenant_id FROM project ORDER BY random()
+
+  - name: fetch_tasks
+    type: query
+    query: SELECT id, tenant_id, project_id FROM task WHERE deleted_at IS NULL ORDER BY random()
+
+run_weights:
+  list_tasks: 30
+  create_task: 15
+  update_task: 15
+  add_comment: 10
+  soft_delete: 5
+  tenant_dashboard: 15
+  admin_overview: 10
+
+run:
+
+  # List active tasks for the worker's tenant, filtered by status.
+  # Pattern: ref_perm for tenant pinning, partial index scan, filtered read
+  - name: list_tasks
+    type: query
+    args:
+      - ref_perm('fetch_tenants').id
+      - gen('number:1,4')
+    query: |-
+      SELECT t.id, t.title, t.status, t.created_at,
+        u.email AS assignee_email
+      FROM task t
+      LEFT JOIN app_user u ON u.id = t.assignee_id
+      WHERE t.tenant_id = $1::UUID
+        AND t.deleted_at IS NULL
+        AND t.status = (ARRAY['open','in_progress','review','done'])[$2::INT]
+      ORDER BY t.updated_at DESC
+      LIMIT 20
+
+  # Create a task in a random project.
+  # Pattern: ref_perm for tenant, ref_rand for project/assignee
+  - name: create_task
+    type: exec
+    args:
+      - ref_perm('fetch_tenants').id
+      - ref_rand('fetch_projects').id
+      - ref_rand('fetch_users').id
+      - gen('sentence:5')
+    query: |-
+      INSERT INTO task (project_id, tenant_id, title, status, assignee_id)
+      SELECT $2::UUID, $1::UUID, $4::STRING, 'open', $3::UUID
+      WHERE EXISTS (
+        SELECT 1 FROM project WHERE id = $2::UUID AND tenant_id = $1::UUID
+      )
+
+  # Advance a task's status through the state machine.
+  # Pattern: CASE-based state transitions (open -> in_progress -> review -> done)
+  - name: update_task
+    type: exec
+    args:
+      - ref_rand('fetch_tasks').id
+    query: |-
+      UPDATE task SET
+        status = CASE status
+          WHEN 'open' THEN 'in_progress'
+          WHEN 'in_progress' THEN 'review'
+          WHEN 'review' THEN 'done'
+          ELSE status
+        END,
+        updated_at = now()
+      WHERE id = $1::UUID AND deleted_at IS NULL
+
+  # Add a comment and increment the tenant's billing counter.
+  # Pattern: ref_same (same user for id + tenant_id), writable CTE, hot counter
+  - name: add_comment
+    type: exec
+    args:
+      - ref_same('fetch_users').id
+      - ref_same('fetch_users').tenant_id
+      - ref_rand('fetch_tasks').id
+      - gen('sentence:6')
+    query: |-
+      WITH
+        new_comment AS (
+          INSERT INTO task_comment (task_id, tenant_id, author_id, body)
+          VALUES ($3::UUID, $2::UUID, $1::UUID, $4::STRING)
+          RETURNING tenant_id
+        )
+      UPDATE billing_usage
+      SET api_calls = api_calls + 1, updated_at = now()
+      WHERE tenant_id = (SELECT tenant_id FROM new_comment)
+
+  # Soft-delete a task.
+  # Pattern: UPDATE deleted_at instead of DELETE
+  - name: soft_delete
+    type: exec
+    args:
+      - ref_rand('fetch_tasks').id
+    query: |-
+      UPDATE task
+      SET deleted_at = now(), updated_at = now()
+      WHERE id = $1::UUID AND deleted_at IS NULL
+
+  # Per-tenant dashboard showing task counts by status per project.
+  # Pattern: ref_perm for tenant, conditional aggregation (COUNT FILTER),
+  #          GROUP BY with multiple aggregates
+  - name: tenant_dashboard
+    type: query
+    args:
+      - ref_perm('fetch_tenants').id
+    query: |-
+      SELECT
+        p.name AS project_name,
+        COUNT(*) FILTER (WHERE t.status = 'open') AS open_count,
+        COUNT(*) FILTER (WHERE t.status = 'in_progress') AS in_progress_count,
+        COUNT(*) FILTER (WHERE t.status = 'review') AS review_count,
+        COUNT(*) FILTER (WHERE t.status = 'done') AS done_count,
+        COUNT(*) AS total
+      FROM task t
+      JOIN project p ON p.id = t.project_id
+      WHERE t.tenant_id = $1::UUID AND t.deleted_at IS NULL
+      GROUP BY p.name
+
+  # Cross-tenant admin overview of usage and task counts.
+  # Pattern: cross-tenant aggregate, no tenant filter, multi-JOIN
+  - name: admin_overview
+    type: query
+    query: |-
+      SELECT
+        tn.name AS tenant_name,
+        tn.plan,
+        bu.api_calls,
+        COUNT(DISTINCT t.id) AS task_count,
+        COUNT(DISTINCT u.id) AS user_count
+      FROM tenant tn
+      LEFT JOIN billing_usage bu ON bu.tenant_id = tn.id
+      LEFT JOIN task t ON t.tenant_id = tn.id AND t.deleted_at IS NULL
+      LEFT JOIN app_user u ON u.tenant_id = tn.id
+      GROUP BY tn.id, tn.name, tn.plan, bu.api_calls
+      ORDER BY bu.api_calls DESC
+      LIMIT 20

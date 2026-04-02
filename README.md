@@ -21,8 +21,6 @@ Query arguments are written as expressions compiled at startup, giving you acces
   - [User-Defined Expressions](#user-defined-expressions)
   - [Examples](#examples)
 - [Included Workloads](#included-workloads)
-  - [TPC-C](#tpc-c)
-  - [Bank](#bank)
 - [Setup](#setup)
 
 ## Supported Databases
@@ -65,7 +63,7 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 | Flag | Short | Default | Description |
 |---|---|---|---|
 | `--url` | | | Database connection URL (or set `URL` env var) |
-| `--config` | | `tpc-c.yaml` | Path to the workload YAML config file |
+| `--config` | | `_examples/tpcc/crdb.yaml` | Path to the workload YAML config file |
 | `--driver` | | `pgx` | database/sql driver name (`pgx` or `oracle`) |
 | `--duration` | `-d` | `1m` | Benchmark duration (run command only) |
 | `--workers` | `-w` | `1` | Number of concurrent workers (run command only) |
@@ -76,29 +74,29 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 ```sh
 edg up \
 --driver pgx \
---config _examples/tpcc_crdb.yaml \
+--config _examples/tpcc/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 
 edg seed \
 --driver pgx \
---config _examples/tpcc_crdb.yaml \
+--config _examples/tpcc/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 
 edg run \
 --driver pgx \
---config _examples/tpcc_crdb.yaml \
+--config _examples/tpcc/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable" \
 -w 100 \
 -d 1m
 
 edg deseed \
 --driver pgx \
---config _examples/tpcc_crdb.yaml \
+--config _examples/tpcc/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 
 edg down \
 --driver pgx \
---config _examples/tpcc_crdb.yaml \
+--config _examples/tpcc/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 ```
 
@@ -337,73 +335,15 @@ args:
 
 ## Included Workloads
 
-### TPC-C
+| Workload | Description |
+|---|---|
+| [TPC-C](_examples/tpcc/) | Full TPC-C benchmark with all 5 transaction profiles |
+| [Bank](_examples/bank/) | Bank account operations for contention and correctness testing |
+| [E-Commerce](_examples/ecommerce/) | E-commerce with categories, products, customers, and orders |
+| [IoT](_examples/iot/) | IoT devices, sensors, and time-series readings |
+| [SaaS](_examples/saas/) | Multi-tenant SaaS with tenants, users, projects, and tasks |
+| [Social](_examples/social/) | Social network with users, posts, follows, and tags |
 
-A TPC-C benchmark implementation with all 5 transaction profiles (New-Order, Payment, Order-Status, Delivery, Stock-Level) using writable CTEs for atomic execution. Available for both CockroachDB (`_examples/tpcc_crdb.yaml`) and Oracle (`_examples/tpcc_oracle.yaml`).
+# Todos
 
-```sh
-# CockroachDB
-edg up \
---driver pgx \
---config _examples/tpcc_crdb.yaml\
---url "postgres://root@localhost:26257?sslmode=disable"
-
-edg seed \
---driver pgx \
---config _examples/tpcc_crdb.yaml\
---url "postgres://root@localhost:26257?sslmode=disable"
-
-edg run \
---driver pgx \
---config _examples/tpcc_crdb.yaml\
---url "postgres://root@localhost:26257?sslmode=disable" \
--w 100 \
--d 1m
-```
-
-### Bank
-
-A simpler workload modelling bank account operations (balance checks, credits, transfers). Useful for contention and correctness testing. Available for both CockroachDB (`_examples/bank_crdb.yaml`) and Oracle (`_examples/bank_oracle.yaml`).
-
-```sh
-# CockroachDB
-edg up \
---driver pgx \
---config _examples/bank_crdb.yaml \
---url "postgres://root@localhost:26257?sslmode=disable"
-
-edg seed \
---driver pgx \
---config _examples/bank_crdb.yaml \
---url "postgres://root@localhost:26257?sslmode=disable"
-
-edg run \
---driver pgx \
---config _examples/bank_crdb.yaml \
---url "postgres://root@localhost:26257?sslmode=disable" \
--w 100 \
--d 1m
-```
-
-## Setup
-
-### CockroachDB
-
-```sh
-docker compose -f _examples/compose_crdb.yml up -d
-docker exec -it node1 cockroach init --insecure
-docker exec -it node1 cockroach sql --insecure
-```
-
-### Oracle
-
-```sh
-docker run \
---name oracle \
--d \
--p 1521:1521 \
--p 5500:5500 \
--e ORACLE_PDB=defaultdb \
--e ORACLE_PWD=password \
-container-registry.oracle.com/database/enterprise:19.19.0.0
-```
+* Support for MySQL

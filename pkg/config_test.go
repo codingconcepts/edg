@@ -104,7 +104,7 @@ func TestGenerateArgs_WithConst(t *testing.T) {
 func TestGenerateArgs_ClearsOneCacheAfter(t *testing.T) {
 	env := testEnv(nil)
 	env.env["const"] = constant
-	env.oneCache[1] = "data"
+	env.oneCache["test"] = "data"
 
 	q := &Query{Args: []string{"const(1)"}}
 	if err := q.CompileArgs(env); err != nil {
