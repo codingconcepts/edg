@@ -453,3 +453,17 @@ args:
 | [Populate](_examples/populate/) | Billion-row data population benchmark |
 | [Social](_examples/social/) | Social network with users, posts, follows, and tags |
 
+
+## Integration tests
+
+CockroachDB:
+
+```sh
+# Start CockroachDB.
+cockroach demo --insecure --no-example-database
+
+# Run integration tests.
+URL="postgres://root@localhost:26257?sslmode=disable" \
+DRIVER="pgx" \
+go test ./pkg -v -db
+```

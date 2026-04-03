@@ -1,0 +1,507 @@
+globals:
+  seed_count: 20
+  test_value: 42
+
+expressions:
+  double: "args[0] * 2"
+
+up:
+
+  - name: create_ref_source
+    type: exec
+    query: |-
+      CREATE TABLE test_ref_source (
+        id NUMBER(10) PRIMARY KEY,
+        name VARCHAR2(255) NOT NULL,
+        weight NUMBER(10) DEFAULT 1 NOT NULL
+      )
+
+  - name: create_scalars
+    type: exec
+    query: |-
+      CREATE TABLE test_scalars (
+        seq_id NUMBER(10),
+        const_val NUMBER(10),
+        global_val NUMBER(10),
+        expr_val NUMBER(10),
+        gen_val VARCHAR2(255),
+        regex_val VARCHAR2(255),
+        tmpl_val VARCHAR2(255),
+        cond_val VARCHAR2(255),
+        coal_val VARCHAR2(255),
+        expr_fn_val NUMBER
+      )
+
+  - name: create_uuids
+    type: exec
+    query: |-
+      CREATE TABLE test_uuids (
+        v1 VARCHAR2(36) NOT NULL,
+        v4 VARCHAR2(36) NOT NULL,
+        v6 VARCHAR2(36) NOT NULL,
+        v7 VARCHAR2(36) NOT NULL
+      )
+
+  - name: create_numbers
+    type: exec
+    query: |-
+      CREATE TABLE test_numbers (
+        float_val NUMBER,
+        uniform_val NUMBER,
+        norm_val NUMBER,
+        norm_f_val NUMBER,
+        zipf_val NUMBER(10)
+      )
+
+  - name: create_sets
+    type: exec
+    query: |-
+      CREATE TABLE test_sets (
+        rand_val VARCHAR2(255),
+        weighted_val VARCHAR2(255),
+        normal_val VARCHAR2(255)
+      )
+
+  - name: create_json
+    type: exec
+    query: |-
+      CREATE TABLE test_json (
+        obj VARCHAR2(4000),
+        arr VARCHAR2(4000)
+      )
+
+  - name: create_geo
+    type: exec
+    query: |-
+      CREATE TABLE test_geo (
+        lat NUMBER,
+        lon NUMBER,
+        wkt VARCHAR2(255)
+      )
+
+  - name: create_time
+    type: exec
+    query: |-
+      CREATE TABLE test_time (
+        ts VARCHAR2(255),
+        dur VARCHAR2(255),
+        date_str VARCHAR2(255),
+        offset_ts VARCHAR2(255)
+      )
+
+  - name: create_distributions
+    type: exec
+    query: |-
+      CREATE TABLE test_distributions (
+        nu_val NUMBER(10),
+        nu_vals VARCHAR2(255),
+        norm_vals VARCHAR2(255)
+      )
+
+  - name: create_refs
+    type: exec
+    query: |-
+      CREATE TABLE test_refs (
+        rand_id NUMBER(10),
+        same_id NUMBER(10),
+        same_name VARCHAR2(255),
+        ref_n_ids VARCHAR2(255),
+        weighted_ids VARCHAR2(255)
+      )
+
+  - name: create_ref_diff
+    type: exec
+    query: |-
+      CREATE TABLE test_ref_diff (
+        id1 NUMBER(10),
+        id2 NUMBER(10)
+      )
+
+  - name: create_ref_perm
+    type: exec
+    query: |-
+      CREATE TABLE test_ref_perm (
+        perm_id NUMBER(10)
+      )
+
+  - name: create_gen_batch
+    type: exec
+    query: |-
+      CREATE TABLE test_gen_batch (
+        email VARCHAR2(255) PRIMARY KEY
+      )
+
+  - name: create_batch
+    type: exec
+    query: |-
+      CREATE TABLE test_batch (
+        val NUMBER(10)
+      )
+
+  - name: create_ref_each
+    type: exec
+    query: |-
+      CREATE TABLE test_ref_each (
+        source_id NUMBER(10)
+      )
+
+seed:
+
+  - name: seed_ref_source
+    type: exec
+    args:
+      - seed_count
+    query: |-
+      INSERT INTO test_ref_source (id, name, weight)
+      SELECT level, 'item-' || level, level * 10
+      FROM DUAL
+      CONNECT BY level <= $1
+
+  - name: seed_gen_batch
+    type: exec
+    args:
+      - gen_batch(10, 5, 'email')
+    query: |-
+      INSERT INTO test_gen_batch (email)
+      SELECT column_value
+      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))
+
+  - name: seed_batch
+    type: exec
+    args:
+      - batch(5)
+    query: |-
+      INSERT INTO test_batch (val) VALUES ($1)
+
+  - name: seed_ref_each
+    type: exec
+    args:
+      - ref_each('SELECT id FROM test_ref_source WHERE id <= 5')
+    query: |-
+      INSERT INTO test_ref_each (source_id) VALUES ($1)
+
+deseed:
+
+  - name: truncate_ref_each
+    type: exec
+    query: TRUNCATE TABLE test_ref_each
+
+  - name: truncate_batch
+    type: exec
+    query: TRUNCATE TABLE test_batch
+
+  - name: truncate_gen_batch
+    type: exec
+    query: TRUNCATE TABLE test_gen_batch
+
+  - name: truncate_ref_perm
+    type: exec
+    query: TRUNCATE TABLE test_ref_perm
+
+  - name: truncate_ref_diff
+    type: exec
+    query: TRUNCATE TABLE test_ref_diff
+
+  - name: truncate_refs
+    type: exec
+    query: TRUNCATE TABLE test_refs
+
+  - name: truncate_distributions
+    type: exec
+    query: TRUNCATE TABLE test_distributions
+
+  - name: truncate_time
+    type: exec
+    query: TRUNCATE TABLE test_time
+
+  - name: truncate_geo
+    type: exec
+    query: TRUNCATE TABLE test_geo
+
+  - name: truncate_json
+    type: exec
+    query: TRUNCATE TABLE test_json
+
+  - name: truncate_sets
+    type: exec
+    query: TRUNCATE TABLE test_sets
+
+  - name: truncate_numbers
+    type: exec
+    query: TRUNCATE TABLE test_numbers
+
+  - name: truncate_uuids
+    type: exec
+    query: TRUNCATE TABLE test_uuids
+
+  - name: truncate_scalars
+    type: exec
+    query: TRUNCATE TABLE test_scalars
+
+  - name: truncate_ref_source
+    type: exec
+    query: TRUNCATE TABLE test_ref_source
+
+down:
+
+  - name: drop_ref_each
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_ref_each PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_batch
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_batch PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_gen_batch
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_gen_batch PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_ref_perm
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_ref_perm PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_ref_diff
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_ref_diff PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_refs
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_refs PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_distributions
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_distributions PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_time
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_time PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_geo
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_geo PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_json
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_json PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_sets
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_sets PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_numbers
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_numbers PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_uuids
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_uuids PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_scalars
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_scalars PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_ref_source
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_ref_source PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+init:
+
+  - name: ref_source
+    type: query
+    query: SELECT id, name, weight FROM test_ref_source
+
+run:
+
+  - name: insert_scalars
+    type: exec
+    args:
+      - seq(1, 1)
+      - const(42)
+      - global('test_value')
+      - expr(test_value * 2)
+      - gen('sentence:5')
+      - regex('[A-Z]{3}-[0-9]{4}')
+      - template('ITEM-%05d', seq(100, 1))
+      - cond(true, 'yes', 'no')
+      - coalesce(nil, 'fallback')
+      - double(5)
+    query: |-
+      INSERT INTO test_scalars (seq_id, const_val, global_val, expr_val, gen_val, regex_val, tmpl_val, cond_val, coal_val, expr_fn_val)
+      VALUES (:1, :2, :3, :4, :5, :6, :7, :8, :9, :10)
+
+  - name: insert_uuids
+    type: exec
+    args:
+      - uuid_v1()
+      - uuid_v4()
+      - uuid_v6()
+      - uuid_v7()
+    query: |-
+      INSERT INTO test_uuids (v1, v4, v6, v7)
+      VALUES (:1, :2, :3, :4)
+
+  - name: insert_numbers
+    type: exec
+    args:
+      - float_rand(1.0, 100.0, 2)
+      - uniform_rand(1.0, 100.0)
+      - norm_rand(50, 10, 1, 100)
+      - norm_rand_f(50, 10, 1, 100, 3)
+      - zipf(2.0, 1.0, 99)
+    query: |-
+      INSERT INTO test_numbers (float_val, uniform_val, norm_val, norm_f_val, zipf_val)
+      VALUES (:1, :2, :3, :4, :5)
+
+  - name: insert_sets
+    type: exec
+    args:
+      - set_rand(['red', 'green', 'blue'], [])
+      - set_rand(['visa', 'mastercard', 'amex'], [60, 30, 10])
+      - set_normal(['a', 'b', 'c', 'd', 'e'], 2, 0.8)
+    query: |-
+      INSERT INTO test_sets (rand_val, weighted_val, normal_val)
+      VALUES (:1, :2, :3)
+
+  - name: insert_json
+    type: exec
+    args:
+      - json_obj('name', gen('firstname'), 'age', gen('number:18,65'))
+      - json_arr(2, 5, 'email')
+    query: |-
+      INSERT INTO test_json (obj, arr)
+      VALUES (:1, :2)
+
+  - name: insert_geo
+    type: exec
+    args:
+      - point(51.5074, -0.1278, 10.0).lat
+      - point(51.5074, -0.1278, 10.0).lon
+      - point_wkt(51.5074, -0.1278, 10.0)
+    query: |-
+      INSERT INTO test_geo (lat, lon, wkt)
+      VALUES (:1, :2, :3)
+
+  - name: insert_time
+    type: exec
+    args:
+      - rand_timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
+      - rand_duration('1h', '24h')
+      - date_rand('2006-01-02', '2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
+      - date_offset('-1h')
+    query: |-
+      INSERT INTO test_time (ts, dur, date_str, offset_ts)
+      VALUES (:1, :2, :3, :4)
+
+  - name: insert_distributions
+    type: exec
+    args:
+      - nurand(255, 1, 1000)
+      - nurand_n(255, 1, 1000, 3, 5)
+      - norm_rand_n(50, 10, 1, 100, 3, 5)
+    query: |-
+      INSERT INTO test_distributions (nu_val, nu_vals, norm_vals)
+      VALUES (:1, :2, :3)
+
+  - name: insert_refs
+    type: exec
+    args:
+      - ref_rand('ref_source').id
+      - ref_same('ref_source').id
+      - ref_same('ref_source').name
+      - ref_n('ref_source', 'id', 2, 4)
+      - weighted_sample_n('ref_source', 'id', 'weight', 2, 4)
+    query: |-
+      INSERT INTO test_refs (rand_id, same_id, same_name, ref_n_ids, weighted_ids)
+      VALUES (:1, :2, :3, :4, :5)
+
+  - name: insert_ref_diff
+    type: exec
+    args:
+      - ref_diff('ref_source').id
+      - ref_diff('ref_source').id
+    query: |-
+      INSERT INTO test_ref_diff (id1, id2)
+      VALUES (:1, :2)
+
+  - name: insert_ref_perm
+    type: exec
+    args:
+      - ref_perm('ref_source').id
+    query: |-
+      INSERT INTO test_ref_perm (perm_id)
+      VALUES (:1)

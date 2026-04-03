@@ -1,0 +1,438 @@
+globals:
+  seed_count: 20
+  test_value: 42
+
+expressions:
+  double: "args[0] * 2"
+
+up:
+
+  - name: create_ref_source
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_ref_source (
+        id INT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        weight INT NOT NULL DEFAULT 1
+      )
+
+  - name: create_scalars
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_scalars (
+        seq_id INT,
+        const_val INT,
+        global_val INT,
+        expr_val INT,
+        gen_val VARCHAR(255),
+        regex_val VARCHAR(255),
+        tmpl_val VARCHAR(255),
+        cond_val VARCHAR(255),
+        coal_val VARCHAR(255),
+        expr_fn_val DOUBLE
+      )
+
+  - name: create_uuids
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_uuids (
+        v1 VARCHAR(36) NOT NULL,
+        v4 VARCHAR(36) NOT NULL,
+        v6 VARCHAR(36) NOT NULL,
+        v7 VARCHAR(36) NOT NULL
+      )
+
+  - name: create_numbers
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_numbers (
+        float_val DOUBLE,
+        uniform_val DOUBLE,
+        norm_val DOUBLE,
+        norm_f_val DOUBLE,
+        zipf_val INT
+      )
+
+  - name: create_sets
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_sets (
+        rand_val VARCHAR(255),
+        weighted_val VARCHAR(255),
+        normal_val VARCHAR(255)
+      )
+
+  - name: create_json
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_json (
+        obj JSON,
+        arr JSON
+      )
+
+  - name: create_geo
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_geo (
+        lat DOUBLE,
+        lon DOUBLE,
+        wkt VARCHAR(255)
+      )
+
+  - name: create_time
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_time (
+        ts VARCHAR(255),
+        dur VARCHAR(255),
+        date_str VARCHAR(255),
+        offset_ts VARCHAR(255)
+      )
+
+  - name: create_distributions
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_distributions (
+        nu_val INT,
+        nu_vals VARCHAR(255),
+        norm_vals VARCHAR(255)
+      )
+
+  - name: create_refs
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_refs (
+        rand_id INT,
+        same_id INT,
+        same_name VARCHAR(255),
+        ref_n_ids VARCHAR(255),
+        weighted_ids VARCHAR(255)
+      )
+
+  - name: create_ref_diff
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_ref_diff (
+        id1 INT,
+        id2 INT
+      )
+
+  - name: create_ref_perm
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_ref_perm (
+        perm_id INT
+      )
+
+  - name: create_gen_batch
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_gen_batch (
+        email VARCHAR(255) PRIMARY KEY
+      )
+
+  - name: create_batch
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_batch (
+        val INT
+      )
+
+  - name: create_ref_each
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_ref_each (
+        source_id INT
+      )
+
+seed:
+
+  - name: seed_ref_source
+    type: exec
+    args:
+      - seed_count
+    query: |-
+      INSERT INTO test_ref_source (id, name, weight)
+      WITH RECURSIVE seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
+      SELECT s, CONCAT('item-', s), s * 10 FROM seq
+
+  - name: seed_gen_batch
+    type: exec
+    args:
+      - gen_batch(10, 5, 'email')
+    query: |-
+      INSERT INTO test_gen_batch (email)
+      SELECT j.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
+      ) j
+
+  - name: seed_batch
+    type: exec
+    args:
+      - batch(5)
+    query: |-
+      INSERT INTO test_batch (val) VALUES ($1)
+
+  - name: seed_ref_each
+    type: exec
+    args:
+      - ref_each('SELECT id FROM test_ref_source WHERE id <= 5')
+    query: |-
+      INSERT INTO test_ref_each (source_id) VALUES ($1)
+
+deseed:
+
+  - name: truncate_ref_each
+    type: exec
+    query: TRUNCATE TABLE test_ref_each
+
+  - name: truncate_batch
+    type: exec
+    query: TRUNCATE TABLE test_batch
+
+  - name: truncate_gen_batch
+    type: exec
+    query: TRUNCATE TABLE test_gen_batch
+
+  - name: truncate_ref_perm
+    type: exec
+    query: TRUNCATE TABLE test_ref_perm
+
+  - name: truncate_ref_diff
+    type: exec
+    query: TRUNCATE TABLE test_ref_diff
+
+  - name: truncate_refs
+    type: exec
+    query: TRUNCATE TABLE test_refs
+
+  - name: truncate_distributions
+    type: exec
+    query: TRUNCATE TABLE test_distributions
+
+  - name: truncate_time
+    type: exec
+    query: TRUNCATE TABLE test_time
+
+  - name: truncate_geo
+    type: exec
+    query: TRUNCATE TABLE test_geo
+
+  - name: truncate_json
+    type: exec
+    query: TRUNCATE TABLE test_json
+
+  - name: truncate_sets
+    type: exec
+    query: TRUNCATE TABLE test_sets
+
+  - name: truncate_numbers
+    type: exec
+    query: TRUNCATE TABLE test_numbers
+
+  - name: truncate_uuids
+    type: exec
+    query: TRUNCATE TABLE test_uuids
+
+  - name: truncate_scalars
+    type: exec
+    query: TRUNCATE TABLE test_scalars
+
+  - name: truncate_ref_source
+    type: exec
+    query: TRUNCATE TABLE test_ref_source
+
+down:
+
+  - name: drop_ref_each
+    type: exec
+    query: DROP TABLE IF EXISTS test_ref_each
+
+  - name: drop_batch
+    type: exec
+    query: DROP TABLE IF EXISTS test_batch
+
+  - name: drop_gen_batch
+    type: exec
+    query: DROP TABLE IF EXISTS test_gen_batch
+
+  - name: drop_ref_perm
+    type: exec
+    query: DROP TABLE IF EXISTS test_ref_perm
+
+  - name: drop_ref_diff
+    type: exec
+    query: DROP TABLE IF EXISTS test_ref_diff
+
+  - name: drop_refs
+    type: exec
+    query: DROP TABLE IF EXISTS test_refs
+
+  - name: drop_distributions
+    type: exec
+    query: DROP TABLE IF EXISTS test_distributions
+
+  - name: drop_time
+    type: exec
+    query: DROP TABLE IF EXISTS test_time
+
+  - name: drop_geo
+    type: exec
+    query: DROP TABLE IF EXISTS test_geo
+
+  - name: drop_json
+    type: exec
+    query: DROP TABLE IF EXISTS test_json
+
+  - name: drop_sets
+    type: exec
+    query: DROP TABLE IF EXISTS test_sets
+
+  - name: drop_numbers
+    type: exec
+    query: DROP TABLE IF EXISTS test_numbers
+
+  - name: drop_uuids
+    type: exec
+    query: DROP TABLE IF EXISTS test_uuids
+
+  - name: drop_scalars
+    type: exec
+    query: DROP TABLE IF EXISTS test_scalars
+
+  - name: drop_ref_source
+    type: exec
+    query: DROP TABLE IF EXISTS test_ref_source
+
+init:
+
+  - name: ref_source
+    type: query
+    query: SELECT id, name, weight FROM test_ref_source
+
+run:
+
+  - name: insert_scalars
+    type: exec
+    args:
+      - seq(1, 1)
+      - const(42)
+      - global('test_value')
+      - expr(test_value * 2)
+      - gen('sentence:5')
+      - regex('[A-Z]{3}-[0-9]{4}')
+      - template('ITEM-%05d', seq(100, 1))
+      - cond(true, 'yes', 'no')
+      - coalesce(nil, 'fallback')
+      - double(5)
+    query: |-
+      INSERT INTO test_scalars (seq_id, const_val, global_val, expr_val, gen_val, regex_val, tmpl_val, cond_val, coal_val, expr_fn_val)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+  - name: insert_uuids
+    type: exec
+    args:
+      - uuid_v1()
+      - uuid_v4()
+      - uuid_v6()
+      - uuid_v7()
+    query: |-
+      INSERT INTO test_uuids (v1, v4, v6, v7)
+      VALUES (?, ?, ?, ?)
+
+  - name: insert_numbers
+    type: exec
+    args:
+      - float_rand(1.0, 100.0, 2)
+      - uniform_rand(1.0, 100.0)
+      - norm_rand(50, 10, 1, 100)
+      - norm_rand_f(50, 10, 1, 100, 3)
+      - zipf(2.0, 1.0, 99)
+    query: |-
+      INSERT INTO test_numbers (float_val, uniform_val, norm_val, norm_f_val, zipf_val)
+      VALUES (?, ?, ?, ?, ?)
+
+  - name: insert_sets
+    type: exec
+    args:
+      - set_rand(['red', 'green', 'blue'], [])
+      - set_rand(['visa', 'mastercard', 'amex'], [60, 30, 10])
+      - set_normal(['a', 'b', 'c', 'd', 'e'], 2, 0.8)
+    query: |-
+      INSERT INTO test_sets (rand_val, weighted_val, normal_val)
+      VALUES (?, ?, ?)
+
+  - name: insert_json
+    type: exec
+    args:
+      - json_obj('name', gen('firstname'), 'age', gen('number:18,65'))
+      - json_arr(2, 5, 'email')
+    query: |-
+      INSERT INTO test_json (obj, arr)
+      VALUES (?, ?)
+
+  - name: insert_geo
+    type: exec
+    args:
+      - point(51.5074, -0.1278, 10.0).lat
+      - point(51.5074, -0.1278, 10.0).lon
+      - point_wkt(51.5074, -0.1278, 10.0)
+    query: |-
+      INSERT INTO test_geo (lat, lon, wkt)
+      VALUES (?, ?, ?)
+
+  - name: insert_time
+    type: exec
+    args:
+      - rand_timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
+      - rand_duration('1h', '24h')
+      - date_rand('2006-01-02', '2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
+      - date_offset('-1h')
+    query: |-
+      INSERT INTO test_time (ts, dur, date_str, offset_ts)
+      VALUES (?, ?, ?, ?)
+
+  - name: insert_distributions
+    type: exec
+    args:
+      - nurand(255, 1, 1000)
+      - nurand_n(255, 1, 1000, 3, 5)
+      - norm_rand_n(50, 10, 1, 100, 3, 5)
+    query: |-
+      INSERT INTO test_distributions (nu_val, nu_vals, norm_vals)
+      VALUES (?, ?, ?)
+
+  - name: insert_refs
+    type: exec
+    args:
+      - ref_rand('ref_source').id
+      - ref_same('ref_source').id
+      - ref_same('ref_source').name
+      - ref_n('ref_source', 'id', 2, 4)
+      - weighted_sample_n('ref_source', 'id', 'weight', 2, 4)
+    query: |-
+      INSERT INTO test_refs (rand_id, same_id, same_name, ref_n_ids, weighted_ids)
+      VALUES (?, ?, ?, ?, ?)
+
+  - name: insert_ref_diff
+    type: exec
+    args:
+      - ref_diff('ref_source').id
+      - ref_diff('ref_source').id
+    query: |-
+      INSERT INTO test_ref_diff (id1, id2)
+      VALUES (?, ?)
+
+  - name: insert_ref_perm
+    type: exec
+    args:
+      - ref_perm('ref_source').id
+    query: |-
+      INSERT INTO test_ref_perm (perm_id)
+      VALUES (?)
