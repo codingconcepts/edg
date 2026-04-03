@@ -1,0 +1,129 @@
+globals:
+  a_rows: 1000
+  b_rows: 5000
+  c_rows: 20000
+  batch_size: 5000
+
+up:
+
+  - name: create_a
+    query: |-
+      CREATE TABLE IF NOT EXISTS a (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name STRING NOT NULL
+      )
+
+  - name: create_b
+    query: |-
+      CREATE TABLE IF NOT EXISTS b (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        a_id UUID NOT NULL REFERENCES a(id),
+        value INT NOT NULL
+      )
+
+  - name: create_c
+    query: |-
+      CREATE TABLE IF NOT EXISTS c (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        b_id UUID NOT NULL REFERENCES b(id),
+        status STRING NOT NULL DEFAULT 'new'
+      )
+
+seed:
+
+  - name: populate_a
+    args:
+      - gen_batch(a_rows, batch_size, 'word')
+    query: |-
+      INSERT INTO a (name)
+      SELECT unnest(string_to_array('$1', ','))
+
+  - name: populate_b
+    args:
+      - batch(b_rows / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO b (a_id, value)
+      SELECT a.id, floor(random()::FLOAT8 * 100)::INT
+      FROM a
+      ORDER BY random()
+      LIMIT $2::INT
+
+  - name: populate_c
+    args:
+      - batch(c_rows / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO c (b_id)
+      SELECT b.id
+      FROM b
+      ORDER BY random()
+      LIMIT $2::INT
+
+deseed:
+
+  - name: truncate_c
+    type: exec
+    query: TRUNCATE TABLE c
+
+  - name: truncate_b
+    type: exec
+    query: TRUNCATE TABLE b
+
+  - name: truncate_a
+    type: exec
+    query: TRUNCATE TABLE a CASCADE
+
+down:
+
+  - name: drop_c
+    type: exec
+    query: DROP TABLE IF EXISTS c
+
+  - name: drop_b
+    type: exec
+    query: DROP TABLE IF EXISTS b
+
+  - name: drop_a
+    type: exec
+    query: DROP TABLE IF EXISTS a
+
+# No run_weights: all three queries run sequentially every iteration,
+# so each step can reference data returned by the previous one.
+
+run:
+
+  # Finds a row from a and makes available to
+  # subsequent queries as "find_a".
+  - name: find_a
+    type: query
+    query: |-
+      SELECT id AS a_id, name
+      FROM a
+      ORDER BY random()
+      LIMIT 1
+
+  # Finds a row from b that's related to a random
+  # row in b and makes available to subsequent queries
+  # as "find_b".
+  - name: find_b
+    type: query
+    args:
+      - ref_rand('find_a').a_id
+    query: |-
+      SELECT id AS b_id, value
+      FROM b
+      WHERE a_id = $1::UUID
+      LIMIT 1
+
+  # Finds a row from b that's related to a random
+  # row in c.
+  - name: update_c
+    type: exec
+    args:
+      - ref_rand('find_b').b_id
+    query: |-
+      UPDATE c SET status = 'processed'
+      WHERE b_id = $1::UUID
+        AND status = 'new'
+      LIMIT 1

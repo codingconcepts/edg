@@ -20,7 +20,7 @@ Query arguments are written as expressions compiled at startup, giving you acces
   - [Functions](#functions)
   - [User-Defined Expressions](#user-defined-expressions)
   - [Examples](#examples)
-- [Included Workloads](#included-workloads)
+- [Example Workloads](#example-workloads)
 - [Setup](#setup)
 
 ## Supported Databases
@@ -29,6 +29,7 @@ Query arguments are written as expressions compiled at startup, giving you acces
 |---|---|---|
 | CockroachDB / PostgreSQL | `pgx` | `postgres://...` |
 | Oracle | `oracle` | `oracle://...` |
+| MySQL | `mysql` | `user:password@tcp(host:port)/database?parseTime=true` |
 
 ## Installation
 
@@ -64,7 +65,7 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 |---|---|---|---|
 | `--url` | | | Database connection URL (or set `URL` env var) |
 | `--config` | | `_examples/tpcc/crdb.yaml` | Path to the workload YAML config file |
-| `--driver` | | `pgx` | database/sql driver name (`pgx` or `oracle`) |
+| `--driver` | | `pgx` | database/sql driver name (`pgx`, `oracle`, or `mysql`) |
 | `--duration` | `-d` | `1m` | Benchmark duration (run command only) |
 | `--workers` | `-w` | `1` | Number of concurrent workers (run command only) |
 | `--print-interval` | | `1s` | Progress reporting interval (run command only) |
@@ -226,6 +227,8 @@ Query arguments are written as expressions compiled at startup using [expr-lang/
 | `ref_n(name, field, min, max)` | `string` | Picks N unique random rows (N in [min, max]) from a named dataset, extracts `field` from each, and returns a comma-separated string (e.g. `"42,17,93"`). |
 | `nurand(A, x, y)` | `int` | TPC-C Non-Uniform Random: `(((random(0,A) \| random(x,y)) + C) / (y-x+1)) + x`. The constant C is generated once per A value and persists for the worker's lifetime. |
 | `nurand_n(A, x, y, min, max)` | `string` | Generates N unique NURand values (N in [min, max]) as a comma-separated string. |
+| `set_rand(values, weights)` | `any` | Picks a random item from a set. If weights are provided, weighted random selection is used; otherwise uniform. Values and weights are separate arrays. |
+| `set_normal(values, mean, stddev)` | `any` | Picks an item from a set using normal distribution. `mean` is the index selected most often; `stddev` controls spread (~68% of picks fall within `mean +/- stddev` indices, ~95% within `mean +/- 2*stddev`). A smaller stddev concentrates picks around the mean; a larger one spreads them more evenly. |
 
 ### User-Defined Expressions
 
@@ -331,9 +334,19 @@ args:
 
   # Generates 100,000 unique emails via gofakeit, split into batches of 10,000.
   - gen_batch(customers, batch_size, 'email')
+
+  # Picks a random payment method with uniform probability.
+  - set_rand(['credit_card', 'debit_card', 'paypal'], [])
+
+  # Picks a random rating weighted toward 4 and 5 stars.
+  - set_rand(['1', '2', '3', '4', '5'], [5, 10, 20, 35, 30])
+
+  # Picks a quantity using normal distribution.
+  # mean=2 (value '3' at index 2 is most common), stddev=0.8 (~68% pick indices 1-3).
+  - set_normal([1, 2, 3, 4, 5], 2, 0.8)
 ```
 
-## Included Workloads
+## Example Workloads
 
 | Workload | Description |
 |---|---|
@@ -341,9 +354,8 @@ args:
 | [Bank](_examples/bank/) | Bank account operations for contention and correctness testing |
 | [E-Commerce](_examples/ecommerce/) | E-commerce with categories, products, customers, and orders |
 | [IoT](_examples/iot/) | IoT devices, sensors, and time-series readings |
+| [Normal](_examples/normal/) | Product reviews with normal distribution ratings |
+| [Pipeline](_examples/pipeline/) | Multi-table sequential reads and writes |
 | [SaaS](_examples/saas/) | Multi-tenant SaaS with tenants, users, projects, and tasks |
 | [Social](_examples/social/) | Social network with users, posts, follows, and tags |
 
-# Todos
-
-* Support for MySQL

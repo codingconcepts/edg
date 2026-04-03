@@ -1,0 +1,85 @@
+globals:
+  products: 100
+  batch_size: 100
+
+up:
+
+  - name: create_product
+    query: |-
+      CREATE TABLE IF NOT EXISTS product (
+        id INT PRIMARY KEY,
+        name STRING NOT NULL,
+        price DECIMAL(10,2) NOT NULL
+      )
+
+  - name: create_review
+    query: |-
+      CREATE TABLE IF NOT EXISTS review (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id INT NOT NULL REFERENCES product(id),
+        rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+seed:
+
+  - name: populate_product
+    args:
+      - products
+    query: |-
+      INSERT INTO product (id, name, price)
+      SELECT
+        s,
+        'product-' || s::TEXT,
+        (random()::FLOAT8 * 99 + 1)::DECIMAL(10,2)
+      FROM generate_series(1, $1) AS s
+
+deseed:
+
+  - name: truncate_review
+    type: exec
+    query: TRUNCATE TABLE review
+
+  - name: truncate_product
+    type: exec
+    query: TRUNCATE TABLE product CASCADE
+
+down:
+
+  - name: drop_review
+    type: exec
+    query: DROP TABLE IF EXISTS review
+
+  - name: drop_product
+    type: exec
+    query: DROP TABLE IF EXISTS product
+
+init:
+
+  - name: fetch_products
+    type: query
+    query: SELECT id FROM product
+
+run:
+
+  # Most reviews cluster around 4 stars (mean=4, stddev=1, clamped to 1-5).
+  - name: add_review
+    type: exec
+    args:
+      - ref_rand('fetch_products').id
+      - norm_rand(4, 1, 1, 5)
+    query: |-
+      INSERT INTO review (product_id, rating)
+      VALUES ($1::INT, $2::INT)
+
+  # Bulk insert using norm_rand_n to pick 3-8 products weighted
+  # toward the middle of the catalogue.
+  - name: add_batch_reviews
+    type: exec
+    args:
+      - norm_rand_n(50, 15, 1, 100, 3, 8)
+      - norm_rand(4, 1, 1, 5)
+    query: |-
+      INSERT INTO review (product_id, rating)
+      SELECT id::INT, $2::INT
+      FROM unnest(string_to_array($1, ',')) AS id

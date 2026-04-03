@@ -261,6 +261,93 @@ func TestNURandN(t *testing.T) {
 	}
 }
 
+func TestNormRand_Distribution(t *testing.T) {
+	env := testEnv(nil)
+
+	const (
+		mean   = 500
+		stddev = 50
+		min    = 1
+		max    = 1000
+		n      = 50000
+	)
+
+	sum := 0.0
+	within1 := 0
+	within2 := 0
+	within3 := 0
+
+	for range n {
+		v := env.normRand(mean, stddev, min, max)
+		if v < min || v > max {
+			t.Fatalf("normRand value %d outside [%d, %d]", v, min, max)
+		}
+		sum += float64(v)
+
+		dist := float64(v) - mean
+		if dist < 0 {
+			dist = -dist
+		}
+		switch {
+		case dist <= stddev:
+			within1++
+			within2++
+			within3++
+		case dist <= 2*stddev:
+			within2++
+			within3++
+		case dist <= 3*stddev:
+			within3++
+		}
+	}
+
+	// Observed mean should be close to the configured mean.
+	observedMean := sum / n
+	if observedMean < mean-2 || observedMean > mean+2 {
+		t.Errorf("observed mean = %.1f, want ~%d", observedMean, mean)
+	}
+
+	// Empirical rule: ~68 / ~95 / ~99.7 within 1 / 2 / 3 stddevs.
+	pct1 := float64(within1) / n
+	pct2 := float64(within2) / n
+	pct3 := float64(within3) / n
+
+	if pct1 < 0.65 || pct1 > 0.71 {
+		t.Errorf("within 1 stddev = %.1f%%, want ~68%%", pct1*100)
+	}
+	if pct2 < 0.93 || pct2 > 0.97 {
+		t.Errorf("within 2 stddevs = %.1f%%, want ~95%%", pct2*100)
+	}
+	if pct3 < 0.99 {
+		t.Errorf("within 3 stddevs = %.1f%%, want ~99.7%%", pct3*100)
+	}
+}
+
+func TestNormRandN(t *testing.T) {
+	env := testEnv(nil)
+
+	result := env.normRandN(500, 50, 1, 1000, 5, 15)
+	parts := strings.Split(result, ",")
+
+	if len(parts) < 5 || len(parts) > 15 {
+		t.Errorf("normRandN returned %d items, want 5-15", len(parts))
+	}
+
+	seen := map[string]bool{}
+	for _, v := range parts {
+		if seen[v] {
+			t.Errorf("normRandN returned duplicate value: %v", v)
+		}
+		seen[v] = true
+
+		var num int
+		fmt.Sscanf(v, "%d", &num)
+		if num < 1 || num > 1000 {
+			t.Errorf("normRandN value %d outside [1, 1000]", num)
+		}
+	}
+}
+
 func TestRefRand_UnknownName(t *testing.T) {
 	env := testEnv(nil)
 	if result := env.refRand("nonexistent"); result != nil {
@@ -712,6 +799,26 @@ func TestResetUniqIndex(t *testing.T) {
 	}
 }
 
+func TestToFloat(t *testing.T) {
+	tests := []struct {
+		name  string
+		input any
+		want  float64
+	}{
+		{"float64", 3.14, 3.14},
+		{"int", 42, 42.0},
+		{"int64", int64(99), 99.0},
+		{"unsupported", "hello", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := toFloat(tt.input); got != tt.want {
+				t.Errorf("toFloat(%v) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func benchEnv(dataSize int) *Env {
 	rows := make([]map[string]any, dataSize)
 	for i := range rows {
@@ -726,6 +833,118 @@ func benchEnv(dataSize int) *Env {
 	}
 	env.env["items"] = rows
 	return env
+}
+
+func TestSetRand_Uniform(t *testing.T) {
+	counts := map[any]int{}
+	for range 3000 {
+		v, err := setRand([]any{"a", "b", "c"}, []any{})
+		if err != nil {
+			t.Fatalf("setRand error: %v", err)
+		}
+		counts[v]++
+	}
+
+	for _, key := range []string{"a", "b", "c"} {
+		if counts[key] < 800 || counts[key] > 1200 {
+			t.Errorf("%q picked %d/3000 times, expected ~1000", key, counts[key])
+		}
+	}
+}
+
+func TestSetRand_Weighted(t *testing.T) {
+	counts := map[any]int{}
+	for range 10000 {
+		v, err := setRand([]any{"heavy", "light"}, []any{90, 10})
+		if err != nil {
+			t.Fatalf("setRand error: %v", err)
+		}
+		counts[v]++
+	}
+
+	if counts["heavy"] < 8500 {
+		t.Errorf("heavy picked %d/10000 times, expected ~9000", counts["heavy"])
+	}
+	if counts["light"] < 500 {
+		t.Errorf("light picked %d/10000 times, expected ~1000", counts["light"])
+	}
+}
+
+func TestSetRand_SingleItem(t *testing.T) {
+	v, err := setRand([]any{"only"}, []any{})
+	if err != nil {
+		t.Fatalf("setRand error: %v", err)
+	}
+	if v != "only" {
+		t.Errorf("setRand single item = %v, want 'only'", v)
+	}
+}
+
+func TestSetRand_Empty(t *testing.T) {
+	_, err := setRand([]any{}, []any{})
+	if err == nil {
+		t.Fatal("setRand with no values should return error")
+	}
+}
+
+func TestSetRand_MismatchedWeights(t *testing.T) {
+	_, err := setRand([]any{"a", "b", "c"}, []any{50, 30})
+	if err == nil {
+		t.Fatal("setRand with mismatched weights should return error")
+	}
+}
+
+func TestSetNormal_CenterBias(t *testing.T) {
+	items := []any{"a", "b", "c", "d", "e"}
+	counts := map[any]int{}
+	for range 10000 {
+		v, err := setNormal(items, 2.0, 0.8)
+		if err != nil {
+			t.Fatalf("setNormal error: %v", err)
+		}
+		counts[v]++
+	}
+
+	// Middle item "c" (index 2) should be picked most often.
+	if counts["c"] < counts["a"] {
+		t.Errorf("center item 'c' (%d) should be picked more than edge 'a' (%d)", counts["c"], counts["a"])
+	}
+	if counts["c"] < counts["e"] {
+		t.Errorf("center item 'c' (%d) should be picked more than edge 'e' (%d)", counts["c"], counts["e"])
+	}
+}
+
+func TestSetNormal_SingleItem(t *testing.T) {
+	v, err := setNormal([]any{"only"}, 0, 1)
+	if err != nil {
+		t.Fatalf("setNormal error: %v", err)
+	}
+	if v != "only" {
+		t.Errorf("setNormal single item = %v, want 'only'", v)
+	}
+}
+
+func TestSetNormal_Empty(t *testing.T) {
+	_, err := setNormal([]any{}, 0, 1)
+	if err == nil {
+		t.Fatal("setNormal with no values should return error")
+	}
+}
+
+func TestWeightedItems_Choose(t *testing.T) {
+	wi := buildWeightedItems(
+		[]any{"heavy", "light"},
+		[]int{90, 10},
+	)
+
+	counts := map[any]int{}
+	for range 1000 {
+		counts[wi.choose()]++
+	}
+
+	if counts["heavy"] < 800 {
+		t.Errorf("heavy picked %d/1000, expected ~900", counts["heavy"])
+	}
 }
 
 func BenchmarkToInt(b *testing.B) {
@@ -935,6 +1154,41 @@ func BenchmarkNurandN(b *testing.B) {
 			b.ResetTimer()
 			for range b.N {
 				env.nuRandN(8191, 1, 100000, tc.n, tc.n)
+			}
+		})
+	}
+}
+
+func BenchmarkNormRand(b *testing.B) {
+	env := benchEnv(0)
+
+	b.Run("sequential", func(b *testing.B) {
+		for range b.N {
+			env.normRand(500, 50, 1, 1000)
+		}
+	})
+
+	b.Run("narrow_range", func(b *testing.B) {
+		for range b.N {
+			env.normRand(50, 100, 40, 60)
+		}
+	})
+}
+
+func BenchmarkNormRandN(b *testing.B) {
+	cases := []struct {
+		name string
+		n    int
+	}{
+		{"n_5", 5},
+		{"n_15", 15},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			env := benchEnv(0)
+			b.ResetTimer()
+			for range b.N {
+				env.normRandN(500, 50, 1, 1000, tc.n, tc.n)
 			}
 		})
 	}

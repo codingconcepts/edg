@@ -1,0 +1,279 @@
+# IoT workload for Oracle
+#
+# Simulates IoT devices with sensors producing time-series readings.
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  devices: 100
+  sensors_per_device: 5
+  readings_per_sensor: 1000
+  page_size: 50
+
+up:
+
+  - name: create_device
+    query: |-
+      CREATE TABLE device (
+        id NUMBER NOT NULL,
+        name VARCHAR2(255) NOT NULL,
+        location VARCHAR2(255) NOT NULL,
+        device_type VARCHAR2(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_sensor
+    query: |-
+      CREATE TABLE sensor (
+        id NUMBER NOT NULL,
+        device_id NUMBER NOT NULL,
+        metric_name VARCHAR2(255) NOT NULL,
+        unit VARCHAR2(20) NOT NULL,
+        min_threshold NUMBER(10,2) NOT NULL,
+        max_threshold NUMBER(10,2) NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_reading
+    query: |-
+      CREATE TABLE reading (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        sensor_id NUMBER NOT NULL,
+        value NUMBER(12,4) NOT NULL,
+        recorded_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_alert
+    query: |-
+      CREATE TABLE alert (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        sensor_id NUMBER NOT NULL,
+        reading_value NUMBER(12,4) NOT NULL,
+        threshold NUMBER(10,2) NOT NULL,
+        alert_type VARCHAR2(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_idx_reading_sensor_time
+    query: |-
+      CREATE INDEX idx_reading_sensor_time
+      ON reading (sensor_id, recorded_at DESC)
+
+  - name: create_idx_alert_sensor_time
+    query: |-
+      CREATE INDEX idx_alert_sensor_time
+      ON alert (sensor_id, created_at DESC)
+
+seed:
+
+  - name: populate_device
+    args:
+      - devices
+    query: |-
+      INSERT INTO device (id, name, location, device_type)
+      SELECT
+        LEVEL,
+        'device-' || LEVEL,
+        DECODE(TRUNC(DBMS_RANDOM.VALUE * 6) + 1,
+          1,'floor-1', 2,'floor-2', 3,'floor-3',
+          4,'roof', 5,'basement', 6,'warehouse'),
+        DECODE(TRUNC(DBMS_RANDOM.VALUE * 4) + 1,
+          1,'temperature', 2,'pressure', 3,'humidity', 4,'vibration')
+      FROM DUAL
+      CONNECT BY LEVEL <= $1
+
+  - name: populate_sensor
+    args:
+      - ref_each('SELECT id FROM device')
+      - sensors_per_device
+    query: |-
+      INSERT INTO sensor (id, device_id, metric_name, unit, min_threshold, max_threshold)
+      SELECT
+        ($1 - 1) * $2 + LEVEL,
+        $1,
+        DECODE(LEVEL, 1,'temp_c', 2,'pressure_psi', 3,'humidity_pct', 4,'rpm', 5,'voltage'),
+        DECODE(LEVEL, 1,'°C', 2,'PSI', 3,'%', 4,'RPM', 5,'V'),
+        DECODE(LEVEL, 1,15.0, 2,20.0, 3,30.0, 4,500.0, 5,110.0),
+        DECODE(LEVEL, 1,35.0, 2,80.0, 3,70.0, 4,3000.0, 5,240.0)
+      FROM DUAL
+      CONNECT BY LEVEL <= $2
+
+  - name: populate_reading
+    args:
+      - ref_each('SELECT id, min_threshold, max_threshold FROM sensor')
+      - readings_per_sensor
+    query: |-
+      INSERT INTO reading (sensor_id, value, recorded_at)
+      SELECT
+        $1,
+        $2 + DBMS_RANDOM.VALUE * ($3 - $2),
+        SYSTIMESTAMP - NUMTODSINTERVAL(LEVEL, 'MINUTE')
+      FROM DUAL
+      CONNECT BY LEVEL <= $4
+
+deseed:
+
+  - name: truncate_alert
+    type: exec
+    query: TRUNCATE TABLE alert
+
+  - name: truncate_reading
+    type: exec
+    query: TRUNCATE TABLE reading
+
+  - name: truncate_sensor
+    type: exec
+    query: TRUNCATE TABLE sensor
+
+  - name: truncate_device
+    type: exec
+    query: TRUNCATE TABLE device
+
+down:
+
+  - name: drop_alert
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE alert CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_reading
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE reading CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_sensor
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE sensor CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_device
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE device CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+init:
+
+  - name: fetch_sensors
+    type: query
+    query: SELECT id, device_id, min_threshold, max_threshold FROM sensor
+
+  - name: fetch_devices
+    type: query
+    query: SELECT id FROM device
+
+run_weights:
+  ingest_reading: 60
+  check_alerts: 15
+  hourly_rollup: 5
+  device_history: 10
+  update_threshold: 5
+  detect_anomaly: 5
+
+run:
+
+  # Ingest a single sensor reading.
+  - name: ingest_reading
+    type: exec
+    args:
+      - ref_rand('fetch_sensors').id
+      - gen('number:1,10000')
+    query: |-
+      INSERT INTO reading (sensor_id, value)
+      VALUES (:1, :2 / 100.0)
+
+  # Find recent readings that exceeded sensor thresholds.
+  - name: check_alerts
+    type: query
+    args:
+      - ref_rand('fetch_sensors').id
+      - ref_rand('fetch_sensors').max_threshold
+    query: |-
+      SELECT r.id, r.value, r.recorded_at, s.metric_name
+      FROM reading r
+      JOIN sensor s ON s.id = r.sensor_id
+      WHERE r.sensor_id = :1
+        AND r.recorded_at >= SYSTIMESTAMP - INTERVAL '1' HOUR
+        AND r.value > :2
+      ORDER BY r.recorded_at DESC
+      FETCH FIRST 20 ROWS ONLY
+
+  # Aggregate readings into hourly buckets for a sensor.
+  - name: hourly_rollup
+    type: query
+    args:
+      - ref_rand('fetch_sensors').id
+    query: |-
+      SELECT
+        sensor_id,
+        TRUNC(recorded_at, 'HH') AS hour,
+        ROUND(AVG(value), 2) AS avg_value,
+        ROUND(MIN(value), 2) AS min_value,
+        ROUND(MAX(value), 2) AS max_value,
+        COUNT(*) AS reading_count
+      FROM reading
+      WHERE sensor_id = :1
+        AND recorded_at >= SYSTIMESTAMP - INTERVAL '24' HOUR
+      GROUP BY sensor_id, TRUNC(recorded_at, 'HH')
+      ORDER BY hour DESC
+
+  # Paginated history of readings for a device.
+  - name: device_history
+    type: query
+    args:
+      - ref_rand('fetch_devices').id
+      - gen('number:0,19')
+      - page_size
+    query: |-
+      SELECT r.value, r.recorded_at, s.metric_name, s.unit
+      FROM reading r
+      JOIN sensor s ON s.id = r.sensor_id
+      WHERE s.device_id = :1
+      ORDER BY r.recorded_at DESC
+      OFFSET :2 * :3 ROWS FETCH NEXT :3 ROWS ONLY
+
+  # Adjust a sensor's upper threshold.
+  - name: update_threshold
+    type: exec
+    args:
+      - ref_rand('fetch_sensors').id
+      - gen('number:50,300')
+    query: |-
+      UPDATE sensor SET max_threshold = :2
+      WHERE id = :1
+
+  # Detect anomalies using a moving average window.
+  - name: detect_anomaly
+    type: query
+    args:
+      - ref_rand('fetch_sensors').id
+    query: |-
+      SELECT sensor_id, value, recorded_at,
+        AVG(value) OVER (ORDER BY recorded_at
+          ROWS BETWEEN 10 PRECEDING AND CURRENT ROW) AS moving_avg,
+        value - AVG(value) OVER (ORDER BY recorded_at
+          ROWS BETWEEN 10 PRECEDING AND CURRENT ROW) AS deviation
+      FROM reading
+      WHERE sensor_id = :1
+        AND recorded_at >= SYSTIMESTAMP - INTERVAL '1' HOUR
+      ORDER BY recorded_at DESC
+      FETCH FIRST 50 ROWS ONLY

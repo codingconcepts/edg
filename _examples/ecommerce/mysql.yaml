@@ -1,8 +1,22 @@
+# E-commerce workload for MySQL
+#
+# MySQL does not support writable CTEs (DML inside WITH clauses).
+# The checkout transaction is simplified to separate operations.
+#
+# Requires MySQL 8.0+.
+# For large datasets, set: SET GLOBAL cte_max_recursion_depth = 200000;
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
 globals:
   categories: 20
   products: 10000  # categories x 500
   customers: 50000
   batch_size: 5000
+
+expressions:
+  star_rating: "int(args[0]) % 5 + 1"
 
 up:
 
@@ -10,77 +24,85 @@ up:
     query: |-
       CREATE TABLE IF NOT EXISTS category (
         id INT PRIMARY KEY,
-        name STRING NOT NULL
+        name VARCHAR(255) NOT NULL
       )
 
   - name: create_product
     query: |-
       CREATE TABLE IF NOT EXISTS product (
         id INT PRIMARY KEY,
-        category_id INT NOT NULL REFERENCES category(id),
-        name STRING NOT NULL,
+        category_id INT NOT NULL,
+        name VARCHAR(255) NOT NULL,
         price DECIMAL(10,2) NOT NULL,
         stock_qty INT NOT NULL DEFAULT 100,
-        created_at TIMESTAMP NOT NULL DEFAULT now()
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (category_id) REFERENCES category(id)
       )
 
   - name: create_customer
     query: |-
       CREATE TABLE IF NOT EXISTS customer (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        email STRING NOT NULL,
-        name STRING NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT now()
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        email VARCHAR(255) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
 
   - name: create_cart_item
     query: |-
       CREATE TABLE IF NOT EXISTS cart_item (
-        customer_id UUID NOT NULL REFERENCES customer(id),
-        product_id INT NOT NULL REFERENCES product(id),
+        customer_id CHAR(36) NOT NULL,
+        product_id INT NOT NULL,
         quantity INT NOT NULL DEFAULT 1,
-        added_at TIMESTAMP NOT NULL DEFAULT now(),
-        PRIMARY KEY (customer_id, product_id)
+        added_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (customer_id, product_id),
+        FOREIGN KEY (customer_id) REFERENCES customer(id),
+        FOREIGN KEY (product_id) REFERENCES product(id)
       )
 
   - name: create_purchase_order
     query: |-
       CREATE TABLE IF NOT EXISTS purchase_order (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        customer_id UUID NOT NULL REFERENCES customer(id),
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        customer_id CHAR(36) NOT NULL,
         total DECIMAL(12,2) NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT now()
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customer(id)
       )
 
   - name: create_order_item
     query: |-
       CREATE TABLE IF NOT EXISTS order_item (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        order_id UUID NOT NULL REFERENCES purchase_order(id),
-        product_id INT NOT NULL REFERENCES product(id),
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        order_id CHAR(36) NOT NULL,
+        product_id INT NOT NULL,
         quantity INT NOT NULL,
-        unit_price DECIMAL(10,2) NOT NULL
+        unit_price DECIMAL(10,2) NOT NULL,
+        FOREIGN KEY (order_id) REFERENCES purchase_order(id),
+        FOREIGN KEY (product_id) REFERENCES product(id)
       )
 
   - name: create_review
     query: |-
       CREATE TABLE IF NOT EXISTS review (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        product_id INT NOT NULL REFERENCES product(id),
-        customer_id UUID NOT NULL REFERENCES customer(id),
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        product_id INT NOT NULL,
+        customer_id CHAR(36) NOT NULL,
         rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
-        body STRING NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT now()
+        body TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (product_id) REFERENCES product(id),
+        FOREIGN KEY (customer_id) REFERENCES customer(id)
       )
 
   - name: create_idx_product_category
     query: |-
-      CREATE INDEX IF NOT EXISTS idx_product_category
+      CREATE INDEX idx_product_category
       ON product (category_id, price)
 
   - name: create_idx_review_product
     query: |-
-      CREATE INDEX IF NOT EXISTS idx_review_product
+      CREATE INDEX idx_review_product
       ON review (product_id, rating)
 
 seed:
@@ -89,61 +111,74 @@ seed:
     args:
       - categories
     query: |-
+      WITH RECURSIVE seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
       INSERT INTO category (id, name)
-      SELECT s, 'category-' || s::TEXT
-      FROM generate_series(1, $1) AS s
+      SELECT s, CONCAT('category-', s)
+      FROM seq
 
   - name: populate_product
     args:
       - products
       - categories
     query: |-
+      WITH RECURSIVE seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
       INSERT INTO product (id, category_id, name, price, stock_qty)
       SELECT
         s,
         (s % $2) + 1,
-        substr(md5(random()::FLOAT8::text), 1, 16),
-        (random()::FLOAT8 * 499 + 1)::DECIMAL(10,2),
-        floor(random()::FLOAT8 * 200 + 10)::INT
-      FROM generate_series(1, $1) AS s
+        SUBSTRING(MD5(RAND()), 1, 16),
+        CAST(RAND() * 499 + 1 AS DECIMAL(10,2)),
+        FLOOR(RAND() * 200 + 10)
+      FROM seq
 
   - name: populate_customer
     args:
       - gen_batch(customers, batch_size, 'email')
     query: |-
       INSERT INTO customer (email, name)
-      SELECT e, substr(md5(e), 1, 12)
-      FROM unnest(string_to_array('$1', ',')) AS e
+      SELECT j.val, SUBSTRING(MD5(j.val), 1, 12)
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
+      ) j
 
 deseed:
 
-  - name: truncate_review
+  - name: delete_review
     type: exec
-    query: TRUNCATE TABLE review
+    query: DELETE FROM review
 
-  - name: truncate_order_item
+  - name: delete_order_item
     type: exec
-    query: TRUNCATE TABLE order_item
+    query: DELETE FROM order_item
 
-  - name: truncate_purchase_order
+  - name: delete_purchase_order
     type: exec
-    query: TRUNCATE TABLE purchase_order
+    query: DELETE FROM purchase_order
 
-  - name: truncate_cart_item
+  - name: delete_cart_item
     type: exec
-    query: TRUNCATE TABLE cart_item
+    query: DELETE FROM cart_item
 
-  - name: truncate_customer
+  - name: delete_customer
     type: exec
-    query: TRUNCATE TABLE customer CASCADE
+    query: DELETE FROM customer
 
-  - name: truncate_product
+  - name: delete_product
     type: exec
-    query: TRUNCATE TABLE product CASCADE
+    query: DELETE FROM product
 
-  - name: truncate_category
+  - name: delete_category
     type: exec
-    query: TRUNCATE TABLE category CASCADE
+    query: DELETE FROM category
 
 down:
 
@@ -179,11 +214,11 @@ init:
 
   - name: fetch_products
     type: query
-    query: SELECT id, category_id, price FROM product ORDER BY random()
+    query: SELECT id, category_id, price FROM product ORDER BY RAND()
 
   - name: fetch_customers
     type: query
-    query: SELECT id FROM customer ORDER BY random()
+    query: SELECT id FROM customer ORDER BY RAND()
 
   - name: fetch_categories
     type: query
@@ -209,7 +244,7 @@ run:
     query: |-
       SELECT p.id, p.name, p.price, p.stock_qty
       FROM product p
-      WHERE p.category_id = $1::INT
+      WHERE p.category_id = ?
       ORDER BY p.price ASC
       LIMIT 20
 
@@ -218,7 +253,8 @@ run:
   - name: view_product
     type: query
     args:
-      - ref_rand('fetch_products').id
+      - ref_same('fetch_products').id
+      - ref_same('fetch_products').id
     query: |-
       SELECT p.id, p.name, p.price, p.stock_qty,
         COALESCE(r.avg_rating, 0) AS avg_rating,
@@ -226,85 +262,53 @@ run:
       FROM product p
       LEFT JOIN (
         SELECT product_id,
-          AVG(rating)::DECIMAL(3,2) AS avg_rating,
+          CAST(AVG(rating) AS DECIMAL(3,2)) AS avg_rating,
           COUNT(*) AS review_count
         FROM review
-        WHERE product_id = $1::INT
+        WHERE product_id = ?
         GROUP BY product_id
       ) r ON r.product_id = p.id
-      WHERE p.id = $1::INT
+      WHERE p.id = ?
 
   # Add item to cart. Increments quantity if already present.
-  # Pattern: UPSERT (INSERT ... ON CONFLICT DO UPDATE), set_normal for quantity
+  # Pattern: UPSERT (INSERT ... ON DUPLICATE KEY UPDATE)
   - name: add_to_cart
     type: exec
     args:
       - ref_rand('fetch_customers').id
       - ref_rand('fetch_products').id
-      - set_normal([1, 2, 3, 4, 5], 2, 0.8)
+      - gen('number:1,3')
     query: |-
       INSERT INTO cart_item (customer_id, product_id, quantity)
-      VALUES ($1::UUID, $2::INT, $3::INT)
-      ON CONFLICT (customer_id, product_id)
-      DO UPDATE SET quantity = cart_item.quantity + $3::INT,
-        added_at = now()
+      VALUES (?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        quantity = cart_item.quantity + VALUES(quantity),
+        added_at = NOW()
 
-  # Checkout: create order from cart, update stock, clear cart.
-  # Pattern: ref_same (same customer across args), writable CTE
+  # Checkout: delete cart items for the customer.
+  # Note: MySQL does not support writable CTEs, so the full
+  # checkout flow (order creation, stock update, cart clear)
+  # cannot be done atomically in a single statement.
+  # This simplified version clears the cart.
   - name: checkout
     type: exec
     args:
       - ref_same('fetch_customers').id
-      - ref_same('fetch_customers').id
     query: |-
-      WITH
-        cart AS (
-          SELECT product_id, quantity
-          FROM cart_item
-          WHERE customer_id = $1::UUID
-          LIMIT 10
-        ),
-        cart_total AS (
-          SELECT COALESCE(SUM(p.price * c.quantity), 0) AS total
-          FROM cart c
-          JOIN product p ON p.id = c.product_id
-        ),
-        new_order AS (
-          INSERT INTO purchase_order (customer_id, total)
-          SELECT $1::UUID, total FROM cart_total
-          WHERE total > 0
-          RETURNING id
-        ),
-        items AS (
-          INSERT INTO order_item (order_id, product_id, quantity, unit_price)
-          SELECT o.id, c.product_id, c.quantity, p.price
-          FROM new_order o
-          CROSS JOIN cart c
-          JOIN product p ON p.id = c.product_id
-          RETURNING 1
-        ),
-        stock_update AS (
-          UPDATE product SET stock_qty = stock_qty - c.quantity
-          FROM cart c
-          WHERE product.id = c.product_id
-            AND product.stock_qty >= c.quantity
-          RETURNING 1
-        )
-      DELETE FROM cart_item WHERE customer_id = $2::UUID
+      DELETE FROM cart_item WHERE customer_id = ?
 
-  # Write a product review with a weighted random rating (skewed toward 4-5 stars).
-  # Pattern: set_rand with weights, gen for text
+  # Write a product review with a rating derived from a user-defined expression.
+  # Pattern: expressions (star_rating), gen for text
   - name: write_review
     type: exec
     args:
-      - ref_rand('fetch_customers').id
       - ref_rand('fetch_products').id
-      - set_rand(['1', '2', '3', '4', '5'], [5, 10, 20, 35, 30])
+      - ref_rand('fetch_customers').id
+      - star_rating(gen('number:1,100'))
       - gen('sentence:8')
     query: |-
-      INSERT INTO review (product_id, customer_id, rating, body)
-      VALUES ($2::INT, $1::UUID, $3::INT, $4::STRING)
-      ON CONFLICT DO NOTHING
+      INSERT IGNORE INTO review (product_id, customer_id, rating, body)
+      VALUES (?, ?, ?, ?)
 
   # Remove a product from the cart.
   # Pattern: DELETE workload
@@ -315,7 +319,7 @@ run:
       - ref_rand('fetch_products').id
     query: |-
       DELETE FROM cart_item
-      WHERE customer_id = $1::UUID AND product_id = $2::INT
+      WHERE customer_id = ? AND product_id = ?
 
   # Look up multiple products by ID.
   # Pattern: ref_n (variable-length IN-clause), GROUP BY aggregate
@@ -325,8 +329,14 @@ run:
       - ref_n('fetch_products', 'id', 3, 8)
     query: |-
       SELECT p.id, p.name, p.price, p.stock_qty,
-        COALESCE(AVG(r.rating), 0)::DECIMAL(3,2) AS avg_rating
+        COALESCE(CAST(AVG(r.rating) AS DECIMAL(3,2)), 0) AS avg_rating
       FROM product p
       LEFT JOIN review r ON r.product_id = p.id
-      WHERE p.id IN (SELECT unnest(string_to_array($1, ','))::INT)
+      WHERE p.id IN (
+        SELECT CAST(j.val AS UNSIGNED)
+        FROM JSON_TABLE(
+          CONCAT('["', REPLACE(?, ',', '","'), '"]'),
+          '$[*]' COLUMNS(val VARCHAR(20) PATH '$')
+        ) j
+      )
       GROUP BY p.id, p.name, p.price, p.stock_qty

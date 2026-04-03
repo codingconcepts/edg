@@ -1,0 +1,103 @@
+# Normal distribution workload for Oracle
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  products: 100
+  batch_size: 100
+
+up:
+
+  - name: create_product
+    query: |-
+      CREATE TABLE product (
+        id NUMBER NOT NULL,
+        name VARCHAR2(255) NOT NULL,
+        price NUMBER(10,2) NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_review
+    query: |-
+      CREATE TABLE review (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        product_id NUMBER NOT NULL,
+        rating NUMBER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+seed:
+
+  - name: populate_product
+    args:
+      - products
+    query: |-
+      INSERT INTO product (id, name, price)
+      SELECT
+        LEVEL,
+        'product-' || LEVEL,
+        TRUNC(DBMS_RANDOM.VALUE * 99 + 1, 2)
+      FROM DUAL
+      CONNECT BY LEVEL <= $1
+
+deseed:
+
+  - name: truncate_review
+    type: exec
+    query: TRUNCATE TABLE review
+
+  - name: truncate_product
+    type: exec
+    query: TRUNCATE TABLE product
+
+down:
+
+  - name: drop_review
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE review CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_product
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE product CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+init:
+
+  - name: fetch_products
+    type: query
+    query: SELECT id FROM product
+
+run:
+
+  # Most reviews cluster around 4 stars (mean=4, stddev=1, clamped to 1-5).
+  - name: add_review
+    type: exec
+    args:
+      - ref_rand('fetch_products').id
+      - norm_rand(4, 1, 1, 5)
+    query: |-
+      INSERT INTO review (product_id, rating)
+      VALUES (:1, :2)
+
+  # Bulk insert using norm_rand_n to pick 3-8 products weighted
+  # toward the middle of the catalogue.
+  - name: add_batch_reviews
+    type: exec
+    args:
+      - norm_rand_n(50, 15, 1, 100, 3, 8)
+      - norm_rand(4, 1, 1, 5)
+    query: |-
+      INSERT INTO review (product_id, rating)
+      SELECT TO_NUMBER(column_value), :2
+      FROM XMLTABLE(('"' || REPLACE(:1, ',', '","') || '"'))

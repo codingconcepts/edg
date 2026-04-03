@@ -1,0 +1,99 @@
+# Normal distribution workload for MySQL
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
+globals:
+  products: 100
+  batch_size: 100
+
+up:
+
+  - name: create_product
+    query: |-
+      CREATE TABLE IF NOT EXISTS product (
+        id INT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        price DECIMAL(10,2) NOT NULL
+      )
+
+  - name: create_review
+    query: |-
+      CREATE TABLE IF NOT EXISTS review (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        product_id INT NOT NULL,
+        rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (product_id) REFERENCES product(id)
+      )
+
+seed:
+
+  - name: populate_product
+    args:
+      - products
+    query: |-
+      WITH RECURSIVE seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
+      INSERT INTO product (id, name, price)
+      SELECT
+        s,
+        CONCAT('product-', s),
+        CAST(RAND() * 99 + 1 AS DECIMAL(10,2))
+      FROM seq
+
+deseed:
+
+  - name: delete_review
+    type: exec
+    query: DELETE FROM review
+
+  - name: delete_product
+    type: exec
+    query: DELETE FROM product
+
+down:
+
+  - name: drop_review
+    type: exec
+    query: DROP TABLE IF EXISTS review
+
+  - name: drop_product
+    type: exec
+    query: DROP TABLE IF EXISTS product
+
+init:
+
+  - name: fetch_products
+    type: query
+    query: SELECT id FROM product
+
+run:
+
+  # Most reviews cluster around 4 stars (mean=4, stddev=1, clamped to 1-5).
+  - name: add_review
+    type: exec
+    args:
+      - ref_rand('fetch_products').id
+      - norm_rand(4, 1, 1, 5)
+    query: |-
+      INSERT INTO review (product_id, rating)
+      VALUES (?, ?)
+
+  # Bulk insert using norm_rand_n to pick 3-8 products weighted
+  # toward the middle of the catalogue.
+  - name: add_batch_reviews
+    type: exec
+    args:
+      - norm_rand(4, 1, 1, 5)
+      - norm_rand_n(50, 15, 1, 100, 3, 8)
+    query: |-
+      INSERT INTO review (product_id, rating)
+      SELECT CAST(j.val AS UNSIGNED), ?
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE(?, ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(20) PATH '$')
+      ) j

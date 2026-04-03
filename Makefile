@@ -1,3 +1,7 @@
+build:
+	go build .
+	mv ./edg ~/dev/bin
+
 test:
 	go test ./... -v --cover
 

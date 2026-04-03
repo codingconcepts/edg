@@ -1,0 +1,373 @@
+# Social network workload for Oracle
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+#
+# Framework notes: Batch-inlined queries (seed section) use $1, $2
+# for string substitution. Run-section queries use :1, :2 (Oracle
+# bind syntax).
+
+globals:
+  users: 10000
+  posts_per_user: 5
+  follows_per_user: 10
+  tags: 50
+
+up:
+
+  - name: create_user_profile
+    query: |-
+      CREATE TABLE user_profile (
+        id RAW(16) DEFAULT SYS_GUID(),
+        username VARCHAR2(255) NOT NULL,
+        display_name VARCHAR2(255) NOT NULL,
+        bio VARCHAR2(500) DEFAULT '' NOT NULL,
+        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_post
+    query: |-
+      CREATE TABLE post (
+        id RAW(16) DEFAULT SYS_GUID(),
+        author_id RAW(16) NOT NULL,
+        body VARCHAR2(4000) NOT NULL,
+        like_count NUMBER DEFAULT 0 NOT NULL,
+        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_follow
+    query: |-
+      CREATE TABLE follow (
+        follower_id RAW(16) NOT NULL,
+        following_id RAW(16) NOT NULL,
+        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+        PRIMARY KEY (follower_id, following_id),
+        CHECK (follower_id != following_id)
+      )
+
+  - name: create_post_like
+    query: |-
+      CREATE TABLE post_like (
+        post_id RAW(16) NOT NULL,
+        user_id RAW(16) NOT NULL,
+        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+        PRIMARY KEY (post_id, user_id)
+      )
+
+  - name: create_comment
+    query: |-
+      CREATE TABLE comment_ (
+        id RAW(16) DEFAULT SYS_GUID(),
+        post_id RAW(16) NOT NULL,
+        author_id RAW(16) NOT NULL,
+        body VARCHAR2(4000) NOT NULL,
+        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_tag
+    query: |-
+      CREATE TABLE tag (
+        id NUMBER NOT NULL,
+        name VARCHAR2(255) NOT NULL UNIQUE,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_post_tag
+    query: |-
+      CREATE TABLE post_tag (
+        post_id RAW(16) NOT NULL,
+        tag_id NUMBER NOT NULL,
+        PRIMARY KEY (post_id, tag_id)
+      )
+
+  - name: create_idx_post_author
+    query: |-
+      CREATE INDEX idx_post_author
+      ON post (author_id, created_at DESC)
+
+  - name: create_idx_follow_follower
+    query: |-
+      CREATE INDEX idx_follow_follower
+      ON follow (follower_id)
+
+  - name: create_idx_comment_post
+    query: |-
+      CREATE INDEX idx_comment_post
+      ON comment_ (post_id, created_at DESC)
+
+seed:
+
+  - name: populate_user_profile
+    args:
+      - users
+    query: |-
+      INSERT INTO user_profile (username, display_name, bio)
+      SELECT
+        'user_' || LEVEL,
+        DBMS_RANDOM.STRING('A', 12),
+        DBMS_RANDOM.STRING('A', 60)
+      FROM DUAL
+      CONNECT BY LEVEL <= $1
+
+  - name: populate_tag
+    args:
+      - tags
+    query: |-
+      INSERT INTO tag (id, name)
+      SELECT LEVEL, 'tag-' || LEVEL
+      FROM DUAL
+      CONNECT BY LEVEL <= $1
+
+  - name: populate_post
+    args:
+      - posts_per_user
+    query: |-
+      INSERT INTO post (author_id, body, like_count)
+      SELECT
+        u.id,
+        DBMS_RANDOM.STRING('A', 100),
+        TRUNC(DBMS_RANDOM.VALUE * 100)
+      FROM user_profile u
+      CROSS JOIN (SELECT LEVEL AS s FROM DUAL CONNECT BY LEVEL <= $1)
+
+  - name: populate_post_tag
+    args:
+      - tags
+    query: |-
+      MERGE INTO post_tag pt
+      USING (
+        SELECT p.id AS post_id, TRUNC(DBMS_RANDOM.VALUE * $1) + 1 AS tag_id
+        FROM post p
+        CROSS JOIN (SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= 3)
+      ) src ON (pt.post_id = src.post_id AND pt.tag_id = src.tag_id)
+      WHEN NOT MATCHED THEN
+        INSERT (post_id, tag_id) VALUES (src.post_id, src.tag_id)
+
+  - name: populate_follow
+    args:
+      - follows_per_user
+    query: |-
+      MERGE INTO follow f
+      USING (
+        SELECT u.id AS follower_id, t.id AS following_id
+        FROM user_profile u
+        CROSS APPLY (
+          SELECT id FROM user_profile
+          WHERE id != u.id
+          ORDER BY DBMS_RANDOM.VALUE
+          FETCH FIRST $1 ROWS ONLY
+        ) t
+      ) src ON (f.follower_id = src.follower_id AND f.following_id = src.following_id)
+      WHEN NOT MATCHED THEN
+        INSERT (follower_id, following_id) VALUES (src.follower_id, src.following_id)
+
+deseed:
+
+  - name: truncate_post_tag
+    type: exec
+    query: TRUNCATE TABLE post_tag
+
+  - name: truncate_comment
+    type: exec
+    query: TRUNCATE TABLE comment_
+
+  - name: truncate_post_like
+    type: exec
+    query: TRUNCATE TABLE post_like
+
+  - name: truncate_follow
+    type: exec
+    query: TRUNCATE TABLE follow
+
+  - name: truncate_post
+    type: exec
+    query: TRUNCATE TABLE post
+
+  - name: truncate_tag
+    type: exec
+    query: TRUNCATE TABLE tag
+
+  - name: truncate_user_profile
+    type: exec
+    query: TRUNCATE TABLE user_profile
+
+down:
+
+  - name: drop_post_tag
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE post_tag CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_comment
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE comment_ CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_post_like
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE post_like CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_follow
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE follow CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_post
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE post CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_tag
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE tag CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_user_profile
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE user_profile CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+init:
+
+  - name: fetch_users
+    type: query
+    query: SELECT id, username, display_name FROM user_profile
+
+  - name: fetch_posts
+    type: query
+    query: SELECT id FROM post
+
+  - name: fetch_tags
+    type: query
+    query: SELECT id, name FROM tag
+
+run_weights:
+  fetch_feed: 30
+  create_post: 10
+  like_post: 25
+  add_comment: 10
+  follow_user: 5
+  trending: 10
+  mutual_friends: 10
+
+run:
+
+  # Fetch posts from users this user follows.
+  - name: fetch_feed
+    type: query
+    args:
+      - ref_rand('fetch_users').id
+    query: |-
+      SELECT p.id, p.body, p.like_count, p.created_at,
+        u.username, u.display_name
+      FROM post p
+      JOIN follow f ON f.following_id = p.author_id
+      JOIN user_profile u ON u.id = p.author_id
+      WHERE f.follower_id = :1
+      ORDER BY p.created_at DESC
+      FETCH FIRST 20 ROWS ONLY
+
+  # Create a post (without tags for simplicity).
+  - name: create_post
+    type: exec
+    args:
+      - ref_rand('fetch_users').id
+      - gen('sentence:10')
+    query: |-
+      INSERT INTO post (author_id, body)
+      VALUES (:1, :2)
+
+  # Like a post (idempotent).
+  - name: like_post
+    type: exec
+    args:
+      - ref_rand('fetch_posts').id
+      - ref_rand('fetch_users').id
+    query: |-
+      MERGE INTO post_like pl
+      USING (SELECT :1 AS post_id, :2 AS user_id FROM DUAL) src
+      ON (pl.post_id = src.post_id AND pl.user_id = src.user_id)
+      WHEN NOT MATCHED THEN
+        INSERT (post_id, user_id) VALUES (src.post_id, src.user_id)
+
+  # Comment on a post.
+  - name: add_comment
+    type: exec
+    args:
+      - ref_same('fetch_users').id
+      - ref_rand('fetch_posts').id
+      - gen('sentence:8')
+      - ref_same('fetch_users').display_name
+    query: |-
+      INSERT INTO comment_ (post_id, author_id, body)
+      VALUES (:2, :1, :4 || ': ' || :3)
+
+  # Follow another user (idempotent).
+  - name: follow_user
+    type: exec
+    args:
+      - ref_diff('fetch_users').id
+      - ref_diff('fetch_users').id
+    query: |-
+      MERGE INTO follow f
+      USING (SELECT :1 AS follower_id, :2 AS following_id FROM DUAL) src
+      ON (f.follower_id = src.follower_id AND f.following_id = src.following_id)
+      WHEN NOT MATCHED THEN
+        INSERT (follower_id, following_id) VALUES (src.follower_id, src.following_id)
+
+  # Find trending posts by like count.
+  - name: trending
+    type: query
+    query: |-
+      SELECT p.id, p.body, p.like_count, u.username
+      FROM post p
+      JOIN user_profile u ON u.id = p.author_id
+      ORDER BY p.like_count DESC
+      FETCH FIRST 10 ROWS ONLY
+
+  # Find mutual follows between two users.
+  - name: mutual_friends
+    type: query
+    args:
+      - ref_diff('fetch_users').id
+      - ref_diff('fetch_users').id
+    query: |-
+      SELECT u.id, u.username, u.display_name
+      FROM follow f1
+      JOIN follow f2 ON f1.following_id = f2.following_id
+      JOIN user_profile u ON u.id = f1.following_id
+      WHERE f1.follower_id = :1
+        AND f2.follower_id = :2
+      FETCH FIRST 20 ROWS ONLY

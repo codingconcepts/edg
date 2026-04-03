@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/codingconcepts/edg/pkg"
+	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/sijms/go-ora/v2"
 	"github.com/spf13/cobra"
@@ -34,7 +35,7 @@ func main() {
 
 	root.PersistentFlags().StringVar(&flagURL, "url", "", "database connection URL (env: URL)")
 	root.PersistentFlags().StringVar(&configFile, "config", "", "workload YAML config file")
-	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle]")
+	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql]")
 
 	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd())
 

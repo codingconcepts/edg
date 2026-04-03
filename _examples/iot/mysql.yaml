@@ -1,0 +1,275 @@
+# IoT workload for MySQL
+#
+# Simulates IoT devices with sensors producing time-series readings.
+# Requires MySQL 8.0+.
+# For large datasets, set: SET GLOBAL cte_max_recursion_depth = 200000;
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
+globals:
+  devices: 100
+  sensors_per_device: 5
+  readings_per_sensor: 1000
+  page_size: 50
+
+up:
+
+  - name: create_device
+    query: |-
+      CREATE TABLE IF NOT EXISTS device (
+        id INT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        location VARCHAR(255) NOT NULL,
+        device_type VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+
+  - name: create_sensor
+    query: |-
+      CREATE TABLE IF NOT EXISTS sensor (
+        id INT PRIMARY KEY,
+        device_id INT NOT NULL,
+        metric_name VARCHAR(255) NOT NULL,
+        unit VARCHAR(20) NOT NULL,
+        min_threshold DECIMAL(10,2) NOT NULL,
+        max_threshold DECIMAL(10,2) NOT NULL,
+        FOREIGN KEY (device_id) REFERENCES device(id)
+      )
+
+  - name: create_reading
+    query: |-
+      CREATE TABLE IF NOT EXISTS reading (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        sensor_id INT NOT NULL,
+        value DECIMAL(12,4) NOT NULL,
+        recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (sensor_id) REFERENCES sensor(id)
+      )
+
+  - name: create_alert
+    query: |-
+      CREATE TABLE IF NOT EXISTS alert (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        sensor_id INT NOT NULL,
+        reading_value DECIMAL(12,4) NOT NULL,
+        threshold DECIMAL(10,2) NOT NULL,
+        alert_type VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (sensor_id) REFERENCES sensor(id)
+      )
+
+  - name: create_idx_reading_sensor_time
+    query: |-
+      CREATE INDEX idx_reading_sensor_time
+      ON reading (sensor_id, recorded_at DESC)
+
+  - name: create_idx_alert_sensor_time
+    query: |-
+      CREATE INDEX idx_alert_sensor_time
+      ON alert (sensor_id, created_at DESC)
+
+seed:
+
+  - name: populate_device
+    args:
+      - devices
+    query: |-
+      WITH RECURSIVE seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
+      INSERT INTO device (id, name, location, device_type)
+      SELECT
+        s,
+        CONCAT('device-', s),
+        ELT(FLOOR(RAND() * 6) + 1, 'floor-1','floor-2','floor-3','roof','basement','warehouse'),
+        ELT(FLOOR(RAND() * 4) + 1, 'temperature','pressure','humidity','vibration')
+      FROM seq
+
+  - name: populate_sensor
+    args:
+      - ref_each('SELECT id FROM device')
+      - sensors_per_device
+    query: |-
+      WITH RECURSIVE seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $2
+      )
+      INSERT INTO sensor (id, device_id, metric_name, unit, min_threshold, max_threshold)
+      SELECT
+        ($1 - 1) * $2 + s,
+        $1,
+        ELT(s, 'temp_c','pressure_psi','humidity_pct','rpm','voltage'),
+        ELT(s, '°C','PSI','%','RPM','V'),
+        CAST(ELT(s, '15.0','20.0','30.0','500.0','110.0') AS DECIMAL(10,2)),
+        CAST(ELT(s, '35.0','80.0','70.0','3000.0','240.0') AS DECIMAL(10,2))
+      FROM seq
+
+  - name: populate_reading
+    args:
+      - ref_each('SELECT id, min_threshold, max_threshold FROM sensor')
+      - readings_per_sensor
+    query: |-
+      WITH RECURSIVE seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $4
+      )
+      INSERT INTO reading (sensor_id, value, recorded_at)
+      SELECT
+        $1,
+        $2 + RAND() * ($3 - $2),
+        DATE_SUB(NOW(), INTERVAL s MINUTE)
+      FROM seq
+
+deseed:
+
+  - name: delete_alert
+    type: exec
+    query: DELETE FROM alert
+
+  - name: delete_reading
+    type: exec
+    query: DELETE FROM reading
+
+  - name: delete_sensor
+    type: exec
+    query: DELETE FROM sensor
+
+  - name: delete_device
+    type: exec
+    query: DELETE FROM device
+
+down:
+
+  - name: drop_alert
+    type: exec
+    query: DROP TABLE IF EXISTS alert
+
+  - name: drop_reading
+    type: exec
+    query: DROP TABLE IF EXISTS reading
+
+  - name: drop_sensor
+    type: exec
+    query: DROP TABLE IF EXISTS sensor
+
+  - name: drop_device
+    type: exec
+    query: DROP TABLE IF EXISTS device
+
+init:
+
+  - name: fetch_sensors
+    type: query
+    query: SELECT id, device_id, min_threshold, max_threshold FROM sensor
+
+  - name: fetch_devices
+    type: query
+    query: SELECT id FROM device
+
+run_weights:
+  ingest_reading: 60
+  check_alerts: 15
+  hourly_rollup: 5
+  device_history: 10
+  update_threshold: 5
+  detect_anomaly: 5
+
+run:
+
+  # Ingest a single sensor reading.
+  # Pattern: high-throughput INSERT, gen for random sensor value
+  - name: ingest_reading
+    type: exec
+    args:
+      - ref_rand('fetch_sensors').id
+      - gen('number:1,10000')
+    query: |-
+      INSERT INTO reading (sensor_id, value)
+      VALUES (?, ? / 100.0)
+
+  # Find recent readings that exceeded sensor thresholds.
+  # Pattern: range scan on timestamp, JOIN with threshold comparison
+  - name: check_alerts
+    type: query
+    args:
+      - ref_rand('fetch_sensors').id
+      - ref_rand('fetch_sensors').max_threshold
+    query: |-
+      SELECT r.id, r.value, r.recorded_at, s.metric_name
+      FROM reading r
+      JOIN sensor s ON s.id = r.sensor_id
+      WHERE r.sensor_id = ?
+        AND r.recorded_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
+        AND r.value > ?
+      ORDER BY r.recorded_at DESC
+      LIMIT 20
+
+  # Aggregate readings into hourly buckets for a sensor.
+  # Pattern: GROUP BY + date_trunc, aggregate functions (AVG, MIN, MAX, COUNT)
+  - name: hourly_rollup
+    type: query
+    args:
+      - ref_rand('fetch_sensors').id
+    query: |-
+      SELECT
+        sensor_id,
+        DATE_FORMAT(recorded_at, '%Y-%m-%d %H:00:00') AS hour,
+        CAST(AVG(value) AS DECIMAL(10,2)) AS avg_value,
+        CAST(MIN(value) AS DECIMAL(10,2)) AS min_value,
+        CAST(MAX(value) AS DECIMAL(10,2)) AS max_value,
+        COUNT(*) AS reading_count
+      FROM reading
+      WHERE sensor_id = ?
+        AND recorded_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+      GROUP BY sensor_id, DATE_FORMAT(recorded_at, '%Y-%m-%d %H:00:00')
+      ORDER BY hour DESC
+
+  # Paginated history of readings for a device.
+  # Pattern: pagination with LIMIT/OFFSET
+  # Paginated history of readings for a device.
+  # Pattern: pagination with LIMIT/OFFSET, offset pre-computed in expression
+  - name: device_history
+    type: query
+    args:
+      - ref_rand('fetch_devices').id
+      - page_size
+      - int(gen('number:0,19')) * page_size
+    query: |-
+      SELECT r.value, r.recorded_at, s.metric_name, s.unit
+      FROM reading r
+      JOIN sensor s ON s.id = r.sensor_id
+      WHERE s.device_id = ?
+      ORDER BY r.recorded_at DESC
+      LIMIT ? OFFSET ?
+
+  # Adjust a sensor's upper threshold.
+  # Pattern: UPDATE with gen for new value
+  - name: update_threshold
+    type: exec
+    args:
+      - gen('number:50,300')
+      - ref_rand('fetch_sensors').id
+    query: |-
+      UPDATE sensor SET max_threshold = ?
+      WHERE id = ?
+
+  # Detect anomalies using a moving average window.
+  # Pattern: window functions (AVG OVER ROWS BETWEEN)
+  - name: detect_anomaly
+    type: query
+    args:
+      - ref_rand('fetch_sensors').id
+    query: |-
+      SELECT sensor_id, value, recorded_at,
+        AVG(value) OVER (ORDER BY recorded_at ROWS BETWEEN 10 PRECEDING AND CURRENT ROW) AS moving_avg,
+        value - AVG(value) OVER (ORDER BY recorded_at ROWS BETWEEN 10 PRECEDING AND CURRENT ROW) AS deviation
+      FROM reading
+      WHERE sensor_id = ?
+        AND recorded_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
+      ORDER BY recorded_at DESC
+      LIMIT 50

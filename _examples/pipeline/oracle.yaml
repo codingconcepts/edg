@@ -1,0 +1,149 @@
+# Pipeline workload for Oracle
+#
+# A simple three-table pipeline where each iteration finds
+# a row in a, follows the relationship to b, then updates c.
+# No run_weights: all queries run sequentially every iteration.
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  a_rows: 1000
+  b_rows: 5000
+  c_rows: 20000
+  batch_size: 5000
+
+up:
+
+  - name: create_a
+    query: |-
+      CREATE TABLE a (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        name VARCHAR2(255) NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_b
+    query: |-
+      CREATE TABLE b (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        a_id NUMBER NOT NULL,
+        value NUMBER NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_c
+    query: |-
+      CREATE TABLE c (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        b_id NUMBER NOT NULL,
+        status VARCHAR2(20) DEFAULT 'new' NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+seed:
+
+  - name: populate_a
+    args:
+      - gen_batch(a_rows, batch_size, 'word')
+    query: |-
+      INSERT INTO a (name)
+      SELECT column_value
+      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))
+
+  - name: populate_b
+    args:
+      - batch(b_rows / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO b (a_id, value)
+      SELECT a.id, TRUNC(DBMS_RANDOM.VALUE * 100)
+      FROM a
+      ORDER BY DBMS_RANDOM.VALUE
+      FETCH FIRST $2 ROWS ONLY
+
+  - name: populate_c
+    args:
+      - batch(c_rows / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO c (b_id)
+      SELECT b.id
+      FROM b
+      ORDER BY DBMS_RANDOM.VALUE
+      FETCH FIRST $2 ROWS ONLY
+
+deseed:
+
+  - name: truncate_c
+    type: exec
+    query: TRUNCATE TABLE c
+
+  - name: truncate_b
+    type: exec
+    query: TRUNCATE TABLE b
+
+  - name: truncate_a
+    type: exec
+    query: TRUNCATE TABLE a
+
+down:
+
+  - name: drop_c
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE c CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_b
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE b CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_a
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE a CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+# No run_weights: all three queries run sequentially every iteration.
+
+run:
+
+  - name: find_a
+    type: query
+    query: |-
+      SELECT id AS a_id, name
+      FROM a
+      ORDER BY DBMS_RANDOM.VALUE
+      FETCH FIRST 1 ROW ONLY
+
+  - name: find_b
+    type: query
+    args:
+      - ref_rand('find_a').a_id
+    query: |-
+      SELECT id AS b_id, value
+      FROM b
+      WHERE a_id = :1
+      FETCH FIRST 1 ROW ONLY
+
+  - name: update_c
+    type: exec
+    args:
+      - ref_rand('find_b').b_id
+    query: |-
+      UPDATE c SET status = 'processed'
+      WHERE b_id = :1
+        AND status = 'new'
+        AND ROWNUM = 1

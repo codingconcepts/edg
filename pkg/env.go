@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"math"
 	"math/rand/v2"
 	"strings"
 	"sync"
@@ -52,20 +53,24 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 	}
 
 	env.env = map[string]any{
-		"const":     constant,    // Use a constant value.
-		"expr":      constant,    // Evaluate an arithmetic expression (e.g. expr(warehouses * 10)).
-		"gen":       gen,         // Generate a random value using gofakeit.
-		"gen_batch": genBatch,    // Generate N values in batches, returns [][]any of comma-separated strings.
-		"batch":     batch,       // Generate sequential batch indices [0, n) for batched execution.
-		"global":    env.global,  // Use a value in the global config section.
-		"ref_rand":  env.refRand, // Use a random row.
-		"ref_same":  env.refSame, // Use the same random row across multiple arguments.
-		"ref_perm":  env.refPerm, // Use the same random row for the worker's lifetime.
-		"ref_diff":  env.refDiff, // Use unique rows across multiple arguments.
-		"ref_each":  env.refEach, // Cycles through each row.
-		"ref_n":     env.refN,    // Pick N unique random field values from a dataset.
-		"nurand":    env.nuRand,  // Non-Uniform Random per TPC-C spec.
-		"nurand_n":  env.nuRandN, // N unique Non-Uniform Random values (comma-separated).
+		"const":       constant,      // Use a constant value.
+		"expr":        constant,      // Evaluate an arithmetic expression (e.g. expr(warehouses * 10)).
+		"gen":         gen,           // Generate a random value using gofakeit.
+		"gen_batch":   genBatch,      // Generate N values in batches, returns [][]any of comma-separated strings.
+		"batch":       batch,         // Generate sequential batch indices [0, n) for batched execution.
+		"global":      env.global,    // Use a value in the global config section.
+		"ref_rand":    env.refRand,   // Use a random row.
+		"ref_same":    env.refSame,   // Use the same random row across multiple arguments.
+		"ref_perm":    env.refPerm,   // Use the same random row for the worker's lifetime.
+		"ref_diff":    env.refDiff,   // Use unique rows across multiple arguments.
+		"ref_each":    env.refEach,   // Cycles through each row.
+		"ref_n":       env.refN,      // Pick N unique random field values from a dataset.
+		"nurand":      env.nuRand,    // Non-Uniform Random per TPC-C spec.
+		"nurand_n":    env.nuRandN,   // N unique Non-Uniform Random values (comma-separated).
+		"norm_rand":   env.normRand,  // Normal-distribution random integer in [min, max].
+		"norm_rand_n": env.normRandN, // N unique normal-distribution random integers (comma-separated).
+		"set_rand":    setRand,       // Pick from a set (uniform or weighted random).
+		"set_normal":  setNormal,     // Pick from a set using normal distribution.
 	}
 
 	// Add each global variable to map itself for cleaner access.
@@ -395,6 +400,49 @@ func (e *Env) nuRandN(a, b, c, d, f any) string {
 	return strings.Join(parts, ",")
 }
 
+// normRandOne generates a single normally-distributed random integer
+// clamped to [min, max]. Uses the Box-Muller transform via rand.NormFloat64.
+func normRandOne(mean, stddev, min, max float64) int {
+	for {
+		v := mean + stddev*rand.NormFloat64()
+		clamped := int(math.Round(v))
+		if clamped >= int(min) && clamped <= int(max) {
+			return clamped
+		}
+	}
+}
+
+// normRand returns a normally-distributed random integer in [min, max].
+//
+//	norm_rand(mean, stddev, min, max)
+func (e *Env) normRand(a, b, c, d any) int {
+	mean, stddev := toFloat(a), toFloat(b)
+	min, max := toFloat(c), toFloat(d)
+	return normRandOne(mean, stddev, min, max)
+}
+
+// normRandN generates N unique normally-distributed random integers as a
+// comma-separated string, where N is chosen randomly in [minN, maxN].
+//
+//	norm_rand_n(mean, stddev, min, max, minN, maxN)
+func (e *Env) normRandN(a, b, c, d, f, g any) string {
+	mean, stddev := toFloat(a), toFloat(b)
+	min, max := toFloat(c), toFloat(d)
+	minN, maxN := toInt(f), toInt(g)
+	n := minN + rand.IntN(maxN-minN+1)
+
+	seen := make(map[int]bool, n)
+	parts := make([]string, 0, n)
+	for len(parts) < n {
+		v := normRandOne(mean, stddev, min, max)
+		if !seen[v] {
+			seen[v] = true
+			parts = append(parts, fmt.Sprintf("%d", v))
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
 // refEach executes a SQL query and returns all rows as [][]any,
 // where each inner slice contains one row's column values in order.
 // Used in arg expressions to drive batched query execution.
@@ -596,6 +644,114 @@ func toInt(v any) int {
 	default:
 		return 0
 	}
+}
+
+func toFloat(v any) float64 {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
+	default:
+		return 0
+	}
+}
+
+// weightedItem pairs a value with a selection weight.
+type weightedItem struct {
+	Value  any
+	Weight int
+}
+
+// weightedItems supports weighted random selection from a set of items.
+type weightedItems struct {
+	items       []weightedItem
+	totalWeight int
+}
+
+func makeWeightedItems(items []weightedItem) weightedItems {
+	wi := weightedItems{items: items}
+	for _, item := range items {
+		wi.totalWeight += item.Weight
+	}
+	return wi
+}
+
+func (wi weightedItems) choose() any {
+	r := rand.IntN(wi.totalWeight) + 1
+	for _, item := range wi.items {
+		r -= item.Weight
+		if r <= 0 {
+			return item.Value
+		}
+	}
+	return nil
+}
+
+func buildWeightedItems(values []any, weights []int) weightedItems {
+	items := make([]weightedItem, len(values))
+	for i, v := range values {
+		items[i] = weightedItem{Value: v, Weight: weights[i]}
+	}
+	return makeWeightedItems(items)
+}
+
+// setRand picks a random item from a set. If weights are provided,
+// weighted random selection is used; otherwise uniform random.
+//
+//	set_rand(['visa', 'mastercard', 'amex'], [])
+//	set_rand(['visa', 'mastercard', 'amex'], [60, 30, 10])
+func setRand(values []any, weights []any) (any, error) {
+	if len(values) == 0 {
+		return nil, fmt.Errorf("set_rand requires at least one value")
+	}
+
+	if len(weights) == 0 {
+		return values[rand.IntN(len(values))], nil
+	}
+
+	if len(weights) != len(values) {
+		return nil, fmt.Errorf("set_rand values and weights must be the same length (got %d values and %d weights)", len(values), len(weights))
+	}
+
+	intWeights := make([]int, len(weights))
+	for i, w := range weights {
+		intWeights[i] = toInt(w)
+	}
+
+	wi := buildWeightedItems(values, intWeights)
+	return wi.choose(), nil
+}
+
+// setNormal picks an item from a set using normal distribution.
+// mean is the index that will be selected most often, and stddev
+// controls the spread: ~68% of picks fall within mean +/- stddev
+// indices, ~95% within mean +/- 2*stddev.
+//
+// For example, with values ['a','b','c','d','e'], mean=2, stddev=0.8:
+//   - index 2 ('c') is picked most often
+//   - ~68% of picks land in indices 1-3 ('b','c','d')
+//   - ~95% of picks land in indices 0-4 ('a'..'e')
+//   - a smaller stddev (e.g. 0.3) concentrates picks more tightly around the mean
+//   - a larger stddev (e.g. 2.0) spreads picks more evenly across the set
+//
+//	set_normal(['a', 'b', 'c', 'd', 'e'], 2, 0.8)
+func setNormal(values []any, mean, stddev any) (any, error) {
+	if len(values) == 0 {
+		return nil, fmt.Errorf("set_normal requires at least one value")
+	}
+
+	if len(values) == 1 {
+		return values[0], nil
+	}
+
+	m := toFloat(mean)
+	s := toFloat(stddev)
+
+	idx := normRandOne(m, s, 0, float64(len(values)-1))
+	return values[idx], nil
 }
 
 func wrap(s string) string {
