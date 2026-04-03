@@ -1,0 +1,63 @@
+globals:
+  customers: 1000000000 # 1 billion
+  initial_balance: 10000
+  batch_size: 10000 # 10K rows per batch insert
+
+up:
+
+  - name: create_customer
+    query: |-
+      CREATE TABLE IF NOT EXISTS customer (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email STRING NOT NULL
+      )
+
+  - name: create_account
+    query: |-
+      CREATE TABLE IF NOT EXISTS account (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        balance FLOAT NOT NULL,
+        customer_id UUID NOT NULL REFERENCES customer(id)
+      )
+
+seed:
+
+  - name: populate_customer
+    args:
+      - gen_batch(customers, batch_size, 'email')
+    query: |-
+      INSERT INTO customer (email)
+      SELECT unnest(string_to_array('$1', ','))
+
+  - name: populate_account
+    args:
+      - batch(customers / batch_size)
+      - initial_balance
+      - batch_size
+    query: |-
+      INSERT INTO account (balance, customer_id)
+      SELECT $2::FLOAT, c.id
+      FROM customer c
+      ORDER BY c.id
+      OFFSET $1::INT * $3::INT
+      LIMIT $3::INT
+
+deseed:
+
+  - name: truncate_account
+    type: exec
+    query: TRUNCATE TABLE account CASCADE
+
+  - name: truncate_customer
+    type: exec
+    query: TRUNCATE TABLE customer CASCADE
+
+down:
+
+  - name: drop_account
+    type: exec
+    query: DROP TABLE IF EXISTS account
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer

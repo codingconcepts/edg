@@ -3,16 +3,17 @@ package pkg
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
-	"math"
 	"math/rand/v2"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/brianvoe/gofakeit/v7"
+	"github.com/codingconcepts/edg/pkg/random"
 	"github.com/expr-lang/expr"
 )
 
@@ -41,6 +42,9 @@ type Env struct {
 
 	nurandCMutex sync.RWMutex
 	nurandC      map[int]int
+
+	seqMutex   sync.Mutex
+	seqCounter int
 }
 
 func NewEnv(db *sql.DB, r *Request) (*Env, error) {
@@ -53,24 +57,46 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 	}
 
 	env.env = map[string]any{
-		"const":       constant,      // Use a constant value.
-		"expr":        constant,      // Evaluate an arithmetic expression (e.g. expr(warehouses * 10)).
-		"gen":         gen,           // Generate a random value using gofakeit.
-		"gen_batch":   genBatch,      // Generate N values in batches, returns [][]any of comma-separated strings.
-		"batch":       batch,         // Generate sequential batch indices [0, n) for batched execution.
-		"global":      env.global,    // Use a value in the global config section.
-		"ref_rand":    env.refRand,   // Use a random row.
-		"ref_same":    env.refSame,   // Use the same random row across multiple arguments.
-		"ref_perm":    env.refPerm,   // Use the same random row for the worker's lifetime.
-		"ref_diff":    env.refDiff,   // Use unique rows across multiple arguments.
-		"ref_each":    env.refEach,   // Cycles through each row.
-		"ref_n":       env.refN,      // Pick N unique random field values from a dataset.
-		"nurand":      env.nuRand,    // Non-Uniform Random per TPC-C spec.
-		"nurand_n":    env.nuRandN,   // N unique Non-Uniform Random values (comma-separated).
-		"norm_rand":   env.normRand,  // Normal-distribution random integer in [min, max].
-		"norm_rand_n": env.normRandN, // N unique normal-distribution random integers (comma-separated).
-		"set_rand":    setRand,       // Pick from a set (uniform or weighted random).
-		"set_normal":  setNormal,     // Pick from a set using normal distribution.
+		"const":             constant,            // Use a constant value.
+		"expr":              constant,            // Evaluate an arithmetic expression (e.g. expr(warehouses * 10)).
+		"gen":               gen,                 // Generate a random value using gofakeit.
+		"gen_batch":         genBatch,            // Generate N values in batches, returns [][]any of comma-separated strings.
+		"batch":             batch,               // Generate sequential batch indices [0, n) for batched execution.
+		"global":            env.global,          // Use a value in the global config section.
+		"ref_rand":          env.refRand,         // Use a random row.
+		"ref_same":          env.refSame,         // Use the same random row across multiple arguments.
+		"ref_perm":          env.refPerm,         // Use the same random row for the worker's lifetime.
+		"ref_diff":          env.refDiff,         // Use unique rows across multiple arguments.
+		"ref_each":          env.refEach,         // Cycles through each row.
+		"ref_n":             env.refN,            // Pick N unique random field values from a dataset.
+		"nurand":            env.nuRand,          // Non-Uniform Random per TPC-C spec.
+		"nurand_n":          env.nuRandN,         // N unique Non-Uniform Random values (comma-separated).
+		"norm_rand":         env.normRand,        // Normal-distribution random integer in [min, max].
+		"norm_rand_f":       env.normRandF,       // Normal-distribution random float with precision.
+		"norm_rand_n":       env.normRandN,       // N unique normal-distribution random values (comma-separated).
+		"set_rand":          setRand,             // Pick from a set (uniform or weighted random).
+		"set_normal":        setNormal,           // Pick from a set using normal distribution.
+		"uuid_v1":           genUUIDv1,           // Generate a Version 1 UUID (timestamp + node ID).
+		"uuid_v4":           genUUIDv4,           // Generate a Version 4 UUID (random).
+		"uuid_v6":           genUUIDv6,           // Generate a Version 6 UUID (reordered timestamp).
+		"uuid_v7":           genUUIDv7,           // Generate a Version 7 UUID (Unix timestamp + random).
+		"float_rand":        floatRand,           // Random float in [min, max] with precision.
+		"uniform_rand":      uniformRand,         // Uniform random float in [min, max].
+		"seq":               env.seq,             // Auto-incrementing sequence (start + counter * step).
+		"zipf":              zipfRand,            // Zipfian-distributed random integer in [0, max].
+		"cond":              cond,                // Conditional: if predicate then trueVal else falseVal.
+		"coalesce":          coalesce,            // First non-nil value from arguments.
+		"template":          tmpl,                // Format string interpolation (fmt.Sprintf).
+		"regex":             genRegex,            // Generate a string matching a regex pattern.
+		"json_obj":          jsonObj,             // Build a JSON object from key-value pairs.
+		"json_arr":          jsonArr,             // Build a JSON array of N random values.
+		"point":             genPoint,            // Random geographic point within a radius.
+		"point_wkt":         genPointWKT,         // Random geographic point as WKT string.
+		"rand_timestamp":    randTimestamp,       // Random timestamp between min and max (RFC3339).
+		"rand_duration":     randDuration,        // Random duration between min and max.
+		"date_rand":         dateRand,            // Random date with custom format.
+		"date_offset":       dateOffset,          // Timestamp offset from now.
+		"weighted_sample_n": env.weightedSampleN, // N weighted random field values (comma-separated).
 	}
 
 	// Add each global variable to map itself for cleaner access.
@@ -400,25 +426,24 @@ func (e *Env) nuRandN(a, b, c, d, f any) string {
 	return strings.Join(parts, ",")
 }
 
-// normRandOne generates a single normally-distributed random integer
-// clamped to [min, max]. Uses the Box-Muller transform via rand.NormFloat64.
-func normRandOne(mean, stddev, min, max float64) int {
-	for {
-		v := mean + stddev*rand.NormFloat64()
-		clamped := int(math.Round(v))
-		if clamped >= int(min) && clamped <= int(max) {
-			return clamped
-		}
-	}
-}
-
-// normRand returns a normally-distributed random integer in [min, max].
+// normRand returns a normally-distributed random float in [min, max],
+// rounded to 0 decimal places by default.
 //
 //	norm_rand(mean, stddev, min, max)
-func (e *Env) normRand(a, b, c, d any) int {
+func (e *Env) normRand(a, b, c, d any) float64 {
 	mean, stddev := toFloat(a), toFloat(b)
 	min, max := toFloat(c), toFloat(d)
-	return normRandOne(mean, stddev, min, max)
+	return random.Norm(mean, stddev, min, max)
+}
+
+// normRandF returns a normally-distributed random float in [min, max],
+// rounded to the given number of decimal places.
+//
+//	norm_rand_f(mean, stddev, min, max, precision)
+func (e *Env) normRandF(a, b, c, d, p any) float64 {
+	mean, stddev := toFloat(a), toFloat(b)
+	min, max := toFloat(c), toFloat(d)
+	return random.Norm(mean, stddev, min, max, toInt(p))
 }
 
 // normRandN generates N unique normally-distributed random integers as a
@@ -431,13 +456,13 @@ func (e *Env) normRandN(a, b, c, d, f, g any) string {
 	minN, maxN := toInt(f), toInt(g)
 	n := minN + rand.IntN(maxN-minN+1)
 
-	seen := make(map[int]bool, n)
+	seen := make(map[float64]bool, n)
 	parts := make([]string, 0, n)
 	for len(parts) < n {
-		v := normRandOne(mean, stddev, min, max)
+		v := random.Norm(mean, stddev, min, max)
 		if !seen[v] {
 			seen[v] = true
-			parts = append(parts, fmt.Sprintf("%d", v))
+			parts = append(parts, fmt.Sprintf("%g", v))
 		}
 	}
 	return strings.Join(parts, ",")
@@ -731,13 +756,18 @@ func setRand(values []any, weights []any) (any, error) {
 // indices, ~95% within mean +/- 2*stddev.
 //
 // For example, with values ['a','b','c','d','e'], mean=2, stddev=0.8:
+//
 //   - index 2 ('c') is picked most often
+//
 //   - ~68% of picks land in indices 1-3 ('b','c','d')
+//
 //   - ~95% of picks land in indices 0-4 ('a'..'e')
+//
 //   - a smaller stddev (e.g. 0.3) concentrates picks more tightly around the mean
+//
 //   - a larger stddev (e.g. 2.0) spreads picks more evenly across the set
 //
-//	set_normal(['a', 'b', 'c', 'd', 'e'], 2, 0.8)
+//     set_normal(['a', 'b', 'c', 'd', 'e'], 2, 0.8)
 func setNormal(values []any, mean, stddev any) (any, error) {
 	if len(values) == 0 {
 		return nil, fmt.Errorf("set_normal requires at least one value")
@@ -750,7 +780,7 @@ func setNormal(values []any, mean, stddev any) (any, error) {
 	m := toFloat(mean)
 	s := toFloat(stddev)
 
-	idx := normRandOne(m, s, 0, float64(len(values)-1))
+	idx := int(random.Norm(m, s, 0, float64(len(values)-1)))
 	return values[idx], nil
 }
 
@@ -759,4 +789,253 @@ func wrap(s string) string {
 		return s
 	}
 	return "{" + s + "}"
+}
+
+func genUUIDv1() string { return random.UUIDv1() }
+func genUUIDv4() string { return random.UUIDv4() }
+func genUUIDv6() string { return random.UUIDv6() }
+func genUUIDv7() string { return random.UUIDv7() }
+
+// floatRand generates a random float64 in [min, max] rounded to the
+// given number of decimal places.
+//
+//	float_rand(min, max, precision)
+func floatRand(min, max, precision any) float64 {
+	return random.Float(toFloat(min), toFloat(max), toInt(precision))
+}
+
+// uniformRand generates a uniform random float64 in [min, max].
+//
+//	uniform_rand(min, max)
+func uniformRand(min, max any) float64 {
+	return random.Uniform(toFloat(min), toFloat(max))
+}
+
+// seq returns a monotonically increasing value: start + counter * step.
+// The counter is shared across all seq calls for a worker.
+//
+//	seq(start, step)
+func (e *Env) seq(start, step any) int {
+	e.seqMutex.Lock()
+	defer e.seqMutex.Unlock()
+
+	s := toInt(start)
+	st := toInt(step)
+	result := s + e.seqCounter*st
+	e.seqCounter++
+	return result
+}
+
+// zipfRand generates a Zipfian-distributed random integer in [0, max].
+// Parameters s (> 1) and v (>= 1) control the distribution shape.
+//
+//	zipf(s, v, max)
+func zipfRand(s, v, imax any) int {
+	return random.Zipf(toFloat(s), toFloat(v), toInt(imax))
+}
+
+// cond returns trueVal if predicate is true, falseVal otherwise.
+//
+//	cond(predicate, trueVal, falseVal)
+func cond(predicate, trueVal, falseVal any) any {
+	if b, ok := predicate.(bool); ok && b {
+		return trueVal
+	}
+	return falseVal
+}
+
+// coalesce returns the first non-nil value from arguments.
+//
+//	coalesce(val1, val2, val3, ...)
+func coalesce(values ...any) any {
+	for _, v := range values {
+		if v != nil {
+			return v
+		}
+	}
+	return nil
+}
+
+// tmpl formats a string using fmt.Sprintf.
+//
+//	template('ORD-%05d-%s', seq(1, 1), ref_rand('w').id)
+func tmpl(format string, args ...any) string {
+	return fmt.Sprintf(format, args...)
+}
+
+// genRegex generates a random string matching the given regex pattern.
+//
+//	regex('[A-Z]{3}-[0-9]{4}')
+func genRegex(pattern string) string {
+	return random.Regex(pattern)
+}
+
+// jsonObj builds a JSON object string from key-value pair arguments.
+//
+//	json_obj('key1', val1, 'key2', val2)
+func jsonObj(pairs ...any) (string, error) {
+	if len(pairs)%2 != 0 {
+		return "", fmt.Errorf("json_obj requires an even number of arguments (key-value pairs)")
+	}
+
+	m := make(map[string]any, len(pairs)/2)
+	for i := 0; i < len(pairs); i += 2 {
+		m[fmt.Sprintf("%v", pairs[i])] = pairs[i+1]
+	}
+
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// jsonArr builds a JSON array string of N random values generated by
+// the given gofakeit pattern, where N is in [minN, maxN].
+//
+//	json_arr(1, 5, 'email')
+func jsonArr(minN, maxN any, pattern string) (string, error) {
+	lo := toInt(minN)
+	hi := toInt(maxN)
+	n := lo + rand.IntN(hi-lo+1)
+
+	values := make([]any, n)
+	for i := range n {
+		values[i] = gen(pattern)
+	}
+
+	b, err := json.Marshal(values)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// genPoint generates a random geographic point within radiusKM of
+// (lat, lon) and returns a map with "lat" and "lon" keys.
+//
+//	point(51.5, -0.1, 10).lat
+func genPoint(lat, lon, radiusKM any) map[string]any {
+	newLat, newLon := random.Point(toFloat(lat), toFloat(lon), toFloat(radiusKM))
+	return map[string]any{
+		"lat": newLat,
+		"lon": newLon,
+	}
+}
+
+// genPointWKT generates a random geographic point within radiusKM of
+// (lat, lon) and returns a WKT string: "POINT(lon lat)".
+//
+//	point_wkt(51.5, -0.1, 10)
+func genPointWKT(lat, lon, radiusKM any) string {
+	newLat, newLon := random.Point(toFloat(lat), toFloat(lon), toFloat(radiusKM))
+	return fmt.Sprintf("POINT(%f %f)", newLon, newLat)
+}
+
+// randTimestamp generates a random timestamp between min and max,
+// both in RFC3339 format. Returns the result in RFC3339.
+//
+//	rand_timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
+func randTimestamp(min, max string) string {
+	minT, err := time.Parse(time.RFC3339, min)
+	if err != nil {
+		return ""
+	}
+	maxT, err := time.Parse(time.RFC3339, max)
+	if err != nil {
+		return ""
+	}
+	return random.Timestamp(minT, maxT).UTC().Format(time.RFC3339)
+}
+
+// randDuration generates a random duration between min and max,
+// both as Go duration strings (e.g. "1h", "30m").
+//
+//	rand_duration('1h', '24h')
+func randDuration(min, max string) string {
+	minD, err := time.ParseDuration(min)
+	if err != nil {
+		return ""
+	}
+	maxD, err := time.ParseDuration(max)
+	if err != nil {
+		return ""
+	}
+	return random.Duration(minD, maxD).String()
+}
+
+// dateRand generates a random timestamp between min and max (RFC3339)
+// and formats the result using the given Go time format string.
+//
+//	date_rand('2006-01-02', '2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
+func dateRand(format, min, max string) string {
+	minT, err := time.Parse(time.RFC3339, min)
+	if err != nil {
+		return ""
+	}
+	maxT, err := time.Parse(time.RFC3339, max)
+	if err != nil {
+		return ""
+	}
+	return random.Timestamp(minT, maxT).UTC().Format(format)
+}
+
+// dateOffset returns the current time offset by the given Go duration
+// string, formatted as RFC3339.
+//
+//	date_offset('-72h')
+//	date_offset('30m')
+func dateOffset(duration string) string {
+	d, err := time.ParseDuration(duration)
+	if err != nil {
+		return ""
+	}
+	return time.Now().Add(d).UTC().Format(time.RFC3339)
+}
+
+// weightedSampleN picks N unique random rows from a named dataset
+// using weighted selection based on a weight column, extracts the
+// specified field, and returns a comma-separated string.
+//
+//	weighted_sample_n('products', 'id', 'popularity', 3, 8)
+func (e *Env) weightedSampleN(name, field, weightField string, minN, maxN any) string {
+	raw, ok := e.env[name]
+	if !ok {
+		return ""
+	}
+	data, ok := raw.([]map[string]any)
+	if !ok || len(data) == 0 {
+		return ""
+	}
+
+	lo := toInt(minN)
+	hi := toInt(maxN)
+	n := lo + rand.IntN(hi-lo+1)
+	if n > len(data) {
+		n = len(data)
+	}
+
+	items := make([]weightedItem, len(data))
+	for i, row := range data {
+		items[i] = weightedItem{
+			Value:  i,
+			Weight: toInt(row[weightField]),
+		}
+	}
+	wi := makeWeightedItems(items)
+	if wi.totalWeight == 0 {
+		return ""
+	}
+
+	seen := make(map[int]bool, n)
+	parts := make([]string, 0, n)
+	for len(parts) < n {
+		idx := toInt(wi.choose())
+		if !seen[idx] {
+			seen[idx] = true
+			parts = append(parts, fmt.Sprintf("%v", data[idx][field]))
+		}
+	}
+
+	return strings.Join(parts, ",")
 }

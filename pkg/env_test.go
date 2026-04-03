@@ -3,8 +3,11 @@ package pkg
 import (
 	"context"
 	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -280,11 +283,11 @@ func TestNormRand_Distribution(t *testing.T) {
 	for range n {
 		v := env.normRand(mean, stddev, min, max)
 		if v < min || v > max {
-			t.Fatalf("normRand value %d outside [%d, %d]", v, min, max)
+			t.Fatalf("normRand value %v outside [%d, %d]", v, min, max)
 		}
-		sum += float64(v)
+		sum += v
 
-		dist := float64(v) - mean
+		dist := v - mean
 		if dist < 0 {
 			dist = -dist
 		}
@@ -1676,5 +1679,366 @@ func TestRunSection_QueryStoresResults(t *testing.T) {
 	}
 	if len(data) != 2 {
 		t.Errorf("stored %d rows, want 2", len(data))
+	}
+}
+
+func TestFloatRand(t *testing.T) {
+	for range 1000 {
+		v := floatRand(1.0, 10.0, 2)
+		if v < 1.0 || v > 10.0 {
+			t.Fatalf("floatRand(1.0, 10.0, 2) = %v, out of range", v)
+		}
+		scaled := v * 100
+		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
+			t.Fatalf("floatRand precision 2: %v not rounded correctly", v)
+		}
+	}
+}
+
+func TestUniformRand(t *testing.T) {
+	for range 1000 {
+		v := uniformRand(5.0, 15.0)
+		if v < 5.0 || v >= 15.0 {
+			t.Fatalf("uniformRand(5.0, 15.0) = %v, out of range", v)
+		}
+	}
+}
+
+func TestSeq(t *testing.T) {
+	env := testEnv(nil)
+
+	for i := range 5 {
+		got := env.seq(1, 1)
+		want := 1 + i
+		if got != want {
+			t.Errorf("seq(1, 1) call %d = %d, want %d", i, got, want)
+		}
+	}
+}
+
+func TestSeq_StepAndStart(t *testing.T) {
+	env := testEnv(nil)
+
+	for i := range 3 {
+		got := env.seq(100, 10)
+		want := 100 + i*10
+		if got != want {
+			t.Errorf("seq(100, 10) call %d = %d, want %d", i, got, want)
+		}
+	}
+}
+
+func TestZipfRand(t *testing.T) {
+	bins := make([]int, 100)
+	for range 10000 {
+		v := zipfRand(2.0, 1.0, 99)
+		if v < 0 || v > 99 {
+			t.Fatalf("zipfRand out of range: %d", v)
+		}
+		bins[v]++
+	}
+	if bins[0] < bins[99] {
+		t.Errorf("zipfRand not skewed: bin[0]=%d, bin[99]=%d", bins[0], bins[99])
+	}
+}
+
+func TestZipfRand_InvalidParams(t *testing.T) {
+	if v := zipfRand(0.5, 1.0, 100); v != 0 {
+		t.Errorf("zipfRand with s <= 1 = %d, want 0", v)
+	}
+}
+
+func TestCond(t *testing.T) {
+	if got := cond(true, "yes", "no"); got != "yes" {
+		t.Errorf("cond(true) = %v, want yes", got)
+	}
+	if got := cond(false, "yes", "no"); got != "no" {
+		t.Errorf("cond(false) = %v, want no", got)
+	}
+}
+
+func TestCond_NonBool(t *testing.T) {
+	// Non-bool predicate should return falseVal.
+	if got := cond("truthy", "yes", "no"); got != "no" {
+		t.Errorf("cond(string) = %v, want no", got)
+	}
+}
+
+func TestCoalesce(t *testing.T) {
+	if got := coalesce(nil, nil, "first", "second"); got != "first" {
+		t.Errorf("coalesce = %v, want first", got)
+	}
+}
+
+func TestCoalesce_AllNil(t *testing.T) {
+	if got := coalesce(nil, nil); got != nil {
+		t.Errorf("coalesce(nil, nil) = %v, want nil", got)
+	}
+}
+
+func TestTemplate(t *testing.T) {
+	got := tmpl("ORD-%05d-%s", 42, "abc")
+	if got != "ORD-00042-abc" {
+		t.Errorf("tmpl = %q, want ORD-00042-abc", got)
+	}
+}
+
+func TestGenRegex(t *testing.T) {
+	result := genRegex("[A-Z]{3}-[0-9]{4}")
+	matched, _ := regexp.MatchString(`^[A-Z]{3}-[0-9]{4}$`, result)
+	if !matched {
+		t.Errorf("genRegex = %q, does not match pattern", result)
+	}
+}
+
+func TestJsonObj(t *testing.T) {
+	result, err := jsonObj("name", "alice", "age", 30)
+	if err != nil {
+		t.Fatalf("jsonObj error: %v", err)
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal([]byte(result), &m); err != nil {
+		t.Fatalf("jsonObj produced invalid JSON: %v", err)
+	}
+	if m["name"] != "alice" {
+		t.Errorf("name = %v, want alice", m["name"])
+	}
+	if m["age"] != float64(30) {
+		t.Errorf("age = %v, want 30", m["age"])
+	}
+}
+
+func TestJsonObj_OddArgs(t *testing.T) {
+	_, err := jsonObj("key1", "val1", "key2")
+	if err == nil {
+		t.Fatal("jsonObj with odd args should return error")
+	}
+}
+
+func TestJsonArr(t *testing.T) {
+	result, err := jsonArr(3, 3, "email")
+	if err != nil {
+		t.Fatalf("jsonArr error: %v", err)
+	}
+
+	var arr []any
+	if err := json.Unmarshal([]byte(result), &arr); err != nil {
+		t.Fatalf("jsonArr produced invalid JSON: %v", err)
+	}
+	if len(arr) != 3 {
+		t.Errorf("jsonArr length = %d, want 3", len(arr))
+	}
+}
+
+func TestGenPoint(t *testing.T) {
+	centerLat := 51.5074
+	centerLon := -0.1278
+	radiusKM := 10.0
+
+	for range 100 {
+		p := genPoint(centerLat, centerLon, radiusKM)
+		lat := p["lat"].(float64)
+		lon := p["lon"].(float64)
+
+		dLat := (lat - centerLat) * math.Pi / 180
+		dLon := (lon - centerLon) * math.Pi / 180
+		a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+			math.Cos(centerLat*math.Pi/180)*math.Cos(lat*math.Pi/180)*
+				math.Sin(dLon/2)*math.Sin(dLon/2)
+		dist := 6371.0 * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+		if dist > radiusKM+0.01 {
+			t.Fatalf("genPoint distance %.4f km exceeds radius", dist)
+		}
+	}
+}
+
+func TestGenPointWKT(t *testing.T) {
+	centerLat := 51.5074
+	centerLon := -0.1278
+	radiusKM := 10.0
+
+	for range 100 {
+		wkt := genPointWKT(centerLat, centerLon, radiusKM)
+
+		var lon, lat float64
+		_, err := fmt.Sscanf(wkt, "POINT(%f %f)", &lon, &lat)
+		if err != nil {
+			t.Fatalf("genPointWKT returned invalid WKT %q: %v", wkt, err)
+		}
+
+		dLat := (lat - centerLat) * math.Pi / 180
+		dLon := (lon - centerLon) * math.Pi / 180
+		a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+			math.Cos(centerLat*math.Pi/180)*math.Cos(lat*math.Pi/180)*
+				math.Sin(dLon/2)*math.Sin(dLon/2)
+		dist := 6371.0 * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+		if dist > radiusKM+0.01 {
+			t.Fatalf("genPointWKT distance %.4f km exceeds radius", dist)
+		}
+	}
+}
+
+func TestRandTimestamp(t *testing.T) {
+	min := "2020-01-01T00:00:00Z"
+	max := "2025-01-01T00:00:00Z"
+	result := randTimestamp(min, max)
+	if result == "" {
+		t.Fatal("randTimestamp returned empty string")
+	}
+
+	ts, err := time.Parse(time.RFC3339, result)
+	if err != nil {
+		t.Fatalf("randTimestamp produced invalid RFC3339: %v", err)
+	}
+	minT, _ := time.Parse(time.RFC3339, min)
+	maxT, _ := time.Parse(time.RFC3339, max)
+	if ts.Before(minT) || ts.After(maxT) {
+		t.Errorf("randTimestamp %v not in range [%v, %v]", ts, minT, maxT)
+	}
+}
+
+func TestRandTimestamp_InvalidInput(t *testing.T) {
+	if result := randTimestamp("bad", "2025-01-01T00:00:00Z"); result != "" {
+		t.Errorf("randTimestamp with bad min = %q, want empty", result)
+	}
+}
+
+func TestRandDuration(t *testing.T) {
+	result := randDuration("1h", "24h")
+	if result == "" {
+		t.Fatal("randDuration returned empty string")
+	}
+
+	d, err := time.ParseDuration(result)
+	if err != nil {
+		t.Fatalf("randDuration produced invalid duration: %v", err)
+	}
+	if d < time.Hour || d > 24*time.Hour {
+		t.Errorf("randDuration %v not in range [1h, 24h]", d)
+	}
+}
+
+func TestRandDuration_InvalidInput(t *testing.T) {
+	if result := randDuration("bad", "24h"); result != "" {
+		t.Errorf("randDuration with bad min = %q, want empty", result)
+	}
+}
+
+func TestDateRand(t *testing.T) {
+	result := dateRand("2006-01-02", "2020-01-01T00:00:00Z", "2025-01-01T00:00:00Z")
+	if result == "" {
+		t.Fatal("dateRand returned empty string")
+	}
+
+	ts, err := time.Parse("2006-01-02", result)
+	if err != nil {
+		t.Fatalf("dateRand produced invalid date: %v", err)
+	}
+	if ts.Year() < 2020 || ts.Year() > 2025 {
+		t.Errorf("dateRand year %d not in range [2020, 2025]", ts.Year())
+	}
+}
+
+func TestDateOffset(t *testing.T) {
+	result := dateOffset("1h")
+	if result == "" {
+		t.Fatal("dateOffset returned empty string")
+	}
+
+	ts, err := time.Parse(time.RFC3339, result)
+	if err != nil {
+		t.Fatalf("dateOffset produced invalid RFC3339: %v", err)
+	}
+
+	expected := time.Now().Add(time.Hour).UTC()
+	diff := ts.Sub(expected)
+	if diff < 0 {
+		diff = -diff
+	}
+	if diff > 2*time.Second {
+		t.Errorf("dateOffset('1h') = %v, expected ~%v", ts, expected)
+	}
+}
+
+func TestDateOffset_InvalidInput(t *testing.T) {
+	if result := dateOffset("bad"); result != "" {
+		t.Errorf("dateOffset with bad duration = %q, want empty", result)
+	}
+}
+
+func TestNormRandF(t *testing.T) {
+	env := testEnv(nil)
+
+	for range 100 {
+		v := env.normRandF(50, 10, 1, 100, 2)
+		if v < 1 || v > 100 {
+			t.Fatalf("normRandF value %v outside [1, 100]", v)
+		}
+		scaled := v * 100
+		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
+			t.Fatalf("normRandF precision 2: %v not rounded correctly", v)
+		}
+	}
+}
+
+func TestWeightedSampleN(t *testing.T) {
+	rows := []map[string]any{
+		{"id": 1, "name": "a", "weight": 100},
+		{"id": 2, "name": "b", "weight": 1},
+		{"id": 3, "name": "c", "weight": 1},
+	}
+	env := testEnv(map[string][]map[string]any{"items": rows})
+
+	result := env.weightedSampleN("items", "name", "weight", 2, 2)
+	if result == "" {
+		t.Fatal("weightedSampleN returned empty string")
+	}
+
+	parts := strings.Split(result, ",")
+	if len(parts) != 2 {
+		t.Errorf("weightedSampleN returned %d items, want 2", len(parts))
+	}
+
+	// Verify uniqueness.
+	if len(parts) == 2 && parts[0] == parts[1] {
+		t.Error("weightedSampleN returned duplicate values")
+	}
+}
+
+func TestWeightedSampleN_Weighted(t *testing.T) {
+	rows := []map[string]any{
+		{"id": 1, "name": "heavy", "weight": 1000},
+		{"id": 2, "name": "light", "weight": 1},
+	}
+	env := testEnv(map[string][]map[string]any{"items": rows})
+
+	counts := map[string]int{}
+	for range 1000 {
+		result := env.weightedSampleN("items", "name", "weight", 1, 1)
+		counts[result]++
+	}
+
+	if counts["heavy"] < 900 {
+		t.Errorf("heavy picked %d/1000, expected ~999", counts["heavy"])
+	}
+}
+
+func TestWeightedSampleN_UnknownName(t *testing.T) {
+	env := testEnv(nil)
+	if result := env.weightedSampleN("nonexistent", "id", "weight", 1, 3); result != "" {
+		t.Errorf("weightedSampleN for unknown name = %v, want empty", result)
+	}
+}
+
+func TestWeightedSampleN_ZeroWeights(t *testing.T) {
+	rows := []map[string]any{
+		{"id": 1, "weight": 0},
+		{"id": 2, "weight": 0},
+	}
+	env := testEnv(map[string][]map[string]any{"items": rows})
+
+	if result := env.weightedSampleN("items", "id", "weight", 1, 1); result != "" {
+		t.Errorf("weightedSampleN with zero weights = %v, want empty", result)
 	}
 }
