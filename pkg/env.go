@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -139,6 +141,11 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 		{"run", r.Run},
 	} {
 		for i, query := range group.queries {
+			switch query.Type {
+			case QueryTypeQuery, QueryTypeExec, "":
+			default:
+				return nil, fmt.Errorf("unknown query type %q in %s query %d (%s)", query.Type, group.name, i, query.Name)
+			}
 			if err := query.CompileArgs(&env); err != nil {
 				return nil, fmt.Errorf("failed to compile %s query %d: %w", group.name, i, err)
 			}
@@ -247,8 +254,7 @@ func (e *Env) InitFrom(source *Env) {
 		if !ok {
 			continue
 		}
-		copied := make([]map[string]any, len(data))
-		copy(copied, data)
+		copied := slices.Clone(data)
 		e.SetEnv(q.Name, copied)
 	}
 }
@@ -319,7 +325,7 @@ func (e *Env) refRand(name string) map[string]any {
 // rows from the named dataset, extracts the specified field from each,
 // and returns a comma-separated string (e.g. "42,17,93") for portable
 // use across database drivers.
-func (e *Env) refN(name string, field string, min, max int) string {
+func (e *Env) refN(name string, field string, lo, hi int) string {
 	raw, ok := e.env[name]
 	if !ok {
 		return ""
@@ -329,10 +335,7 @@ func (e *Env) refN(name string, field string, min, max int) string {
 		return ""
 	}
 
-	n := min + rand.IntN(max-min+1)
-	if n > len(data) {
-		n = len(data)
-	}
+	n := min(lo+rand.IntN(hi-lo+1), len(data))
 
 	var parts []string
 	if n*rejectionSamplingFactor < len(data) {
@@ -354,7 +357,7 @@ func rejection(data []map[string]any, field string, n int) []string {
 			idx := rand.IntN(len(data))
 			if _, ok := seen[idx]; !ok {
 				seen[idx] = struct{}{}
-				parts[i] = fmt.Sprintf("%v", data[idx][field])
+				parts[i] = fmt.Sprint(data[idx][field])
 				break
 			}
 		}
@@ -401,8 +404,8 @@ func (e *Env) getNurandC(A int) int {
 // nuRand implements the TPC-C Non-Uniform Random number generator:
 //
 //	NURand(A, x, y) = (((random(0, A) | random(x, y)) + C) % (y - x + 1)) + x
-func (e *Env) nuRand(a, b, c any) int {
-	A, x, y := toInt(a), toInt(b), toInt(c)
+func (e *Env) nuRand(rawA, rawX, rawY any) int {
+	A, x, y := toInt(rawA), toInt(rawX), toInt(rawY)
 	C := e.getNurandC(A)
 	return (((rand.IntN(A+1) | (rand.IntN(y-x+1) + x)) + C) % (y - x + 1)) + x
 }
@@ -410,9 +413,10 @@ func (e *Env) nuRand(a, b, c any) int {
 // nuRandN generates N unique NURand values as a comma-separated string,
 // where N is chosen randomly in [min, max]. Used for multi-item order
 // lines in New-Order transactions.
-func (e *Env) nuRandN(a, b, c, d, f any) string {
-	A, x, y, min, max := toInt(a), toInt(b), toInt(c), toInt(d), toInt(f)
-	n := min + rand.IntN(max-min+1)
+func (e *Env) nuRandN(rawA, rawX, rawY, rawMinN, rawMaxN any) string {
+	A, x, y := toInt(rawA), toInt(rawX), toInt(rawY)
+	minN, maxN := toInt(rawMinN), toInt(rawMaxN)
+	n := minN + rand.IntN(maxN-minN+1)
 
 	seen := make(map[int]bool, n)
 	parts := make([]string, 0, n)
@@ -430,36 +434,32 @@ func (e *Env) nuRandN(a, b, c, d, f any) string {
 // rounded to 0 decimal places by default.
 //
 //	norm_rand(mean, stddev, min, max)
-func (e *Env) normRand(a, b, c, d any) float64 {
-	mean, stddev := toFloat(a), toFloat(b)
-	min, max := toFloat(c), toFloat(d)
-	return random.Norm(mean, stddev, min, max)
+func (e *Env) normRand(rawMean, rawStddev, rawMin, rawMax any) float64 {
+	return random.Norm(toFloat(rawMean), toFloat(rawStddev), toFloat(rawMin), toFloat(rawMax))
 }
 
 // normRandF returns a normally-distributed random float in [min, max],
 // rounded to the given number of decimal places.
 //
 //	norm_rand_f(mean, stddev, min, max, precision)
-func (e *Env) normRandF(a, b, c, d, p any) float64 {
-	mean, stddev := toFloat(a), toFloat(b)
-	min, max := toFloat(c), toFloat(d)
-	return random.Norm(mean, stddev, min, max, toInt(p))
+func (e *Env) normRandF(rawMean, rawStddev, rawMin, rawMax, rawPrecision any) float64 {
+	return random.Norm(toFloat(rawMean), toFloat(rawStddev), toFloat(rawMin), toFloat(rawMax), toInt(rawPrecision))
 }
 
 // normRandN generates N unique normally-distributed random integers as a
 // comma-separated string, where N is chosen randomly in [minN, maxN].
 //
 //	norm_rand_n(mean, stddev, min, max, minN, maxN)
-func (e *Env) normRandN(a, b, c, d, f, g any) string {
-	mean, stddev := toFloat(a), toFloat(b)
-	min, max := toFloat(c), toFloat(d)
-	minN, maxN := toInt(f), toInt(g)
+func (e *Env) normRandN(rawMean, rawStddev, rawMin, rawMax, rawMinN, rawMaxN any) string {
+	mean, stddev := toFloat(rawMean), toFloat(rawStddev)
+	lo, hi := toFloat(rawMin), toFloat(rawMax)
+	minN, maxN := toInt(rawMinN), toInt(rawMaxN)
 	n := minN + rand.IntN(maxN-minN+1)
 
 	seen := make(map[float64]bool, n)
 	parts := make([]string, 0, n)
 	for len(parts) < n {
-		v := random.Norm(mean, stddev, min, max)
+		v := random.Norm(mean, stddev, lo, hi)
 		if !seen[v] {
 			seen[v] = true
 			parts = append(parts, fmt.Sprintf("%g", v))
@@ -730,7 +730,7 @@ func buildWeightedItems(values []any, weights []int) weightedItems {
 //	set_rand(['visa', 'mastercard', 'amex'], [60, 30, 10])
 func setRand(values []any, weights []any) (any, error) {
 	if len(values) == 0 {
-		return nil, fmt.Errorf("set_rand requires at least one value")
+		return nil, errors.New("set_rand requires at least one value")
 	}
 
 	if len(weights) == 0 {
@@ -738,7 +738,7 @@ func setRand(values []any, weights []any) (any, error) {
 	}
 
 	if len(weights) != len(values) {
-		return nil, fmt.Errorf("set_rand values and weights must be the same length (got %d values and %d weights)", len(values), len(weights))
+		return nil, fmt.Errorf("set_rand: values and weights length mismatch (%d vs %d)", len(values), len(weights))
 	}
 
 	intWeights := make([]int, len(weights))
@@ -770,7 +770,7 @@ func setRand(values []any, weights []any) (any, error) {
 //     set_normal(['a', 'b', 'c', 'd', 'e'], 2, 0.8)
 func setNormal(values []any, mean, stddev any) (any, error) {
 	if len(values) == 0 {
-		return nil, fmt.Errorf("set_normal requires at least one value")
+		return nil, errors.New("set_normal requires at least one value")
 	}
 
 	if len(values) == 1 {
@@ -875,7 +875,7 @@ func genRegex(pattern string) string {
 //	json_obj('key1', val1, 'key2', val2)
 func jsonObj(pairs ...any) (string, error) {
 	if len(pairs)%2 != 0 {
-		return "", fmt.Errorf("json_obj requires an even number of arguments (key-value pairs)")
+		return "", errors.New("json_obj requires an even number of arguments (key-value pairs)")
 	}
 
 	m := make(map[string]any, len(pairs)/2)
@@ -1010,10 +1010,7 @@ func (e *Env) weightedSampleN(name, field, weightField string, minN, maxN any) s
 
 	lo := toInt(minN)
 	hi := toInt(maxN)
-	n := lo + rand.IntN(hi-lo+1)
-	if n > len(data) {
-		n = len(data)
-	}
+	n := min(lo+rand.IntN(hi-lo+1), len(data))
 
 	items := make([]weightedItem, len(data))
 	for i, row := range data {
@@ -1033,7 +1030,7 @@ func (e *Env) weightedSampleN(name, field, weightField string, minN, maxN any) s
 		idx := toInt(wi.choose())
 		if !seen[idx] {
 			seen[idx] = true
-			parts = append(parts, fmt.Sprintf("%v", data[idx][field]))
+			parts = append(parts, fmt.Sprint(data[idx][field]))
 		}
 	}
 

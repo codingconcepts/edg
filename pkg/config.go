@@ -122,7 +122,7 @@ func (q *Query) Run(ctx context.Context, e *Env, args ...any) error {
 		if err := e.Exec(ctx, e.db, q, args...); err != nil {
 			return fmt.Errorf("executing exec %s: %w", q.Name, err)
 		}
-	default:
+	case QueryTypeQuery, "":
 		if err := e.Query(ctx, e.db, q, args...); err != nil {
 			return fmt.Errorf("executing query %s: %w", q.Name, err)
 		}

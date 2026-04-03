@@ -217,6 +217,47 @@ up:
 	}
 }
 
+func TestNewEnv_RejectsUnknownQueryType(t *testing.T) {
+	tests := []struct {
+		name    string
+		req     *Request
+		wantErr bool
+	}{
+		{
+			name:    "valid exec",
+			req:     &Request{Run: []*Query{{Name: "q", Type: QueryTypeExec, Query: "SELECT 1"}}},
+			wantErr: false,
+		},
+		{
+			name:    "valid query",
+			req:     &Request{Run: []*Query{{Name: "q", Type: QueryTypeQuery, Query: "SELECT 1"}}},
+			wantErr: false,
+		},
+		{
+			name:    "empty defaults to query",
+			req:     &Request{Run: []*Query{{Name: "q", Type: "", Query: "SELECT 1"}}},
+			wantErr: false,
+		},
+		{
+			name:    "unknown type",
+			req:     &Request{Run: []*Query{{Name: "q", Type: "bogus", Query: "SELECT 1"}}},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewEnv(nil, tt.req)
+			if tt.wantErr && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func BenchmarkCompileArgs(b *testing.B) {
 	cases := []struct {
 		name string
