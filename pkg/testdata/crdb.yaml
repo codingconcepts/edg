@@ -59,7 +59,10 @@ up:
       CREATE TABLE IF NOT EXISTS test_sets (
         rand_val STRING,
         weighted_val STRING,
-        normal_val STRING
+        normal_val STRING,
+        exp_val STRING,
+        lognorm_val STRING,
+        zipfian_val STRING
       )
 
   - name: create_json
@@ -86,7 +89,9 @@ up:
         ts STRING,
         dur STRING,
         date_str STRING,
-        offset_ts STRING
+        offset_ts STRING,
+        time_val STRING,
+        timez_val STRING
       )
 
   - name: create_distributions
@@ -97,7 +102,9 @@ up:
         nu_vals STRING,
         norm_vals STRING,
         exp_val FLOAT8,
-        lognorm_val FLOAT8
+        lognorm_val FLOAT8,
+        exp_int_val FLOAT8,
+        lognorm_int_val FLOAT8
       )
 
   - name: create_refs
@@ -124,6 +131,23 @@ up:
     query: |-
       CREATE TABLE IF NOT EXISTS test_ref_perm (
         perm_id INT
+      )
+
+  - name: create_binary
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_binary (
+        bytes_val STRING,
+        bit_val STRING,
+        varbit_val STRING,
+        inet_val STRING
+      )
+
+  - name: create_arrays
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_arrays (
+        arr_val STRING
       )
 
   - name: create_gen_batch
@@ -198,6 +222,14 @@ deseed:
     type: exec
     query: TRUNCATE TABLE test_gen_batch
 
+  - name: truncate_arrays
+    type: exec
+    query: TRUNCATE TABLE test_arrays
+
+  - name: truncate_binary
+    type: exec
+    query: TRUNCATE TABLE test_binary
+
   - name: truncate_ref_perm
     type: exec
     query: TRUNCATE TABLE test_ref_perm
@@ -259,6 +291,14 @@ down:
   - name: drop_gen_batch
     type: exec
     query: DROP TABLE IF EXISTS test_gen_batch
+
+  - name: drop_arrays
+    type: exec
+    query: DROP TABLE IF EXISTS test_arrays
+
+  - name: drop_binary
+    type: exec
+    query: DROP TABLE IF EXISTS test_binary
 
   - name: drop_ref_perm
     type: exec
@@ -359,16 +399,19 @@ run:
       INSERT INTO test_numbers (float_val, uniform_val, norm_val, norm_f_val, zipf_val)
       VALUES ($1, $2, $3, $4, $5)
 
-  # Test: set_rand (uniform), set_rand (weighted), set_normal
+  # Test: set_rand (uniform), set_rand (weighted), set_normal, set_exp, set_lognormal, set_zipfian
   - name: insert_sets
     type: exec
     args:
       - set_rand(['red', 'green', 'blue'], [])
       - set_rand(['visa', 'mastercard', 'amex'], [60, 30, 10])
       - set_normal(['a', 'b', 'c', 'd', 'e'], 2, 0.8)
+      - set_exp(['a', 'b', 'c', 'd', 'e'], 0.5)
+      - set_lognormal(['a', 'b', 'c', 'd', 'e'], 1.0, 0.5)
+      - set_zipfian(['a', 'b', 'c', 'd', 'e'], 2.0, 1.0)
     query: |-
-      INSERT INTO test_sets (rand_val, weighted_val, normal_val)
-      VALUES ($1, $2, $3)
+      INSERT INTO test_sets (rand_val, weighted_val, normal_val, exp_val, lognorm_val, zipfian_val)
+      VALUES ($1, $2, $3, $4, $5, $6)
 
   # Test: json_obj, json_arr
   - name: insert_json
@@ -391,7 +434,7 @@ run:
       INSERT INTO test_geo (lat, lon, wkt)
       VALUES ($1, $2, $3)
 
-  # Test: rand_timestamp, rand_duration, date_rand, date_offset
+  # Test: rand_timestamp, rand_duration, date_rand, date_offset, time, timez
   - name: insert_time
     type: exec
     args:
@@ -399,11 +442,13 @@ run:
       - rand_duration('1h', '24h')
       - date_rand('2006-01-02', '2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
       - date_offset('-1h')
+      - time('08:00:00', '17:30:00')
+      - timez('08:00:00', '17:30:00')
     query: |-
-      INSERT INTO test_time (ts, dur, date_str, offset_ts)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO test_time (ts, dur, date_str, offset_ts, time_val, timez_val)
+      VALUES ($1, $2, $3, $4, $5, $6)
 
-  # Test: nurand, nurand_n, norm_rand_n
+  # Test: nurand, nurand_n, norm_rand_n, exp_rand, exp_rand_f, lognorm_rand, lognorm_rand_f
   - name: insert_distributions
     type: exec
     args:
@@ -412,9 +457,11 @@ run:
       - norm_rand_n(50, 10, 1, 100, 3, 5)
       - exp_rand_f(0.5, 0, 100, 2)
       - lognorm_rand_f(2.0, 0.5, 1, 100, 2)
+      - exp_rand(0.5, 0, 100)
+      - lognorm_rand(2.0, 0.5, 1, 100)
     query: |-
-      INSERT INTO test_distributions (nu_val, nu_vals, norm_vals, exp_val, lognorm_val)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO test_distributions (nu_val, nu_vals, norm_vals, exp_val, lognorm_val, exp_int_val, lognorm_int_val)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
 
   # Test: ref_rand, ref_same, ref_n, weighted_sample_n
   - name: insert_refs
@@ -438,6 +485,27 @@ run:
     query: |-
       INSERT INTO test_ref_diff (id1, id2)
       VALUES ($1, $2)
+
+  # Test: bytes, bit, varbit, inet
+  - name: insert_binary
+    type: exec
+    args:
+      - bytes(16)
+      - bit(8)
+      - varbit(16)
+      - inet('192.168.1.0/24')
+    query: |-
+      INSERT INTO test_binary (bytes_val, bit_val, varbit_val, inet_val)
+      VALUES ($1, $2, $3, $4)
+
+  # Test: array
+  - name: insert_arrays
+    type: exec
+    args:
+      - array(2, 5, 'intrange[1,100]')
+    query: |-
+      INSERT INTO test_arrays (arr_val)
+      VALUES ($1)
 
   # Test: ref_perm (returns same row for worker lifetime)
   - name: insert_ref_perm

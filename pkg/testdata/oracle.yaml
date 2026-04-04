@@ -59,7 +59,10 @@ up:
       CREATE TABLE test_sets (
         rand_val VARCHAR2(255),
         weighted_val VARCHAR2(255),
-        normal_val VARCHAR2(255)
+        normal_val VARCHAR2(255),
+        exp_val VARCHAR2(255),
+        lognorm_val VARCHAR2(255),
+        zipfian_val VARCHAR2(255)
       )
 
   - name: create_json
@@ -86,7 +89,9 @@ up:
         ts VARCHAR2(255),
         dur VARCHAR2(255),
         date_str VARCHAR2(255),
-        offset_ts VARCHAR2(255)
+        offset_ts VARCHAR2(255),
+        time_val VARCHAR2(255),
+        timez_val VARCHAR2(255)
       )
 
   - name: create_distributions
@@ -97,7 +102,9 @@ up:
         nu_vals VARCHAR2(255),
         norm_vals VARCHAR2(255),
         exp_val NUMBER,
-        lognorm_val NUMBER
+        lognorm_val NUMBER,
+        exp_int_val NUMBER,
+        lognorm_int_val NUMBER
       )
 
   - name: create_refs
@@ -124,6 +131,23 @@ up:
     query: |-
       CREATE TABLE test_ref_perm (
         perm_id NUMBER(10)
+      )
+
+  - name: create_binary
+    type: exec
+    query: |-
+      CREATE TABLE test_binary (
+        bytes_val VARCHAR2(255),
+        bit_val VARCHAR2(255),
+        varbit_val VARCHAR2(255),
+        inet_val VARCHAR2(255)
+      )
+
+  - name: create_arrays
+    type: exec
+    query: |-
+      CREATE TABLE test_arrays (
+        arr_val VARCHAR2(255)
       )
 
   - name: create_gen_batch
@@ -195,6 +219,14 @@ deseed:
   - name: truncate_gen_batch
     type: exec
     query: TRUNCATE TABLE test_gen_batch
+
+  - name: truncate_arrays
+    type: exec
+    query: TRUNCATE TABLE test_arrays
+
+  - name: truncate_binary
+    type: exec
+    query: TRUNCATE TABLE test_binary
 
   - name: truncate_ref_perm
     type: exec
@@ -269,6 +301,24 @@ down:
     query: |-
       BEGIN
         EXECUTE IMMEDIATE 'DROP TABLE test_gen_batch PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_arrays
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_arrays PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_binary
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_binary PURGE';
       EXCEPTION WHEN OTHERS THEN
         IF SQLCODE != -942 THEN RAISE; END IF;
       END;
@@ -435,9 +485,12 @@ run:
       - set_rand(['red', 'green', 'blue'], [])
       - set_rand(['visa', 'mastercard', 'amex'], [60, 30, 10])
       - set_normal(['a', 'b', 'c', 'd', 'e'], 2, 0.8)
+      - set_exp(['a', 'b', 'c', 'd', 'e'], 0.5)
+      - set_lognormal(['a', 'b', 'c', 'd', 'e'], 1.0, 0.5)
+      - set_zipfian(['a', 'b', 'c', 'd', 'e'], 2.0, 1.0)
     query: |-
-      INSERT INTO test_sets (rand_val, weighted_val, normal_val)
-      VALUES (:1, :2, :3)
+      INSERT INTO test_sets (rand_val, weighted_val, normal_val, exp_val, lognorm_val, zipfian_val)
+      VALUES (:1, :2, :3, :4, :5, :6)
 
   - name: insert_json
     type: exec
@@ -465,9 +518,11 @@ run:
       - rand_duration('1h', '24h')
       - date_rand('2006-01-02', '2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
       - date_offset('-1h')
+      - time('08:00:00', '17:30:00')
+      - timez('08:00:00', '17:30:00')
     query: |-
-      INSERT INTO test_time (ts, dur, date_str, offset_ts)
-      VALUES (:1, :2, :3, :4)
+      INSERT INTO test_time (ts, dur, date_str, offset_ts, time_val, timez_val)
+      VALUES (:1, :2, :3, :4, :5, :6)
 
   - name: insert_distributions
     type: exec
@@ -477,9 +532,11 @@ run:
       - norm_rand_n(50, 10, 1, 100, 3, 5)
       - exp_rand_f(0.5, 0, 100, 2)
       - lognorm_rand_f(2.0, 0.5, 1, 100, 2)
+      - exp_rand(0.5, 0, 100)
+      - lognorm_rand(2.0, 0.5, 1, 100)
     query: |-
-      INSERT INTO test_distributions (nu_val, nu_vals, norm_vals, exp_val, lognorm_val)
-      VALUES (:1, :2, :3, :4, :5)
+      INSERT INTO test_distributions (nu_val, nu_vals, norm_vals, exp_val, lognorm_val, exp_int_val, lognorm_int_val)
+      VALUES (:1, :2, :3, :4, :5, :6, :7)
 
   - name: insert_refs
     type: exec
@@ -501,6 +558,25 @@ run:
     query: |-
       INSERT INTO test_ref_diff (id1, id2)
       VALUES (:1, :2)
+
+  - name: insert_binary
+    type: exec
+    args:
+      - bytes(16)
+      - bit(8)
+      - varbit(16)
+      - inet('192.168.1.0/24')
+    query: |-
+      INSERT INTO test_binary (bytes_val, bit_val, varbit_val, inet_val)
+      VALUES (:1, :2, :3, :4)
+
+  - name: insert_arrays
+    type: exec
+    args:
+      - array(2, 5, 'intrange[1,100]')
+    query: |-
+      INSERT INTO test_arrays (arr_val)
+      VALUES (:1)
 
   - name: insert_ref_perm
     type: exec

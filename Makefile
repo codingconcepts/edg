@@ -17,6 +17,6 @@ integration_test:
 
 teardown:
 	- docker compose -f _examples/compose_crdb.yml down
-	- docker compose -f docker-compose.test.yml down
+	- docker rm cockroachdb -f
 	- docker rm oracle -f
 	- rm ./tpc-c

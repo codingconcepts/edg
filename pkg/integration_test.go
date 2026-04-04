@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"regexp"
 	"strings"
@@ -39,6 +40,7 @@ var (
 		"test_ref_source", "test_scalars", "test_uuids", "test_numbers",
 		"test_sets", "test_json", "test_geo", "test_time",
 		"test_distributions", "test_refs", "test_ref_diff", "test_ref_perm",
+		"test_binary", "test_arrays",
 		"test_gen_batch", "test_batch", "test_ref_each",
 	}
 )
@@ -139,14 +141,16 @@ func TestIntegration_CockroachDB(t *testing.T) {
 		"scalars":       "SELECT const_val, global_val, expr_val, gen_val, regex_val, tmpl_val, cond_val, coal_val, expr_fn_val FROM test_scalars",
 		"uuids":         "SELECT v1, v4, v6, v7 FROM test_uuids",
 		"numbers":       "SELECT float_val, uniform_val, norm_val, norm_f_val, zipf_val FROM test_numbers",
-		"sets":          "SELECT rand_val, weighted_val, normal_val FROM test_sets",
+		"sets":          "SELECT rand_val, weighted_val, normal_val, exp_val, lognorm_val, zipfian_val FROM test_sets",
 		"json":          "SELECT obj::STRING, arr::STRING FROM test_json",
 		"geo":           "SELECT lat, lon, wkt FROM test_geo",
-		"time":          "SELECT ts, dur, date_str, offset_ts FROM test_time",
-		"distributions": "SELECT nu_val, nu_vals, norm_vals, exp_val, lognorm_val FROM test_distributions",
+		"time":          "SELECT ts, dur, date_str, offset_ts, time_val, timez_val FROM test_time",
+		"distributions": "SELECT nu_val, nu_vals, norm_vals, exp_val, lognorm_val, exp_int_val, lognorm_int_val FROM test_distributions",
 		"refs":          "SELECT rand_id, same_id, same_name, ref_n_ids, weighted_ids FROM test_refs",
 		"ref_diff":      "SELECT id1, id2 FROM test_ref_diff",
 		"ref_perm":      "SELECT COUNT(DISTINCT perm_id) FROM test_ref_perm",
+		"binary":        "SELECT bytes_val, bit_val, varbit_val, inet_val FROM test_binary",
+		"arrays":        "SELECT arr_val FROM test_arrays",
 		"batch_vals":    "SELECT val FROM test_batch ORDER BY val",
 	}
 
@@ -164,14 +168,16 @@ func TestIntegration_MySQL(t *testing.T) {
 		"scalars":       "SELECT const_val, global_val, expr_val, gen_val, regex_val, tmpl_val, cond_val, coal_val, expr_fn_val FROM test_scalars",
 		"uuids":         "SELECT v1, v4, v6, v7 FROM test_uuids",
 		"numbers":       "SELECT float_val, uniform_val, norm_val, norm_f_val, zipf_val FROM test_numbers",
-		"sets":          "SELECT rand_val, weighted_val, normal_val FROM test_sets",
+		"sets":          "SELECT rand_val, weighted_val, normal_val, exp_val, lognorm_val, zipfian_val FROM test_sets",
 		"json":          "SELECT CAST(obj AS CHAR), CAST(arr AS CHAR) FROM test_json",
 		"geo":           "SELECT lat, lon, wkt FROM test_geo",
-		"time":          "SELECT ts, dur, date_str, offset_ts FROM test_time",
-		"distributions": "SELECT nu_val, nu_vals, norm_vals, exp_val, lognorm_val FROM test_distributions",
+		"time":          "SELECT ts, dur, date_str, offset_ts, time_val, timez_val FROM test_time",
+		"distributions": "SELECT nu_val, nu_vals, norm_vals, exp_val, lognorm_val, exp_int_val, lognorm_int_val FROM test_distributions",
 		"refs":          "SELECT rand_id, same_id, same_name, ref_n_ids, weighted_ids FROM test_refs",
 		"ref_diff":      "SELECT id1, id2 FROM test_ref_diff",
 		"ref_perm":      "SELECT COUNT(DISTINCT perm_id) FROM test_ref_perm",
+		"binary":        "SELECT bytes_val, bit_val, varbit_val, inet_val FROM test_binary",
+		"arrays":        "SELECT arr_val FROM test_arrays",
 		"batch_vals":    "SELECT val FROM test_batch ORDER BY val",
 	}
 
@@ -189,14 +195,16 @@ func TestIntegration_Oracle(t *testing.T) {
 		"scalars":       "SELECT const_val, global_val, expr_val, gen_val, regex_val, tmpl_val, cond_val, coal_val, expr_fn_val FROM test_scalars",
 		"uuids":         "SELECT v1, v4, v6, v7 FROM test_uuids",
 		"numbers":       "SELECT float_val, uniform_val, norm_val, norm_f_val, zipf_val FROM test_numbers",
-		"sets":          "SELECT rand_val, weighted_val, normal_val FROM test_sets",
+		"sets":          "SELECT rand_val, weighted_val, normal_val, exp_val, lognorm_val, zipfian_val FROM test_sets",
 		"json":          "SELECT obj, arr FROM test_json",
 		"geo":           "SELECT lat, lon, wkt FROM test_geo",
-		"time":          "SELECT ts, dur, date_str, offset_ts FROM test_time",
-		"distributions": "SELECT nu_val, nu_vals, norm_vals, exp_val, lognorm_val FROM test_distributions",
+		"time":          "SELECT ts, dur, date_str, offset_ts, time_val, timez_val FROM test_time",
+		"distributions": "SELECT nu_val, nu_vals, norm_vals, exp_val, lognorm_val, exp_int_val, lognorm_int_val FROM test_distributions",
 		"refs":          "SELECT rand_id, same_id, same_name, ref_n_ids, weighted_ids FROM test_refs",
 		"ref_diff":      "SELECT id1, id2 FROM test_ref_diff",
 		"ref_perm":      "SELECT COUNT(DISTINCT perm_id) FROM test_ref_perm",
+		"binary":        "SELECT bytes_val, bit_val, varbit_val, inet_val FROM test_binary",
+		"arrays":        "SELECT arr_val FROM test_arrays",
 		"batch_vals":    "SELECT val FROM test_batch ORDER BY val",
 	}
 
@@ -312,6 +320,8 @@ func testRun(t *testing.T, env *Env, ctx context.Context, queries map[string]str
 	t.Run("geo", func(t *testing.T) { testRunGeo(t, queries) })
 	t.Run("time", func(t *testing.T) { testRunTime(t, queries) })
 	t.Run("distributions", func(t *testing.T) { testRunDistributions(t, queries) })
+	t.Run("binary", func(t *testing.T) { testRunBinary(t, queries) })
+	t.Run("arrays", func(t *testing.T) { testRunArrays(t, queries) })
 	t.Run("refs", func(t *testing.T) { testRunRefs(t, queries) })
 	t.Run("ref_diff", func(t *testing.T) { testRunRefDiff(t, queries) })
 	t.Run("ref_perm", func(t *testing.T) { testRunRefPerm(t, queries) })
@@ -430,7 +440,7 @@ func testRunSets(t *testing.T, queries map[string]string) {
 
 	validRand := map[string]bool{"red": true, "green": true, "blue": true}
 	validWeighted := map[string]bool{"visa": true, "mastercard": true, "amex": true}
-	validNormal := map[string]bool{"a": true, "b": true, "c": true, "d": true, "e": true}
+	validDist := map[string]bool{"a": true, "b": true, "c": true, "d": true, "e": true}
 
 	rows, err := db.Query(queries["sets"])
 	if err != nil {
@@ -438,8 +448,8 @@ func testRunSets(t *testing.T, queries map[string]string) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var randVal, weightedVal, normalVal string
-		rows.Scan(&randVal, &weightedVal, &normalVal)
+		var randVal, weightedVal, normalVal, expVal, lognormVal, zipfianVal string
+		rows.Scan(&randVal, &weightedVal, &normalVal, &expVal, &lognormVal, &zipfianVal)
 
 		if !validRand[randVal] {
 			t.Errorf("rand_val %q not in valid set", randVal)
@@ -447,8 +457,17 @@ func testRunSets(t *testing.T, queries map[string]string) {
 		if !validWeighted[weightedVal] {
 			t.Errorf("weighted_val %q not in valid set", weightedVal)
 		}
-		if !validNormal[normalVal] {
+		if !validDist[normalVal] {
 			t.Errorf("normal_val %q not in valid set", normalVal)
+		}
+		if !validDist[expVal] {
+			t.Errorf("exp_val %q not in valid set", expVal)
+		}
+		if !validDist[lognormVal] {
+			t.Errorf("lognorm_val %q not in valid set", lognormVal)
+		}
+		if !validDist[zipfianVal] {
+			t.Errorf("zipfian_val %q not in valid set", zipfianVal)
 		}
 	}
 }
@@ -508,14 +527,17 @@ func testRunTime(t *testing.T, queries map[string]string) {
 		t.Errorf("rows = %d, want %d", got, runIterations)
 	}
 
+	timePat := regexp.MustCompile(`^\d{2}:\d{2}:\d{2}$`)
+	timezPat := regexp.MustCompile(`^\d{2}:\d{2}:\d{2}\+00:00$`)
+
 	rows, err := db.Query(queries["time"])
 	if err != nil {
 		t.Fatalf("querying: %v", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var ts, dur, dateStr, offsetTs string
-		rows.Scan(&ts, &dur, &dateStr, &offsetTs)
+		var ts, dur, dateStr, offsetTs, timeVal, timezVal string
+		rows.Scan(&ts, &dur, &dateStr, &offsetTs, &timeVal, &timezVal)
 
 		if _, err := time.Parse(time.RFC3339, ts); err != nil {
 			t.Errorf("ts %q is not valid RFC3339: %v", ts, err)
@@ -528,6 +550,12 @@ func testRunTime(t *testing.T, queries map[string]string) {
 		}
 		if _, err := time.Parse(time.RFC3339, offsetTs); err != nil {
 			t.Errorf("offset_ts %q is not valid RFC3339: %v", offsetTs, err)
+		}
+		if !timePat.MatchString(timeVal) {
+			t.Errorf("time_val %q does not match HH:MM:SS", timeVal)
+		}
+		if !timezPat.MatchString(timezVal) {
+			t.Errorf("timez_val %q does not match HH:MM:SS+00:00", timezVal)
 		}
 	}
 }
@@ -545,8 +573,8 @@ func testRunDistributions(t *testing.T, queries map[string]string) {
 	for rows.Next() {
 		var nuVal int
 		var nuVals, normVals string
-		var expVal, lognormVal float64
-		rows.Scan(&nuVal, &nuVals, &normVals, &expVal, &lognormVal)
+		var expVal, lognormVal, expIntVal, lognormIntVal float64
+		rows.Scan(&nuVal, &nuVals, &normVals, &expVal, &lognormVal, &expIntVal, &lognormIntVal)
 
 		if nuVal < 1 || nuVal > 1000 {
 			t.Errorf("nu_val %d out of [1, 1000]", nuVal)
@@ -568,6 +596,67 @@ func testRunDistributions(t *testing.T, queries map[string]string) {
 
 		if lognormVal < 1 || lognormVal > 100 {
 			t.Errorf("lognorm_val %v out of [1, 100]", lognormVal)
+		}
+
+		if expIntVal < 0 || expIntVal > 100 {
+			t.Errorf("exp_int_val %v out of [0, 100]", expIntVal)
+		}
+
+		if lognormIntVal < 1 || lognormIntVal > 100 {
+			t.Errorf("lognorm_int_val %v out of [1, 100]", lognormIntVal)
+		}
+	}
+}
+
+func testRunBinary(t *testing.T, queries map[string]string) {
+	if got := rowCount(t, "test_binary"); got != runIterations {
+		t.Errorf("rows = %d, want %d", got, runIterations)
+	}
+
+	bytesPat := regexp.MustCompile(`^\\x[0-9a-f]{32}$`)
+	bitPat := regexp.MustCompile(`^[01]{8}$`)
+	varbitPat := regexp.MustCompile(`^[01]{1,16}$`)
+
+	rows, err := db.Query(queries["binary"])
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var bytesVal, bitVal, varbitVal, inetVal string
+		rows.Scan(&bytesVal, &bitVal, &varbitVal, &inetVal)
+
+		if !bytesPat.MatchString(bytesVal) {
+			t.Errorf("bytes_val %q does not match \\x + 32 hex chars", bytesVal)
+		}
+		if !bitPat.MatchString(bitVal) {
+			t.Errorf("bit_val %q does not match 8 bits", bitVal)
+		}
+		if !varbitPat.MatchString(varbitVal) {
+			t.Errorf("varbit_val %q does not match 1-16 bits", varbitVal)
+		}
+		if ip := net.ParseIP(inetVal); ip == nil {
+			t.Errorf("inet_val %q is not a valid IP address", inetVal)
+		}
+	}
+}
+
+func testRunArrays(t *testing.T, queries map[string]string) {
+	if got := rowCount(t, "test_arrays"); got != runIterations {
+		t.Errorf("rows = %d, want %d", got, runIterations)
+	}
+
+	rows, err := db.Query(queries["arrays"])
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var arrVal string
+		rows.Scan(&arrVal)
+
+		if !strings.HasPrefix(arrVal, "{") || !strings.HasSuffix(arrVal, "}") {
+			t.Errorf("arr_val %q is not a valid array literal", arrVal)
 		}
 	}
 }
