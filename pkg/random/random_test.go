@@ -142,6 +142,148 @@ func TestNorm_Distribution(t *testing.T) {
 	}
 }
 
+func TestExp_DefaultPrecision(t *testing.T) {
+	const (
+		rate = 1.0
+		min  = 0.0
+		max  = 100.0
+		n    = 10000
+	)
+
+	sum := 0.0
+	for range n {
+		v := Exp(rate, min, max)
+		if v < min || v > max {
+			t.Fatalf("Exp value %v outside [%.0f, %.0f]", v, min, max)
+		}
+		// Default precision 0: should be a whole number.
+		if v != math.Round(v) {
+			t.Fatalf("Exp default precision: %v is not a whole number", v)
+		}
+		sum += v
+	}
+
+	// Exponential with rate=1 has mean=1, but clamped to [0,100] shouldn't
+	// shift the mean much. Observed mean should be close to 1.
+	observedMean := sum / n
+	if observedMean < 0.5 || observedMean > 1.5 {
+		t.Errorf("observed mean = %.2f, want ~1.0", observedMean)
+	}
+}
+
+func TestExp_WithPrecision(t *testing.T) {
+	for range 1000 {
+		v := Exp(0.5, 0, 100, 2)
+		if v < 0 || v > 100 {
+			t.Fatalf("Exp with precision 2: %v outside [0, 100]", v)
+		}
+
+		// Verify 2 decimal places.
+		scaled := v * 100
+		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
+			t.Fatalf("Exp with precision 2: %v not rounded to 2 decimal places", v)
+		}
+	}
+}
+
+func TestExp_Distribution(t *testing.T) {
+	const (
+		rate = 0.5
+		min  = 0.0
+		max  = 1000.0
+		n    = 50000
+	)
+
+	// Exponential distribution: most values should be small.
+	// With rate=0.5 and precision=0, values round to whole numbers.
+	// "Rounded <= 2" captures continuous values in [0, 2.5),
+	// so P ≈ 1 - e^(-0.5*2.5) ≈ 71.3%.
+	belowMedian := 0
+	for range n {
+		v := Exp(rate, min, max)
+		if v <= 2 {
+			belowMedian++
+		}
+	}
+
+	pct := float64(belowMedian) / n
+	if pct < 0.67 || pct > 0.76 {
+		t.Errorf("below mean = %.1f%%, want ~71%%", pct*100)
+	}
+}
+
+func TestLogNorm_DefaultPrecision(t *testing.T) {
+	const (
+		mu    = 3.0
+		sigma = 0.5
+		min   = 1.0
+		max   = 500.0
+		n     = 10000
+	)
+
+	for range n {
+		v := LogNorm(mu, sigma, min, max)
+		if v < min || v > max {
+			t.Fatalf("LogNorm value %v outside [%.0f, %.0f]", v, min, max)
+		}
+		// Default precision 0: should be a whole number.
+		if v != math.Round(v) {
+			t.Fatalf("LogNorm default precision: %v is not a whole number", v)
+		}
+	}
+}
+
+func TestLogNorm_WithPrecision(t *testing.T) {
+	for range 1000 {
+		v := LogNorm(2.0, 0.5, 1, 100, 2)
+		if v < 1 || v > 100 {
+			t.Fatalf("LogNorm with precision 2: %v outside [1, 100]", v)
+		}
+
+		scaled := v * 100
+		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
+			t.Fatalf("LogNorm with precision 2: %v not rounded to 2 decimal places", v)
+		}
+	}
+}
+
+func TestLogNorm_Distribution(t *testing.T) {
+	const (
+		mu    = 3.0  // underlying normal mean
+		sigma = 0.5  // underlying normal stddev
+		min   = 1.0
+		max   = 500.0
+		n     = 50000
+	)
+
+	// For log-normal, the median is exp(mu) = exp(3) ≈ 20.09.
+	// Roughly 50% of values should be below the median.
+	expectedMedian := math.Exp(mu)
+	belowMedian := 0
+	sum := 0.0
+
+	for range n {
+		v := LogNorm(mu, sigma, min, max)
+		sum += v
+		if v <= expectedMedian {
+			belowMedian++
+		}
+	}
+
+	pct := float64(belowMedian) / n
+	if pct < 0.45 || pct > 0.55 {
+		t.Errorf("below median = %.1f%%, want ~50%%", pct*100)
+	}
+
+	// Mean of log-normal is exp(mu + sigma^2/2) ≈ exp(3.125) ≈ 22.76
+	expectedMean := math.Exp(mu + sigma*sigma/2)
+	observedMean := sum / n
+	tolerance := expectedMean * 0.1
+	if math.Abs(observedMean-expectedMean) > tolerance {
+		t.Errorf("observed mean = %.1f, want ~%.1f", observedMean, expectedMean)
+	}
+}
+
 func TestRegex(t *testing.T) {
 	tests := []struct {
 		name    string

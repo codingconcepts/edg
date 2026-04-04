@@ -48,6 +48,8 @@ type Env struct {
 	nurandC      map[int]int
 
 	seqCounter int64
+
+	Results chan<- QueryResult
 }
 
 func NewEnv(db *sql.DB, r *Request) (*Env, error) {
@@ -77,6 +79,10 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 		"norm_rand":         env.normRand,        // Normal-distribution random integer in [min, max].
 		"norm_rand_f":       env.normRandF,       // Normal-distribution random float with precision.
 		"norm_rand_n":       env.normRandN,       // N unique normal-distribution random values (comma-separated).
+		"exp_rand":          expRand,             // Exponential-distribution random float in [min, max].
+		"exp_rand_f":        expRandF,            // Exponential-distribution random float with precision.
+		"lognorm_rand":      lognormRand,         // Log-normal-distribution random float in [min, max].
+		"lognorm_rand_f":    lognormRandF,        // Log-normal-distribution random float with precision.
 		"set_rand":          setRand,             // Pick from a set (uniform or weighted random).
 		"set_normal":        setNormal,           // Pick from a set using normal distribution.
 		"uuid_v1":           genUUIDv1,           // Generate a Version 1 UUID (timestamp + node ID).
@@ -170,8 +176,12 @@ func (e *Env) runSection(ctx context.Context, queries []*Query, section ConfigSe
 
 		argSets, err := q.GenerateArgs(e)
 		if err != nil {
-			return fmt.Errorf("building args for %s query %s: %w", section, q.Name, err)
+			err = fmt.Errorf("building args for %s query %s: %w", section, q.Name, err)
+			e.sendResult(QueryResult{Name: q.Name, Section: section, Err: err})
+			return err
 		}
+
+		queryStart := time.Now()
 
 		for i, args := range argSets {
 			if verbose && len(argSets) > 1 {
@@ -194,15 +204,21 @@ func (e *Env) runSection(ctx context.Context, queries []*Query, section ConfigSe
 					Query: inlined,
 				}
 				if err := inlinedQuery.Run(ctx, e); err != nil {
-					return fmt.Errorf("running %s query %s: %w", section, q.Name, err)
+					err = fmt.Errorf("running %s query %s: %w", section, q.Name, err)
+					e.sendResult(QueryResult{Name: q.Name, Section: section, Latency: time.Since(queryStart), Err: err, Count: i})
+					return err
 				}
 				continue
 			}
 
 			if err := q.Run(ctx, e, args...); err != nil {
-				return fmt.Errorf("running %s query %s: %w", section, q.Name, err)
+				err = fmt.Errorf("running %s query %s: %w", section, q.Name, err)
+				e.sendResult(QueryResult{Name: q.Name, Section: section, Latency: time.Since(queryStart), Err: err, Count: i})
+				return err
 			}
 		}
+
+		e.sendResult(QueryResult{Name: q.Name, Section: section, Latency: time.Since(queryStart), Count: len(argSets)})
 
 		if section == ConfigSectionRun && q.Wait > 0 {
 			select {
@@ -213,6 +229,12 @@ func (e *Env) runSection(ctx context.Context, queries []*Query, section ConfigSe
 		}
 	}
 	return nil
+}
+
+func (e *Env) sendResult(r QueryResult) {
+	if e.Results != nil {
+		e.Results <- r
+	}
 }
 
 // Up runs the schema-up queries to create tables.
@@ -260,10 +282,10 @@ func (e *Env) InitFrom(source *Env) {
 	}
 }
 
-// RunOnce executes one iteration of the run queries. When run_weights
+// RunIteration executes one iteration of the run queries. When run_weights
 // is configured, a single transaction is chosen by weighted random
 // selection. Otherwise all run queries execute sequentially.
-func (e *Env) RunOnce(ctx context.Context) error {
+func (e *Env) RunIteration(ctx context.Context) error {
 	if len(e.request.RunWeights) == 0 {
 		return e.runSection(ctx, e.request.Run, ConfigSectionRun)
 	}
@@ -689,6 +711,38 @@ func toFloat(v any) float64 {
 	default:
 		return 0
 	}
+}
+
+// expRand returns an exponentially-distributed random float in [min, max],
+// rounded to 0 decimal places by default.
+//
+//	exp_rand(rate, min, max)
+func expRand(rawRate, rawMin, rawMax any) float64 {
+	return random.Exp(toFloat(rawRate), toFloat(rawMin), toFloat(rawMax))
+}
+
+// expRandF returns an exponentially-distributed random float in [min, max],
+// rounded to the given number of decimal places.
+//
+//	exp_rand_f(rate, min, max, precision)
+func expRandF(rawRate, rawMin, rawMax, rawPrecision any) float64 {
+	return random.Exp(toFloat(rawRate), toFloat(rawMin), toFloat(rawMax), toInt(rawPrecision))
+}
+
+// lognormRand returns a log-normally-distributed random float in [min, max],
+// rounded to 0 decimal places by default.
+//
+//	lognorm_rand(mu, sigma, min, max)
+func lognormRand(rawMu, rawSigma, rawMin, rawMax any) float64 {
+	return random.LogNorm(toFloat(rawMu), toFloat(rawSigma), toFloat(rawMin), toFloat(rawMax))
+}
+
+// lognormRandF returns a log-normally-distributed random float in [min, max],
+// rounded to the given number of decimal places.
+//
+//	lognorm_rand_f(mu, sigma, min, max, precision)
+func lognormRandF(rawMu, rawSigma, rawMin, rawMax, rawPrecision any) float64 {
+	return random.LogNorm(toFloat(rawMu), toFloat(rawSigma), toFloat(rawMin), toFloat(rawMax), toInt(rawPrecision))
 }
 
 // weightedItem pairs a value with a selection weight.

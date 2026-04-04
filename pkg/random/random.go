@@ -89,6 +89,45 @@ func Norm(mean, stddev, min, max float64, precision ...int) float64 {
 	}
 }
 
+// Exp generates an exponentially-distributed random float64 with the given
+// rate (lambda). The result is clamped to [min, max] and rounded to the
+// specified number of decimal places (default 0).
+func Exp(rate, min, max float64, precision ...int) float64 {
+	p := 0
+	if len(precision) > 0 {
+		p = precision[0]
+	}
+	shift := math.Pow(10, float64(p))
+
+	for {
+		v := rand.ExpFloat64() / rate
+		rounded := math.Round(v*shift) / shift
+		if rounded >= min && rounded <= max {
+			return rounded
+		}
+	}
+}
+
+// LogNorm generates a log-normally-distributed random float64 clamped to
+// [min, max]. mu and sigma are the mean and standard deviation of the
+// underlying normal distribution. The result is rounded to the specified
+// number of decimal places (default 0).
+func LogNorm(mu, sigma, min, max float64, precision ...int) float64 {
+	p := 0
+	if len(precision) > 0 {
+		p = precision[0]
+	}
+	shift := math.Pow(10, float64(p))
+
+	for {
+		v := math.Exp(mu + sigma*rand.NormFloat64())
+		rounded := math.Round(v*shift) / shift
+		if rounded >= min && rounded <= max {
+			return rounded
+		}
+	}
+}
+
 // Regex generates a random string matching the given regular expression.
 func Regex(pattern string) string {
 	return gofakeit.Regex(pattern)

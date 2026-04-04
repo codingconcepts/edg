@@ -1337,7 +1337,7 @@ func TestPickWeighted_SkipsUnweightedQueries(t *testing.T) {
 	}
 }
 
-func TestRunOnce_NoWeights(t *testing.T) {
+func TestRunIteration_NoWeights(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("creating sqlmock: %v", err)
@@ -1360,15 +1360,15 @@ func TestRunOnce_NoWeights(t *testing.T) {
 		},
 	}
 
-	if err := env.RunOnce(context.Background()); err != nil {
-		t.Fatalf("RunOnce error: %v", err)
+	if err := env.RunIteration(context.Background()); err != nil {
+		t.Fatalf("RunIteration error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
 	}
 }
 
-func TestRunOnce_WithWeights(t *testing.T) {
+func TestRunIteration_WithWeights(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("creating sqlmock: %v", err)
@@ -1395,8 +1395,8 @@ func TestRunOnce_WithWeights(t *testing.T) {
 		},
 	}
 
-	if err := env.RunOnce(context.Background()); err != nil {
-		t.Fatalf("RunOnce error: %v", err)
+	if err := env.RunIteration(context.Background()); err != nil {
+		t.Fatalf("RunIteration error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
@@ -1978,6 +1978,73 @@ func TestNormRandF(t *testing.T) {
 		scaled := v * 100
 		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
 			t.Fatalf("normRandF precision 2: %v not rounded correctly", v)
+		}
+	}
+}
+
+func TestExpRand(t *testing.T) {
+	const (
+		rate = 1.0
+		min  = 0.0
+		max  = 100.0
+		n    = 10000
+	)
+
+	sum := 0.0
+	for range n {
+		v := expRand(rate, min, max)
+		if v < min || v > max {
+			t.Fatalf("expRand value %v outside [%.0f, %.0f]", v, min, max)
+		}
+		sum += v
+	}
+
+	// Exponential with rate=1 has mean=1.
+	observedMean := sum / n
+	if observedMean < 0.5 || observedMean > 1.5 {
+		t.Errorf("observed mean = %.2f, want ~1.0", observedMean)
+	}
+}
+
+func TestExpRandF(t *testing.T) {
+	for range 100 {
+		v := expRandF(0.5, 0.0, 100.0, 2)
+		if v < 0 || v > 100 {
+			t.Fatalf("expRandF value %v outside [0, 100]", v)
+		}
+		scaled := v * 100
+		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
+			t.Fatalf("expRandF precision 2: %v not rounded correctly", v)
+		}
+	}
+}
+
+func TestLognormRand(t *testing.T) {
+	const (
+		mu    = 3.0
+		sigma = 0.5
+		min   = 1.0
+		max   = 500.0
+		n     = 10000
+	)
+
+	for range n {
+		v := lognormRand(mu, sigma, min, max)
+		if v < min || v > max {
+			t.Fatalf("lognormRand value %v outside [%.0f, %.0f]", v, min, max)
+		}
+	}
+}
+
+func TestLognormRandF(t *testing.T) {
+	for range 100 {
+		v := lognormRandF(2.0, 0.5, 1.0, 100.0, 2)
+		if v < 1 || v > 100 {
+			t.Fatalf("lognormRandF value %v outside [1, 100]", v)
+		}
+		scaled := v * 100
+		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
+			t.Fatalf("lognormRandF precision 2: %v not rounded correctly", v)
 		}
 	}
 }

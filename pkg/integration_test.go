@@ -143,7 +143,7 @@ func TestIntegration_CockroachDB(t *testing.T) {
 		"json":          "SELECT obj::STRING, arr::STRING FROM test_json",
 		"geo":           "SELECT lat, lon, wkt FROM test_geo",
 		"time":          "SELECT ts, dur, date_str, offset_ts FROM test_time",
-		"distributions": "SELECT nu_val, nu_vals, norm_vals FROM test_distributions",
+		"distributions": "SELECT nu_val, nu_vals, norm_vals, exp_val, lognorm_val FROM test_distributions",
 		"refs":          "SELECT rand_id, same_id, same_name, ref_n_ids, weighted_ids FROM test_refs",
 		"ref_diff":      "SELECT id1, id2 FROM test_ref_diff",
 		"ref_perm":      "SELECT COUNT(DISTINCT perm_id) FROM test_ref_perm",
@@ -168,7 +168,7 @@ func TestIntegration_MySQL(t *testing.T) {
 		"json":          "SELECT CAST(obj AS CHAR), CAST(arr AS CHAR) FROM test_json",
 		"geo":           "SELECT lat, lon, wkt FROM test_geo",
 		"time":          "SELECT ts, dur, date_str, offset_ts FROM test_time",
-		"distributions": "SELECT nu_val, nu_vals, norm_vals FROM test_distributions",
+		"distributions": "SELECT nu_val, nu_vals, norm_vals, exp_val, lognorm_val FROM test_distributions",
 		"refs":          "SELECT rand_id, same_id, same_name, ref_n_ids, weighted_ids FROM test_refs",
 		"ref_diff":      "SELECT id1, id2 FROM test_ref_diff",
 		"ref_perm":      "SELECT COUNT(DISTINCT perm_id) FROM test_ref_perm",
@@ -193,7 +193,7 @@ func TestIntegration_Oracle(t *testing.T) {
 		"json":          "SELECT obj, arr FROM test_json",
 		"geo":           "SELECT lat, lon, wkt FROM test_geo",
 		"time":          "SELECT ts, dur, date_str, offset_ts FROM test_time",
-		"distributions": "SELECT nu_val, nu_vals, norm_vals FROM test_distributions",
+		"distributions": "SELECT nu_val, nu_vals, norm_vals, exp_val, lognorm_val FROM test_distributions",
 		"refs":          "SELECT rand_id, same_id, same_name, ref_n_ids, weighted_ids FROM test_refs",
 		"ref_diff":      "SELECT id1, id2 FROM test_ref_diff",
 		"ref_perm":      "SELECT COUNT(DISTINCT perm_id) FROM test_ref_perm",
@@ -299,7 +299,7 @@ func testInit(t *testing.T, env *Env, ctx context.Context) {
 
 func testRun(t *testing.T, env *Env, ctx context.Context, queries map[string]string) {
 	for i := range runIterations {
-		if err := env.RunOnce(ctx); err != nil {
+		if err := env.RunIteration(ctx); err != nil {
 			t.Fatalf("run iteration %d: %v", i, err)
 		}
 	}
@@ -545,7 +545,8 @@ func testRunDistributions(t *testing.T, queries map[string]string) {
 	for rows.Next() {
 		var nuVal int
 		var nuVals, normVals string
-		rows.Scan(&nuVal, &nuVals, &normVals)
+		var expVal, lognormVal float64
+		rows.Scan(&nuVal, &nuVals, &normVals, &expVal, &lognormVal)
 
 		if nuVal < 1 || nuVal > 1000 {
 			t.Errorf("nu_val %d out of [1, 1000]", nuVal)
@@ -559,6 +560,14 @@ func testRunDistributions(t *testing.T, queries map[string]string) {
 		normParts := strings.Split(normVals, ",")
 		if len(normParts) < 3 || len(normParts) > 5 {
 			t.Errorf("norm_vals has %d parts, want 3-5", len(normParts))
+		}
+
+		if expVal < 0 || expVal > 100 {
+			t.Errorf("exp_val %v out of [0, 100]", expVal)
+		}
+
+		if lognormVal < 1 || lognormVal > 100 {
+			t.Errorf("lognorm_val %v out of [1, 100]", lognormVal)
 		}
 	}
 }

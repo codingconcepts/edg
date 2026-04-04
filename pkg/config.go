@@ -49,6 +49,14 @@ const (
 	ConfigSectionRun    ConfigSection = "run"
 )
 
+type QueryResult struct {
+	Name    string
+	Section ConfigSection
+	Latency time.Duration
+	Err     error
+	Count   int
+}
+
 type Query struct {
 	Name         string        `json:"name" yaml:"name"`
 	Type         QueryType     `json:"type" yaml:"type"`

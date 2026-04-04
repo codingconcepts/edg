@@ -95,7 +95,9 @@ up:
       CREATE TABLE test_distributions (
         nu_val NUMBER(10),
         nu_vals VARCHAR2(255),
-        norm_vals VARCHAR2(255)
+        norm_vals VARCHAR2(255),
+        exp_val NUMBER,
+        lognorm_val NUMBER
       )
 
   - name: create_refs
@@ -473,9 +475,11 @@ run:
       - nurand(255, 1, 1000)
       - nurand_n(255, 1, 1000, 3, 5)
       - norm_rand_n(50, 10, 1, 100, 3, 5)
+      - exp_rand_f(0.5, 0, 100, 2)
+      - lognorm_rand_f(2.0, 0.5, 1, 100, 2)
     query: |-
-      INSERT INTO test_distributions (nu_val, nu_vals, norm_vals)
-      VALUES (:1, :2, :3)
+      INSERT INTO test_distributions (nu_val, nu_vals, norm_vals, exp_val, lognorm_val)
+      VALUES (:1, :2, :3, :4, :5)
 
   - name: insert_refs
     type: exec

@@ -1,14 +1,16 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"log/slog"
 	"os"
 	"os/signal"
+	"slices"
 	"sync"
-	"sync/atomic"
+	"text/tabwriter"
 	"time"
 
 	"github.com/codingconcepts/edg/pkg"
@@ -189,12 +191,7 @@ func runCmd() *cobra.Command {
 				return err
 			}
 
-			var (
-				wg       sync.WaitGroup
-				count    atomic.Int64
-				errCount atomic.Int64
-			)
-
+			results := make(chan pkg.QueryResult, workers*100)
 			start := time.Now()
 
 			// Timer cancels context after duration.
@@ -206,66 +203,15 @@ func runCmd() *cobra.Command {
 				}
 			}()
 
-			// Progress reporter.
+			wg := startWorkers(ctx, workers, db, req, initEnv, results)
+
 			go func() {
-				ticker := time.NewTicker(printInterval)
-				defer ticker.Stop()
-				for {
-					select {
-					case <-ticker.C:
-						c := count.Load()
-						e := errCount.Load()
-						elapsed := time.Since(start)
-						tps := float64(c) / elapsed.Seconds()
-						tpm := float64(c) / elapsed.Minutes()
-						slog.Info("progress",
-							"qps", fmt.Sprintf("%.1f", tps),
-							"tpm", fmt.Sprintf("%.1f", tpm),
-							"errors", e,
-							"elapsed", elapsed.Round(time.Second))
-					case <-ctx.Done():
-						return
-					}
-				}
+				wg.Wait()
+				close(results)
 			}()
 
-			for i := range workers {
-				wg.Go(func() {
-					workerEnv, err := pkg.NewEnv(db, req)
-					if err != nil {
-						slog.Error("env error", "worker", i, "error", err)
-						return
-					}
-					workerEnv.InitFrom(initEnv)
-
-					for ctx.Err() == nil {
-						if err := workerEnv.RunOnce(ctx); err != nil {
-							if ctx.Err() != nil {
-								return
-							}
-							slog.Error("run error", "worker", i, "error", err)
-							errCount.Add(1)
-							continue
-						}
-						count.Add(1)
-					}
-				})
-			}
-
 			slog.Info("running", "workers", workers, "duration", duration)
-			wg.Wait()
-
-			elapsed := time.Since(start)
-			total := count.Load()
-			errors := errCount.Load()
-			tpm := float64(total) / elapsed.Minutes()
-
-			fmt.Println()
-			fmt.Printf("Duration:     %s\n", elapsed.Round(time.Millisecond))
-			fmt.Printf("Workers:      %d\n", workers)
-			fmt.Printf("Transactions: %d\n", total)
-			fmt.Printf("Errors:       %d\n", errors)
-			fmt.Printf("tpm:          %.1f\n", tpm)
+			printResults(results, printInterval, start, workers)
 
 			return nil
 		},
@@ -276,4 +222,126 @@ func runCmd() *cobra.Command {
 	cmd.Flags().DurationVar(&printInterval, "print-interval", time.Second, "progress reporting interval")
 
 	return cmd
+}
+
+func startWorkers(ctx context.Context, numWorkers int, db *sql.DB, req *pkg.Request, initEnv *pkg.Env, results chan<- pkg.QueryResult) *sync.WaitGroup {
+	var wg sync.WaitGroup
+
+	for i := range numWorkers {
+		wg.Go(func() {
+			workerEnv, err := pkg.NewEnv(db, req)
+			if err != nil {
+				slog.Error("env error", "worker", i, "error", err)
+				return
+			}
+			workerEnv.InitFrom(initEnv)
+			workerEnv.Results = results
+
+			for ctx.Err() == nil {
+				if err := workerEnv.RunIteration(ctx); err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					slog.Error("run error", "worker", i, "error", err)
+					continue
+				}
+			}
+		})
+	}
+	return &wg
+}
+
+type queryStats struct {
+	count        int64
+	errors       int64
+	totalLatency time.Duration
+}
+
+func printResults(results <-chan pkg.QueryResult, interval time.Duration, start time.Time, numWorkers int) {
+	stats := map[string]*queryStats{}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case r, ok := <-results:
+			if !ok {
+				printSummary(stats, start, numWorkers)
+				return
+			}
+			s := stats[r.Name]
+			if s == nil {
+				s = &queryStats{}
+				stats[r.Name] = s
+			}
+			if r.Err != nil {
+				s.errors++
+			} else {
+				s.count += int64(r.Count)
+				s.totalLatency += r.Latency
+			}
+		case <-ticker.C:
+			printProgress(stats, start)
+		}
+	}
+}
+
+func printProgress(stats map[string]*queryStats, start time.Time) {
+	elapsed := time.Since(start)
+
+	names := make([]string, 0, len(stats))
+	for name := range stats {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "\n%s elapsed\n", elapsed.Round(time.Second))
+	fmt.Fprintf(w, "QUERY\tCOUNT\tERRORS\tAVG LATENCY\tQPS\n")
+	for _, name := range names {
+		s := stats[name]
+		var avg time.Duration
+		if s.count > 0 {
+			avg = s.totalLatency / time.Duration(s.count)
+		}
+		qps := float64(s.count) / elapsed.Seconds()
+		fmt.Fprintf(w, "%s\t%d\t%d\t%s\t%.1f\n", name, s.count, s.errors, avg.Round(time.Microsecond), qps)
+	}
+	w.Flush()
+}
+
+func printSummary(stats map[string]*queryStats, start time.Time, numWorkers int) {
+	elapsed := time.Since(start)
+
+	names := make([]string, 0, len(stats))
+	for name := range stats {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	var totalCount, totalErrors int64
+	for _, s := range stats {
+		totalCount += s.count
+		totalErrors += s.errors
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "\nsummary\n")
+	fmt.Fprintf(w, "Duration:\t%s\n", elapsed.Round(time.Millisecond))
+	fmt.Fprintf(w, "Workers:\t%d\n", numWorkers)
+	fmt.Fprintf(w, "\nQUERY\tCOUNT\tERRORS\tAVG LATENCY\tQPS\n")
+	for _, name := range names {
+		s := stats[name]
+		var avg time.Duration
+		if s.count > 0 {
+			avg = s.totalLatency / time.Duration(s.count)
+		}
+		qps := float64(s.count) / elapsed.Seconds()
+		fmt.Fprintf(w, "%s\t%d\t%d\t%s\t%.1f\n", name, s.count, s.errors, avg.Round(time.Microsecond), qps)
+	}
+	tpm := float64(totalCount) / elapsed.Minutes()
+	fmt.Fprintf(w, "\nTransactions:\t%d\n", totalCount)
+	fmt.Fprintf(w, "Errors:\t%d\n", totalErrors)
+	fmt.Fprintf(w, "tpm:\t%.1f\n", tpm)
+	w.Flush()
 }

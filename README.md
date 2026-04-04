@@ -503,3 +503,7 @@ URL="oracle://system:password@localhost:1521/defaultdb" \
 DRIVER="oracle" \
 go test ./pkg -v -db
 ```
+
+## Todos
+
+* Test zipf and norm random for set selection.
