@@ -5,7 +5,7 @@
 # Single table (usertable) with a primary key and 10 fields of
 # 100 bytes each. Keys follow the format user{0000000000}.
 #
-# Workload profiles — change run_weights to switch:
+# Workload profiles: change run_weights to switch:
 #
 #   A - Update heavy:       read: 50,  update: 50
 #   B - Read mostly:        read: 95,  update: 5
@@ -82,7 +82,7 @@ down:
     type: exec
     query: DROP TABLE IF EXISTS usertable
 
-# Workload A — Update heavy (default)
+# Workload A - Update heavy (default)
 run_weights:
   read: 50
   update: 50

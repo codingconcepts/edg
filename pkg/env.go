@@ -85,6 +85,9 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 		"lognorm_rand_f":    lognormRandF,        // Log-normal-distribution random float with precision.
 		"set_rand":          setRand,             // Pick from a set (uniform or weighted random).
 		"set_normal":        setNormal,           // Pick from a set using normal distribution.
+		"set_exp":           setExp,              // Pick from a set using exponential distribution.
+		"set_lognormal":     setLognormal,        // Pick from a set using log-normal distribution.
+		"set_zipfian":       setZipfian,          // Pick from a set using Zipfian distribution.
 		"uuid_v1":           genUUIDv1,           // Generate a Version 1 UUID (timestamp + node ID).
 		"uuid_v4":           genUUIDv4,           // Generate a Version 4 UUID (random).
 		"uuid_v6":           genUUIDv6,           // Generate a Version 6 UUID (reordered timestamp).
@@ -842,6 +845,63 @@ func setNormal(values []any, mean, stddev any) (any, error) {
 	s := toFloat(stddev)
 
 	idx := int(random.Norm(m, s, 0, float64(len(values)-1)))
+	return values[idx], nil
+}
+
+// setExp picks an item from a set using exponential distribution.
+// rate controls how steeply the distribution favours early indices:
+// higher rate means stronger concentration on the first items.
+//
+//	set_exp(['a', 'b', 'c', 'd', 'e'], 0.5)
+func setExp(values []any, rate any) (any, error) {
+	if len(values) == 0 {
+		return nil, errors.New("set_exp requires at least one value")
+	}
+
+	if len(values) == 1 {
+		return values[0], nil
+	}
+
+	r := toFloat(rate)
+	idx := int(random.Exp(r, 0, float64(len(values)-1)))
+	return values[idx], nil
+}
+
+// setLognormal picks an item from a set using log-normal distribution.
+// mu and sigma are the mean and standard deviation of the underlying
+// normal distribution, mapped onto the set's indices.
+//
+//	set_lognormal(['a', 'b', 'c', 'd', 'e'], 1.0, 0.5)
+func setLognormal(values []any, mu, sigma any) (any, error) {
+	if len(values) == 0 {
+		return nil, errors.New("set_lognormal requires at least one value")
+	}
+
+	if len(values) == 1 {
+		return values[0], nil
+	}
+
+	m := toFloat(mu)
+	s := toFloat(sigma)
+	idx := int(random.LogNorm(m, s, 0, float64(len(values)-1)))
+	return values[idx], nil
+}
+
+// setZipfian picks an item from a set using Zipfian distribution.
+// s (> 1) and v (>= 1) control the distribution shape; lower indices
+// are selected exponentially more often.
+//
+//	set_zipfian(['a', 'b', 'c', 'd', 'e'], 2.0, 1.0)
+func setZipfian(values []any, s, v any) (any, error) {
+	if len(values) == 0 {
+		return nil, errors.New("set_zipfian requires at least one value")
+	}
+
+	if len(values) == 1 {
+		return values[0], nil
+	}
+
+	idx := random.Zipf(toFloat(s), toFloat(v), len(values)-1)
 	return values[idx], nil
 }
 

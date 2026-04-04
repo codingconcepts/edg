@@ -934,6 +934,109 @@ func TestSetNormal_Empty(t *testing.T) {
 	}
 }
 
+func TestSetExp_LowIndexBias(t *testing.T) {
+	items := []any{"a", "b", "c", "d", "e"}
+	counts := map[any]int{}
+	for range 10000 {
+		v, err := setExp(items, 0.5)
+		if err != nil {
+			t.Fatalf("setExp error: %v", err)
+		}
+		counts[v]++
+	}
+
+	// First item "a" (index 0) should be picked most often.
+	if counts["a"] < counts["e"] {
+		t.Errorf("first item 'a' (%d) should be picked more than last 'e' (%d)", counts["a"], counts["e"])
+	}
+}
+
+func TestSetExp_SingleItem(t *testing.T) {
+	v, err := setExp([]any{"only"}, 0.5)
+	if err != nil {
+		t.Fatalf("setExp error: %v", err)
+	}
+	if v != "only" {
+		t.Errorf("setExp single item = %v, want 'only'", v)
+	}
+}
+
+func TestSetExp_Empty(t *testing.T) {
+	_, err := setExp([]any{}, 0.5)
+	if err == nil {
+		t.Fatal("setExp with no values should return error")
+	}
+}
+
+func TestSetLognormal_LowIndexBias(t *testing.T) {
+	items := []any{"a", "b", "c", "d", "e"}
+	counts := map[any]int{}
+	for range 10000 {
+		v, err := setLognormal(items, 0.5, 0.5)
+		if err != nil {
+			t.Fatalf("setLognormal error: %v", err)
+		}
+		counts[v]++
+	}
+
+	// Lower indices should be picked more than higher ones.
+	if counts["a"]+counts["b"] < counts["d"]+counts["e"] {
+		t.Errorf("lower items a+b (%d) should be picked more than upper d+e (%d)",
+			counts["a"]+counts["b"], counts["d"]+counts["e"])
+	}
+}
+
+func TestSetLognormal_SingleItem(t *testing.T) {
+	v, err := setLognormal([]any{"only"}, 0, 1)
+	if err != nil {
+		t.Fatalf("setLognormal error: %v", err)
+	}
+	if v != "only" {
+		t.Errorf("setLognormal single item = %v, want 'only'", v)
+	}
+}
+
+func TestSetLognormal_Empty(t *testing.T) {
+	_, err := setLognormal([]any{}, 0, 1)
+	if err == nil {
+		t.Fatal("setLognormal with no values should return error")
+	}
+}
+
+func TestSetZipfian_LowIndexBias(t *testing.T) {
+	items := []any{"a", "b", "c", "d", "e"}
+	counts := map[any]int{}
+	for range 10000 {
+		v, err := setZipfian(items, 2.0, 1.0)
+		if err != nil {
+			t.Fatalf("setZipfian error: %v", err)
+		}
+		counts[v]++
+	}
+
+	// First item "a" (index 0) should dominate.
+	if counts["a"] < counts["e"] {
+		t.Errorf("first item 'a' (%d) should be picked more than last 'e' (%d)", counts["a"], counts["e"])
+	}
+}
+
+func TestSetZipfian_SingleItem(t *testing.T) {
+	v, err := setZipfian([]any{"only"}, 2.0, 1.0)
+	if err != nil {
+		t.Fatalf("setZipfian error: %v", err)
+	}
+	if v != "only" {
+		t.Errorf("setZipfian single item = %v, want 'only'", v)
+	}
+}
+
+func TestSetZipfian_Empty(t *testing.T) {
+	_, err := setZipfian([]any{}, 2.0, 1.0)
+	if err == nil {
+		t.Fatal("setZipfian with no values should return error")
+	}
+}
+
 func TestWeightedItems_Choose(t *testing.T) {
 	wi := buildWeightedItems(
 		[]any{"heavy", "light"},

@@ -1,0 +1,90 @@
+globals:
+  rows: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_distributions
+    query: |-
+      CREATE TABLE IF NOT EXISTS distributions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        dist_type STRING NOT NULL,
+        value FLOAT8 NOT NULL
+      )
+
+seed:
+
+  - name: seed_uniform
+    args:
+      - batch(rows / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO distributions (dist_type, value)
+      SELECT 'uniform', (random() * 100)::FLOAT8
+      FROM generate_series(1, $2::INT)
+
+deseed:
+
+  - name: truncate_distributions
+    type: exec
+    query: TRUNCATE TABLE distributions
+
+down:
+
+  - name: drop_distributions
+    type: exec
+    query: DROP TABLE IF EXISTS distributions
+
+run:
+
+  # Uniform: flat distribution across [0, 100].
+  - name: insert_uniform
+    type: exec
+    args:
+      - uniform_rand(0, 100)
+    query: |-
+      INSERT INTO distributions (dist_type, value)
+      VALUES ('uniform', $1::FLOAT8)
+
+  # Zipfian: heavily skewed toward low values.
+  - name: insert_zipfian
+    type: exec
+    args:
+      - zipf(2.0, 1.0, 99)
+    query: |-
+      INSERT INTO distributions (dist_type, value)
+      VALUES ('zipfian', $1::FLOAT8)
+
+  # Normal: bell curve centered at 50 with stddev 15.
+  - name: insert_normal
+    type: exec
+    args:
+      - norm_rand_f(50, 15, 0, 100, 2)
+    query: |-
+      INSERT INTO distributions (dist_type, value)
+      VALUES ('normal', $1::FLOAT8)
+
+  # Exponential: decay from 0, most values near the low end.
+  - name: insert_exponential
+    type: exec
+    args:
+      - exp_rand_f(0.5, 0, 100, 2)
+    query: |-
+      INSERT INTO distributions (dist_type, value)
+      VALUES ('exponential', $1::FLOAT8)
+
+  # Log-normal: right-skewed, long tail toward high values.
+  - name: insert_lognormal
+    type: exec
+    args:
+      - lognorm_rand_f(2.0, 0.5, 0, 100, 2)
+    query: |-
+      INSERT INTO distributions (dist_type, value)
+      VALUES ('lognormal', $1::FLOAT8)
+
+run_weights:
+  insert_uniform: 20
+  insert_zipfian: 20
+  insert_normal: 20
+  insert_exponential: 20
+  insert_lognormal: 20

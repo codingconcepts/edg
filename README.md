@@ -229,6 +229,9 @@ Query arguments are written as expressions compiled at startup using [expr-lang/
 | `nurand_n(A, x, y, min, max)` | `string` | Generates N unique NURand values (N in [min, max]) as a comma-separated string. |
 | `set_rand(values, weights)` | `any` | Picks a random item from a set. If weights are provided, weighted random selection is used; otherwise uniform. Values and weights are separate arrays. |
 | `set_normal(values, mean, stddev)` | `any` | Picks an item from a set using normal distribution. `mean` is the index selected most often; `stddev` controls spread (~68% of picks fall within `mean +/- stddev` indices, ~95% within `mean +/- 2*stddev`). A smaller stddev concentrates picks around the mean; a larger one spreads them more evenly. |
+| `set_exp(values, rate)` | `any` | Picks an item from a set using exponential distribution. Higher `rate` concentrates picks more toward the first items. |
+| `set_lognormal(values, mu, sigma)` | `any` | Picks an item from a set using log-normal distribution. `mu` and `sigma` control the shape, producing a right-skewed selection over the set's indices. |
+| `set_zipfian(values, s, v)` | `any` | Picks an item from a set using Zipfian distribution. `s` (> 1) and `v` (>= 1) control the shape; lower indices are selected exponentially more often. |
 | `norm_rand(mean, stddev, min, max)` | `float64` | Normally-distributed random number in [min, max], rounded to 0 decimal places (whole number). |
 | `norm_rand_f(mean, stddev, min, max, precision)` | `float64` | Normally-distributed random number in [min, max], rounded to `precision` decimal places. |
 | `norm_rand_n(mean, stddev, min, max, minN, maxN)` | `string` | N unique normally-distributed values (N in [minN, maxN]) as a comma-separated string. |
@@ -368,6 +371,16 @@ args:
   # Picks a quantity using normal distribution.
   # mean=2 (value '3' at index 2 is most common), stddev=0.8 (~68% pick indices 1-3).
   - set_normal([1, 2, 3, 4, 5], 2, 0.8)
+
+  # Picks a priority level using exponential distribution.
+  # Higher rate concentrates picks toward the first item ('low').
+  - set_exp(['low', 'medium', 'high', 'critical'], 0.5)
+
+  # Picks a tier using log-normal distribution (right-skewed toward early indices).
+  - set_lognormal(['free', 'basic', 'pro', 'enterprise'], 0.5, 0.5)
+
+  # Picks a category using Zipfian distribution (strong skew toward first items).
+  - set_zipfian(['electronics', 'clothing', 'books', 'food', 'toys'], 2.0, 1.0)
 
   # Generates a random UUID v4 (random) or v7 (time-ordered, sortable).
   - uuid_v4()
