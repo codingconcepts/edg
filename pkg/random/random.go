@@ -1,8 +1,11 @@
 package random
 
 import (
+	"encoding/hex"
+	"fmt"
 	"math"
 	"math/rand/v2"
+	"net"
 	"time"
 
 	"github.com/brianvoe/gofakeit/v7"
@@ -190,6 +193,88 @@ func Duration(min, max time.Duration) time.Duration {
 	randomDiff := time.Duration(rand.Int64N(int64(diff)))
 
 	return min + randomDiff
+}
+
+// Bytes generates n random bytes and returns them as a hex-encoded
+// string prefixed with \x, matching CockroachDB/PostgreSQL BYTES literal format.
+func Bytes(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = byte(rand.IntN(256))
+	}
+	return `\x` + hex.EncodeToString(b)
+}
+
+// Bit generates a random fixed-length bit string of exactly n bits.
+func Bit(n int) string {
+	b := make([]byte, n)
+	for i := range n {
+		b[i] = '0' + byte(rand.IntN(2))
+	}
+	return string(b)
+}
+
+// VarBit generates a random variable-length bit string of 1 to n bits.
+func VarBit(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return Bit(1 + rand.IntN(n))
+}
+
+// Inet generates a random IP address within the given CIDR block.
+// Supports both IPv4 and IPv6.
+func Inet(cidr string) (string, error) {
+	_, network, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return "", fmt.Errorf("inet: invalid CIDR %q: %w", cidr, err)
+	}
+
+	ip := network.IP
+	mask := network.Mask
+
+	result := make(net.IP, len(ip))
+	for i := range ip {
+		result[i] = (ip[i] & mask[i]) | (byte(rand.IntN(256)) & ^mask[i])
+	}
+
+	return result.String(), nil
+}
+
+// TimeOfDay generates a random time of day between min and max,
+// both in HH:MM:SS format.
+func TimeOfDay(minStr, maxStr string) (string, error) {
+	minSec, err := parseTimeOfDay(minStr)
+	if err != nil {
+		return "", fmt.Errorf("time: invalid min %q: %w", minStr, err)
+	}
+	maxSec, err := parseTimeOfDay(maxStr)
+	if err != nil {
+		return "", fmt.Errorf("time: invalid max %q: %w", maxStr, err)
+	}
+
+	if minSec > maxSec {
+		minSec, maxSec = maxSec, minSec
+	}
+
+	randSec := minSec
+	if maxSec > minSec {
+		randSec += rand.IntN(maxSec - minSec + 1)
+	}
+
+	h := randSec / 3600
+	m := (randSec % 3600) / 60
+	s := randSec % 60
+
+	return fmt.Sprintf("%02d:%02d:%02d", h, m, s), nil
+}
+
+func parseTimeOfDay(s string) (int, error) {
+	t, err := time.Parse("15:04:05", s)
+	if err != nil {
+		return 0, err
+	}
+	return t.Hour()*3600 + t.Minute()*60 + t.Second(), nil
 }
 
 func degreesToRadians(degrees float64) float64 {

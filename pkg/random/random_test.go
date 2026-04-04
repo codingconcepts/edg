@@ -2,7 +2,9 @@ package random
 
 import (
 	"math"
+	"net"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 )
@@ -393,6 +395,146 @@ func TestDuration_SwapsMinMax(t *testing.T) {
 	d := Duration(max, min)
 	if d < min || d > max {
 		t.Fatalf("Duration with swapped args not in range: %v", d)
+	}
+}
+
+func TestBytes(t *testing.T) {
+	for range 100 {
+		result := Bytes(16)
+		if !strings.HasPrefix(result, `\x`) {
+			t.Fatalf("Bytes(16) = %q, want \\x prefix", result)
+		}
+		// \x prefix + 32 hex chars = 34 total
+		if len(result) != 34 {
+			t.Fatalf("Bytes(16) length = %d, want 34", len(result))
+		}
+	}
+}
+
+func TestBytes_Zero(t *testing.T) {
+	result := Bytes(0)
+	if result != `\x` {
+		t.Errorf("Bytes(0) = %q, want \\x", result)
+	}
+}
+
+func TestBit(t *testing.T) {
+	for range 100 {
+		result := Bit(8)
+		if len(result) != 8 {
+			t.Fatalf("Bit(8) length = %d, want 8", len(result))
+		}
+		for _, c := range result {
+			if c != '0' && c != '1' {
+				t.Fatalf("Bit(8) = %q, contains non-bit character", result)
+			}
+		}
+	}
+}
+
+func TestVarBit(t *testing.T) {
+	for range 100 {
+		result := VarBit(16)
+		if len(result) < 1 || len(result) > 16 {
+			t.Fatalf("VarBit(16) length = %d, want 1-16", len(result))
+		}
+		for _, c := range result {
+			if c != '0' && c != '1' {
+				t.Fatalf("VarBit(16) = %q, contains non-bit character", result)
+			}
+		}
+	}
+}
+
+func TestVarBit_Zero(t *testing.T) {
+	if result := VarBit(0); result != "" {
+		t.Errorf("VarBit(0) = %q, want empty", result)
+	}
+}
+
+func TestInet_IPv4(t *testing.T) {
+	for range 100 {
+		result, err := Inet("192.168.1.0/24")
+		if err != nil {
+			t.Fatalf("Inet error: %v", err)
+		}
+		ip := net.ParseIP(result)
+		if ip == nil {
+			t.Fatalf("Inet returned invalid IP: %q", result)
+		}
+		_, network, _ := net.ParseCIDR("192.168.1.0/24")
+		if !network.Contains(ip) {
+			t.Fatalf("Inet returned %v, not in 192.168.1.0/24", result)
+		}
+	}
+}
+
+func TestInet_IPv6(t *testing.T) {
+	result, err := Inet("fd00::/64")
+	if err != nil {
+		t.Fatalf("Inet error: %v", err)
+	}
+	ip := net.ParseIP(result)
+	if ip == nil {
+		t.Fatalf("Inet returned invalid IP: %q", result)
+	}
+	_, network, _ := net.ParseCIDR("fd00::/64")
+	if !network.Contains(ip) {
+		t.Fatalf("Inet returned %v, not in fd00::/64", result)
+	}
+}
+
+func TestInet_InvalidCIDR(t *testing.T) {
+	_, err := Inet("not-a-cidr")
+	if err == nil {
+		t.Fatal("Inet with invalid CIDR should return error")
+	}
+}
+
+func TestTimeOfDay(t *testing.T) {
+	for range 100 {
+		result, err := TimeOfDay("08:00:00", "17:30:00")
+		if err != nil {
+			t.Fatalf("TimeOfDay error: %v", err)
+		}
+		if len(result) != 8 {
+			t.Fatalf("TimeOfDay = %q, want HH:MM:SS format", result)
+		}
+		// Verify it parses back.
+		_, err = time.Parse("15:04:05", result)
+		if err != nil {
+			t.Fatalf("TimeOfDay returned invalid time %q: %v", result, err)
+		}
+		if result < "08:00:00" || result > "17:30:00" {
+			t.Fatalf("TimeOfDay = %q, out of range [08:00:00, 17:30:00]", result)
+		}
+	}
+}
+
+func TestTimeOfDay_Equal(t *testing.T) {
+	result, err := TimeOfDay("12:00:00", "12:00:00")
+	if err != nil {
+		t.Fatalf("TimeOfDay error: %v", err)
+	}
+	if result != "12:00:00" {
+		t.Errorf("TimeOfDay(equal, equal) = %q, want 12:00:00", result)
+	}
+}
+
+func TestTimeOfDay_SwapsMinMax(t *testing.T) {
+	result, err := TimeOfDay("17:00:00", "08:00:00")
+	if err != nil {
+		t.Fatalf("TimeOfDay error: %v", err)
+	}
+	if result < "08:00:00" || result > "17:00:00" {
+		t.Fatalf("TimeOfDay with swapped args = %q, out of range", result)
+	}
+}
+
+func TestTimeOfDay_InvalidInput(t *testing.T) {
+	_, err := TimeOfDay("bad", "17:00:00")
+	if err == nil {
+		t.Fatal("TimeOfDay with invalid min should return error")
 	}
 }
 
