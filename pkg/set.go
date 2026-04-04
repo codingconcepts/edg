@@ -91,10 +91,10 @@ func setRand(values []any, weights []any) (any, error) {
 //
 //   - a larger stddev (e.g. 2.0) spreads picks more evenly across the set
 //
-//     set_normal(['a', 'b', 'c', 'd', 'e'], 2, 0.8)
+//     set_norm(['a', 'b', 'c', 'd', 'e'], 2, 0.8)
 func setNormal(values []any, mean, stddev any) (any, error) {
 	if len(values) == 0 {
-		return nil, errors.New("set_normal requires at least one value")
+		return nil, errors.New("set_norm requires at least one value")
 	}
 
 	if len(values) == 1 {
@@ -131,10 +131,10 @@ func setExp(values []any, rate any) (any, error) {
 // mu and sigma are the mean and standard deviation of the underlying
 // normal distribution, mapped onto the set's indices.
 //
-//	set_lognormal(['a', 'b', 'c', 'd', 'e'], 1.0, 0.5)
+//	set_lognorm(['a', 'b', 'c', 'd', 'e'], 1.0, 0.5)
 func setLognormal(values []any, mu, sigma any) (any, error) {
 	if len(values) == 0 {
-		return nil, errors.New("set_lognormal requires at least one value")
+		return nil, errors.New("set_lognorm requires at least one value")
 	}
 
 	if len(values) == 1 {
@@ -151,10 +151,10 @@ func setLognormal(values []any, mu, sigma any) (any, error) {
 // s (> 1) and v (>= 1) control the distribution shape; lower indices
 // are selected exponentially more often.
 //
-//	set_zipfian(['a', 'b', 'c', 'd', 'e'], 2.0, 1.0)
+//	set_zipf(['a', 'b', 'c', 'd', 'e'], 2.0, 1.0)
 func setZipfian(values []any, s, v any) (any, error) {
 	if len(values) == 0 {
-		return nil, errors.New("set_zipfian requires at least one value")
+		return nil, errors.New("set_zipf requires at least one value")
 	}
 
 	if len(values) == 1 {

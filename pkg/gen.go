@@ -57,14 +57,14 @@ func genUUIDv7() string { return random.UUIDv7() }
 // floatRand generates a random float64 in [min, max] rounded to the
 // given number of decimal places.
 //
-//	float_rand(min, max, precision)
+//	uniform_f(min, max, precision)
 func floatRand(min, max, precision any) float64 {
 	return random.Float(toFloat(min), toFloat(max), toInt(precision))
 }
 
 // uniformRand generates a uniform random float64 in [min, max].
 //
-//	uniform_rand(min, max)
+//	uniform(min, max)
 func uniformRand(min, max any) float64 {
 	return random.Uniform(toFloat(min), toFloat(max))
 }
@@ -149,7 +149,7 @@ func genPointWKT(lat, lon, radiusKM any) string {
 // randTimestamp generates a random timestamp between min and max,
 // both in RFC3339 format. Returns the result in RFC3339.
 //
-//	rand_timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
+//	timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
 func randTimestamp(min, max string) string {
 	minT, err := time.Parse(time.RFC3339, min)
 	if err != nil {
@@ -165,7 +165,7 @@ func randTimestamp(min, max string) string {
 // randDuration generates a random duration between min and max,
 // both as Go duration strings (e.g. "1h", "30m").
 //
-//	rand_duration('1h', '24h')
+//	duration('1h', '24h')
 func randDuration(min, max string) string {
 	minD, err := time.ParseDuration(min)
 	if err != nil {
@@ -181,7 +181,7 @@ func randDuration(min, max string) string {
 // dateRand generates a random timestamp between min and max (RFC3339)
 // and formats the result using the given Go time format string.
 //
-//	date_rand('2006-01-02', '2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
+//	date('2006-01-02', '2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
 func dateRand(format, min, max string) string {
 	minT, err := time.Parse(time.RFC3339, min)
 	if err != nil {
@@ -210,7 +210,7 @@ func dateOffset(duration string) string {
 // expRand returns an exponentially-distributed random float in [min, max],
 // rounded to 0 decimal places by default.
 //
-//	exp_rand(rate, min, max)
+//	exp(rate, min, max)
 func expRand(rawRate, rawMin, rawMax any) float64 {
 	return random.Exp(toFloat(rawRate), toFloat(rawMin), toFloat(rawMax))
 }
@@ -218,7 +218,7 @@ func expRand(rawRate, rawMin, rawMax any) float64 {
 // expRandF returns an exponentially-distributed random float in [min, max],
 // rounded to the given number of decimal places.
 //
-//	exp_rand_f(rate, min, max, precision)
+//	exp_f(rate, min, max, precision)
 func expRandF(rawRate, rawMin, rawMax, rawPrecision any) float64 {
 	return random.Exp(toFloat(rawRate), toFloat(rawMin), toFloat(rawMax), toInt(rawPrecision))
 }
@@ -226,7 +226,7 @@ func expRandF(rawRate, rawMin, rawMax, rawPrecision any) float64 {
 // lognormRand returns a log-normally-distributed random float in [min, max],
 // rounded to 0 decimal places by default.
 //
-//	lognorm_rand(mu, sigma, min, max)
+//	lognorm(mu, sigma, min, max)
 func lognormRand(rawMu, rawSigma, rawMin, rawMax any) float64 {
 	return random.LogNorm(toFloat(rawMu), toFloat(rawSigma), toFloat(rawMin), toFloat(rawMax))
 }
@@ -234,7 +234,7 @@ func lognormRand(rawMu, rawSigma, rawMin, rawMax any) float64 {
 // lognormRandF returns a log-normally-distributed random float in [min, max],
 // rounded to the given number of decimal places.
 //
-//	lognorm_rand_f(mu, sigma, min, max, precision)
+//	lognorm_f(mu, sigma, min, max, precision)
 func lognormRandF(rawMu, rawSigma, rawMin, rawMax, rawPrecision any) float64 {
 	return random.LogNorm(toFloat(rawMu), toFloat(rawSigma), toFloat(rawMin), toFloat(rawMax), toInt(rawPrecision))
 }

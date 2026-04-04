@@ -20,6 +20,10 @@ Query arguments are written as expressions compiled at startup, giving you acces
   - [Functions](#functions)
   - [User-Defined Expressions](#user-defined-expressions)
   - [Examples](#examples)
+- [Distributions](#distributions)
+  - [Numeric Distributions](#numeric-distributions)
+  - [Set Distributions](#set-distributions)
+- [REPL](#repl)
 - [Example Workloads](#example-workloads)
 - [Setup](#setup)
 
@@ -56,6 +60,7 @@ go build -o edg .
 | `run` | Execute the benchmark workload |
 | `deseed` | Delete seeded data (truncate tables) |
 | `down` | Tear down schema (drop tables) |
+| `repl` | Interactive expression evaluator |
 
 A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `deseed` -> `down`.
 
@@ -228,19 +233,23 @@ Query arguments are written as expressions compiled at startup using [expr-lang/
 | `nurand(A, x, y)` | `int` | TPC-C Non-Uniform Random: `(((random(0,A) \| random(x,y)) + C) / (y-x+1)) + x`. The constant C is generated once per A value and persists for the worker's lifetime. |
 | `nurand_n(A, x, y, min, max)` | `string` | Generates N unique NURand values (N in [min, max]) as a comma-separated string. |
 | `set_rand(values, weights)` | `any` | Picks a random item from a set. If weights are provided, weighted random selection is used; otherwise uniform. Values and weights are separate arrays. |
-| `set_normal(values, mean, stddev)` | `any` | Picks an item from a set using normal distribution. `mean` is the index selected most often; `stddev` controls spread (~68% of picks fall within `mean +/- stddev` indices, ~95% within `mean +/- 2*stddev`). A smaller stddev concentrates picks around the mean; a larger one spreads them more evenly. |
+| `set_norm(values, mean, stddev)` | `any` | Picks an item from a set using normal distribution. `mean` is the index selected most often; `stddev` controls spread (~68% of picks fall within `mean +/- stddev` indices, ~95% within `mean +/- 2*stddev`). A smaller stddev concentrates picks around the mean; a larger one spreads them more evenly. |
 | `set_exp(values, rate)` | `any` | Picks an item from a set using exponential distribution. Higher `rate` concentrates picks more toward the first items. |
-| `set_lognormal(values, mu, sigma)` | `any` | Picks an item from a set using log-normal distribution. `mu` and `sigma` control the shape, producing a right-skewed selection over the set's indices. |
-| `set_zipfian(values, s, v)` | `any` | Picks an item from a set using Zipfian distribution. `s` (> 1) and `v` (>= 1) control the shape; lower indices are selected exponentially more often. |
-| `norm_rand(mean, stddev, min, max)` | `float64` | Normally-distributed random number in [min, max], rounded to 0 decimal places (whole number). |
-| `norm_rand_f(mean, stddev, min, max, precision)` | `float64` | Normally-distributed random number in [min, max], rounded to `precision` decimal places. |
-| `norm_rand_n(mean, stddev, min, max, minN, maxN)` | `string` | N unique normally-distributed values (N in [minN, maxN]) as a comma-separated string. |
+| `set_lognorm(values, mu, sigma)` | `any` | Picks an item from a set using log-normal distribution. `mu` and `sigma` control the shape, producing a right-skewed selection over the set's indices. |
+| `set_zipf(values, s, v)` | `any` | Picks an item from a set using Zipfian distribution. `s` (> 1) and `v` (>= 1) control the shape; lower indices are selected exponentially more often. |
+| `exp(rate, min, max)` | `float64` | Exponentially-distributed random number in [min, max], rounded to 0 decimal places. Higher `rate` concentrates values closer to min. |
+| `exp_f(rate, min, max, precision)` | `float64` | Exponentially-distributed random number in [min, max], rounded to `precision` decimal places. |
+| `lognorm(mu, sigma, min, max)` | `float64` | Log-normally-distributed random number in [min, max], rounded to 0 decimal places. Produces a right-skewed distribution. |
+| `lognorm_f(mu, sigma, min, max, precision)` | `float64` | Log-normally-distributed random number in [min, max], rounded to `precision` decimal places. |
+| `norm(mean, stddev, min, max)` | `float64` | Normally-distributed random number in [min, max], rounded to 0 decimal places (whole number). |
+| `norm_f(mean, stddev, min, max, precision)` | `float64` | Normally-distributed random number in [min, max], rounded to `precision` decimal places. |
+| `norm_n(mean, stddev, min, max, minN, maxN)` | `string` | N unique normally-distributed values (N in [minN, maxN]) as a comma-separated string. |
 | `uuid_v1()` | `string` | Generates a Version 1 UUID (timestamp + node ID). |
 | `uuid_v4()` | `string` | Generates a Version 4 UUID (random). |
 | `uuid_v6()` | `string` | Generates a Version 6 UUID (reordered timestamp). |
 | `uuid_v7()` | `string` | Generates a Version 7 UUID (Unix timestamp + random, sortable). |
-| `float_rand(min, max, precision)` | `float64` | Random float in [min, max] rounded to `precision` decimal places. |
-| `uniform_rand(min, max)` | `float64` | Uniform random float in [min, max]. |
+| `uniform_f(min, max, precision)` | `float64` | Uniform random float in [min, max] rounded to `precision` decimal places. |
+| `uniform(min, max)` | `float64` | Uniform random float in [min, max]. |
 | `seq(start, step)` | `int` | Auto-incrementing sequence per worker. Returns `start + counter * step`, where counter increments on each call. |
 | `zipf(s, v, max)` | `int` | Zipfian-distributed (power-law) random integer in [0, max]. `s` (> 1) controls skew, `v` (>= 1) offsets the distribution. Lower values are exponentially more frequent. |
 | `cond(predicate, trueVal, falseVal)` | `any` | Returns `trueVal` if `predicate` is true, `falseVal` otherwise. |
@@ -249,11 +258,18 @@ Query arguments are written as expressions compiled at startup using [expr-lang/
 | `regex(pattern)` | `string` | Generates a random string matching the given regular expression. |
 | `json_obj(k1, v1, k2, v2, ...)` | `string` | Builds a JSON object string from key-value pair arguments. |
 | `json_arr(minN, maxN, pattern)` | `string` | Builds a JSON array of N random values (N in [minN, maxN]) generated by a gofakeit `pattern`. |
+| `bytes(n)` | `string` | Random `n` bytes as a hex-encoded string with `\x` prefix (CockroachDB/PostgreSQL BYTES literal). |
+| `bit(n)` | `string` | Random fixed-length bit string of exactly `n` bits. |
+| `varbit(n)` | `string` | Random variable-length bit string of 1 to `n` bits. |
+| `inet(cidr)` | `string` | Random IP address within the given CIDR block (supports IPv4 and IPv6). |
+| `array(minN, maxN, pattern)` | `string` | PostgreSQL/CockroachDB array literal with a random number of elements in [minN, maxN], each produced by a gofakeit `pattern`. |
+| `time(min, max)` | `string` | Random time of day between `min` and `max` (HH:MM:SS format). |
+| `timez(min, max)` | `string` | Random time of day with `+00:00` timezone suffix (for TIMETZ columns). |
 | `point(lat, lon, radiusKM)` | `map` | Generates a random geographic point within `radiusKM` of (`lat`, `lon`). Access fields with `.lat` and `.lon`. |
 | `point_wkt(lat, lon, radiusKM)` | `string` | Generates a random geographic point within `radiusKM` of (`lat`, `lon`) as a WKT string: `POINT(lon lat)`. Use with `ST_GeomFromText` for native geometry columns. |
-| `rand_timestamp(min, max)` | `string` | Random timestamp between `min` and `max` (both RFC3339 strings), returned as RFC3339. |
-| `rand_duration(min, max)` | `string` | Random duration between `min` and `max` (Go duration strings like `"1h"`, `"30m"`). |
-| `date_rand(format, min, max)` | `string` | Random timestamp between `min` and `max` (RFC3339), formatted using a Go time format string. |
+| `timestamp(min, max)` | `string` | Random timestamp between `min` and `max` (both RFC3339 strings), returned as RFC3339. |
+| `duration(min, max)` | `string` | Random duration between `min` and `max` (Go duration strings like `"1h"`, `"30m"`). |
+| `date(format, min, max)` | `string` | Random timestamp between `min` and `max` (RFC3339), formatted using a Go time format string. |
 | `date_offset(duration)` | `string` | Returns the current time offset by `duration` (e.g. `"-72h"`, `"30m"`), formatted as RFC3339. |
 | `weighted_sample_n(name, field, weightField, minN, maxN)` | `string` | Picks N unique rows (N in [minN, maxN]) from a named dataset using weighted selection based on `weightField`, extracts `field`, and returns a comma-separated string. |
 
@@ -370,27 +386,27 @@ args:
 
   # Picks a quantity using normal distribution.
   # mean=2 (value '3' at index 2 is most common), stddev=0.8 (~68% pick indices 1-3).
-  - set_normal([1, 2, 3, 4, 5], 2, 0.8)
+  - set_norm([1, 2, 3, 4, 5], 2, 0.8)
 
   # Picks a priority level using exponential distribution.
   # Higher rate concentrates picks toward the first item ('low').
   - set_exp(['low', 'medium', 'high', 'critical'], 0.5)
 
   # Picks a tier using log-normal distribution (right-skewed toward early indices).
-  - set_lognormal(['free', 'basic', 'pro', 'enterprise'], 0.5, 0.5)
+  - set_lognorm(['free', 'basic', 'pro', 'enterprise'], 0.5, 0.5)
 
   # Picks a category using Zipfian distribution (strong skew toward first items).
-  - set_zipfian(['electronics', 'clothing', 'books', 'food', 'toys'], 2.0, 1.0)
+  - set_zipf(['electronics', 'clothing', 'books', 'food', 'toys'], 2.0, 1.0)
 
   # Generates a random UUID v4 (random) or v7 (time-ordered, sortable).
   - uuid_v4()
   - uuid_v7()
 
   # Random float between 0.01 and 999.99 with 2 decimal places (e.g. for prices).
-  - float_rand(0.01, 999.99, 2)
+  - uniform_f(0.01, 999.99, 2)
 
   # Uniform random float between 0 and 1 (e.g. for percentages).
-  - uniform_rand(0, 1)
+  - uniform(0, 1)
 
   # Auto-incrementing sequence: 1, 2, 3, ... (shared across calls for the worker).
   - seq(1, 1)
@@ -406,10 +422,10 @@ args:
   - zipf(2.0, 1.0, 999)
 
   # Normally-distributed integer review rating centred on 4, mostly 3-5.
-  - norm_rand(4, 1, 1, 5)
+  - norm(4, 1, 1, 5)
 
   # Normally-distributed float price centred on 50.00, rounded to 2 decimal places.
-  - norm_rand_f(50.0, 15.0, 1.0, 100.0, 2)
+  - norm_f(50.0, 15.0, 1.0, 100.0, 2)
 
   # Conditional value based on a random roll.
   - cond(gen('number:1,100') > 95, 'premium', 'standard')
@@ -437,19 +453,152 @@ args:
   - point_wkt(51.5074, -0.1278, 10.0)
 
   # Random timestamp between two dates (RFC3339 format).
-  - rand_timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
+  - timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
 
   # Random date formatted as YYYY-MM-DD.
-  - date_rand('2006-01-02', '2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
+  - date('2006-01-02', '2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
 
   # Timestamp 72 hours in the past (e.g. for TTL or expiry columns).
   - date_offset('-72h')
 
   # Random duration between 1 hour and 24 hours.
-  - rand_duration('1h', '24h')
+  - duration('1h', '24h')
 
   # Pick 3-8 products weighted by their popularity column.
   - weighted_sample_n('fetch_products', 'id', 'popularity', 3, 8)
+
+  # Regex: generate a random US phone number.
+  - regex('\\([0-9]{3}\\) [0-9]{3}-[0-9]{4}')
+
+  # Regex: generate a random hex colour code.
+  - regex('#[0-9a-f]{6}')
+
+  # Regex: generate a random IPv4 address.
+  - regex('[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}')
+
+  # Regex: generate a random MAC address.
+  - regex('[0-9a-f]{2}(:[0-9a-f]{2}){5}')
+
+  # Regex: generate a random license plate (e.g. "AB12 CDE").
+  - regex('[A-Z]{2}[0-9]{2} [A-Z]{3}')
+
+  # Exponentially-distributed float in [0, 100] with 2 decimal places.
+  # Higher rate concentrates values closer to min.
+  - exp_f(0.5, 0, 100, 2)
+
+  # Log-normally-distributed float in [1, 1000] with 2 decimal places.
+  # Produces a right-skewed distribution (many small values, few large ones).
+  - lognorm_f(1.0, 0.5, 1, 1000, 2)
+
+  # Random IP address within a CIDR block (e.g. for network simulation).
+  - inet('192.168.1.0/24')
+
+  # Random 16 bytes as a hex-encoded CockroachDB/PostgreSQL BYTES literal.
+  - bytes(16)
+
+  # Random fixed-length bit string of 8 bits (e.g. "10110011").
+  - bit(8)
+
+  # Random variable-length bit string of 1-16 bits.
+  - varbit(16)
+
+  # PostgreSQL/CockroachDB array literal with 2-5 random email addresses.
+  - array(2, 5, 'email')
+
+  # Random time of day between 08:00 and 18:00 (HH:MM:SS format).
+  - time('08:00:00', '18:00:00')
+
+  # Random time of day with timezone suffix (for TIMETZ columns).
+  - timez('09:00:00', '17:00:00')
+```
+
+## Distributions
+
+### Numeric Distributions
+
+| Function | Signature | Description |
+|---|---|---|
+| `uniform` | `uniform(min, max)` | Flat distribution, every value equally likely |
+| `zipf` | `zipf(s, v, max)` | Power-law skew, low values dominate |
+| `norm_f` | `norm_f(mean, stddev, min, max, precision)` | Bell curve centered on mean |
+| `exp_f` | `exp_f(rate, min, max, precision)` | Exponential decay from min |
+| `lognorm_f` | `lognorm_f(mu, sigma, min, max, precision)` | Right-skewed with a long tail |
+
+### Set Distributions
+
+Pick from a predefined set of values using a distribution to control which items are selected most often.
+
+| Function | Signature | Description |
+|---|---|---|
+| `set_rand` | `set_rand(values, weights)` | Uniform or weighted random selection from a set |
+| `set_norm` | `set_norm(values, mean, stddev)` | Normal distribution over indices; `mean` index picked most often |
+| `set_exp` | `set_exp(values, rate)` | Exponential distribution over indices; lower indices picked most often |
+| `set_lognorm` | `set_lognorm(values, mu, sigma)` | Log-normal distribution over indices; right-skewed selection |
+| `set_zipf` | `set_zipf(values, s, v)` | Zipfian distribution over indices; strong power-law skew toward first items |
+
+## REPL
+
+The `repl` command starts an interactive session where you can evaluate any expression from the function table above. No database connection is required, it's a quick way to explore functions, test distributions, and prototype argument expressions before adding them to a workload config.
+
+```sh
+edg repl
+```
+
+```
+>> uniform(0, 100)
+73.37
+>> norm(50, 10, 0, 100)
+53
+>> set_norm([1, 2, 3, 4, 5], 2, 0.8)
+3
+>> uuid_v4()
+a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d
+>> template('ORD-%05d', seq(1, 1))
+ORD-00001
+>> zipf(2.0, 1.0, 999)
+0
+>> regex('[A-Z]{3}-[0-9]{4}')
+QVM-8314
+>> regex('#[0-9a-f]{6}')
+#a3c2f1
+>> regex('[A-Z]{2}[0-9]{2} [A-Z]{3}')
+KD42 BXR
+>> exp_f(0.5, 0, 100, 2)
+12.74
+>> lognorm_f(1.0, 0.5, 1, 1000, 2)
+3.41
+>> inet('192.168.1.0/24')
+192.168.1.47
+>> bytes(16)
+\x4a7f2b9c01de38f56a8b3c4d5e6f7a8b
+>> bit(8)
+10110011
+>> varbit(16)
+101011
+>> array(2, 5, 'email')
+{john@example.com,anne@test.net,mike@domain.org}
+>> time('08:00:00', '18:00:00')
+14:23:07
+>> timez('09:00:00', '17:00:00')
+11:45:32+00:00
+>> 1 + 2
+3
+```
+
+To load globals and user-defined expressions from a workload config, pass `--config`:
+
+```sh
+edg repl --config _examples/tpcc/crdb.yaml
+```
+
+```
+edg repl - type expressions to evaluate
+>> warehouses
+1
+>> warehouses * 10
+10
+>> nurand(1023, 1, 3000)
+1842
 ```
 
 ## Example Workloads

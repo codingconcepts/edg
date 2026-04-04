@@ -259,7 +259,7 @@ func (e *Env) nuRandN(rawA, rawX, rawY, rawMinN, rawMaxN any) string {
 // normRand returns a normally-distributed random float in [min, max],
 // rounded to 0 decimal places by default.
 //
-//	norm_rand(mean, stddev, min, max)
+//	norm(mean, stddev, min, max)
 func (e *Env) normRand(rawMean, rawStddev, rawMin, rawMax any) float64 {
 	return random.Norm(toFloat(rawMean), toFloat(rawStddev), toFloat(rawMin), toFloat(rawMax))
 }
@@ -267,7 +267,7 @@ func (e *Env) normRand(rawMean, rawStddev, rawMin, rawMax any) float64 {
 // normRandF returns a normally-distributed random float in [min, max],
 // rounded to the given number of decimal places.
 //
-//	norm_rand_f(mean, stddev, min, max, precision)
+//	norm_f(mean, stddev, min, max, precision)
 func (e *Env) normRandF(rawMean, rawStddev, rawMin, rawMax, rawPrecision any) float64 {
 	return random.Norm(toFloat(rawMean), toFloat(rawStddev), toFloat(rawMin), toFloat(rawMax), toInt(rawPrecision))
 }
@@ -275,7 +275,7 @@ func (e *Env) normRandF(rawMean, rawStddev, rawMin, rawMax, rawPrecision any) fl
 // normRandN generates N unique normally-distributed random integers as a
 // comma-separated string, where N is chosen randomly in [minN, maxN].
 //
-//	norm_rand_n(mean, stddev, min, max, minN, maxN)
+//	norm_n(mean, stddev, min, max, minN, maxN)
 func (e *Env) normRandN(rawMean, rawStddev, rawMin, rawMax, rawMinN, rawMaxN any) string {
 	mean, stddev := toFloat(rawMean), toFloat(rawStddev)
 	lo, hi := toFloat(rawMin), toFloat(rawMax)

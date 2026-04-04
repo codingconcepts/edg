@@ -1,13 +1,13 @@
 # Normal Distribution
 
-Demonstrates `norm_rand` and `norm_rand_n` by generating product reviews with realistic rating distributions. Most ratings cluster around 4 stars (mean=4, stddev=1, clamped to 1-5).
+Demonstrates `norm` and `norm_n` by generating product reviews with realistic rating distributions. Most ratings cluster around 4 stars (mean=4, stddev=1, clamped to 1-5).
 
 ## Functions
 
 | Function | Signature | Description |
 |---|---|---|
-| `norm_rand` | `norm_rand(mean, stddev, min, max)` | Single normally-distributed random integer |
-| `norm_rand_n` | `norm_rand_n(mean, stddev, min, max, minN, maxN)` | N unique normally-distributed integers (comma-separated) |
+| `norm` | `norm(mean, stddev, min, max)` | Single normally-distributed random integer |
+| `norm_n` | `norm_n(mean, stddev, min, max, minN, maxN)` | N unique normally-distributed integers (comma-separated) |
 
 ## CockroachDB
 

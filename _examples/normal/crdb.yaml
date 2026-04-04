@@ -67,18 +67,18 @@ run:
     type: exec
     args:
       - ref_rand('fetch_products').id
-      - norm_rand(4, 1, 1, 5)
+      - norm(4, 1, 1, 5)
     query: |-
       INSERT INTO review (product_id, rating)
       VALUES ($1::INT, $2::INT)
 
-  # Bulk insert using norm_rand_n to pick 3-8 products weighted
+  # Bulk insert using norm_n to pick 3-8 products weighted
   # toward the middle of the catalogue.
   - name: add_batch_reviews
     type: exec
     args:
-      - norm_rand_n(50, 15, 1, 100, 3, 8)
-      - norm_rand(4, 1, 1, 5)
+      - norm_n(50, 15, 1, 100, 3, 8)
+      - norm(4, 1, 1, 5)
     query: |-
       INSERT INTO review (product_id, rating)
       SELECT id::INT, $2::INT

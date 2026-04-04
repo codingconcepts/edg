@@ -41,7 +41,7 @@ run:
   - name: insert_uniform
     type: exec
     args:
-      - uniform_rand(0, 100)
+      - uniform(0, 100)
     query: |-
       INSERT INTO distributions (dist_type, value)
       VALUES ('uniform', $1::FLOAT8)
@@ -59,7 +59,7 @@ run:
   - name: insert_normal
     type: exec
     args:
-      - norm_rand_f(50, 15, 0, 100, 2)
+      - norm_f(50, 15, 0, 100, 2)
     query: |-
       INSERT INTO distributions (dist_type, value)
       VALUES ('normal', $1::FLOAT8)
@@ -68,7 +68,7 @@ run:
   - name: insert_exponential
     type: exec
     args:
-      - exp_rand_f(0.5, 0, 100, 2)
+      - exp_f(0.5, 0, 100, 2)
     query: |-
       INSERT INTO distributions (dist_type, value)
       VALUES ('exponential', $1::FLOAT8)
@@ -77,7 +77,7 @@ run:
   - name: insert_lognormal
     type: exec
     args:
-      - lognorm_rand_f(2.0, 0.5, 0, 100, 2)
+      - lognorm_f(2.0, 0.5, 0, 100, 2)
     query: |-
       INSERT INTO distributions (dist_type, value)
       VALUES ('lognormal', $1::FLOAT8)

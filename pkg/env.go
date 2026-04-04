@@ -63,24 +63,24 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 		"ref_n":             env.refN,            // Pick N unique random field values from a dataset.
 		"nurand":            env.nuRand,          // Non-Uniform Random per TPC-C spec.
 		"nurand_n":          env.nuRandN,         // N unique Non-Uniform Random values (comma-separated).
-		"norm_rand":         env.normRand,        // Normal-distribution random integer in [min, max].
-		"norm_rand_f":       env.normRandF,       // Normal-distribution random float with precision.
-		"norm_rand_n":       env.normRandN,       // N unique normal-distribution random values (comma-separated).
-		"exp_rand":          expRand,             // Exponential-distribution random float in [min, max].
-		"exp_rand_f":        expRandF,            // Exponential-distribution random float with precision.
-		"lognorm_rand":      lognormRand,         // Log-normal-distribution random float in [min, max].
-		"lognorm_rand_f":    lognormRandF,        // Log-normal-distribution random float with precision.
+		"norm":              env.normRand,        // Normal-distribution random integer in [min, max].
+		"norm_f":             env.normRandF,       // Normal-distribution random float with precision.
+		"norm_n":             env.normRandN,       // N unique normal-distribution random values (comma-separated).
+		"exp":               expRand,             // Exponential-distribution random float in [min, max].
+		"exp_f":              expRandF,            // Exponential-distribution random float with precision.
+		"lognorm":           lognormRand,         // Log-normal-distribution random float in [min, max].
+		"lognorm_f":          lognormRandF,        // Log-normal-distribution random float with precision.
 		"set_rand":          setRand,             // Pick from a set (uniform or weighted random).
-		"set_normal":        setNormal,           // Pick from a set using normal distribution.
+		"set_norm":          setNormal,           // Pick from a set using normal distribution.
 		"set_exp":           setExp,              // Pick from a set using exponential distribution.
-		"set_lognormal":     setLognormal,        // Pick from a set using log-normal distribution.
-		"set_zipfian":       setZipfian,          // Pick from a set using Zipfian distribution.
+		"set_lognorm":       setLognormal,        // Pick from a set using log-normal distribution.
+		"set_zipf":          setZipfian,          // Pick from a set using Zipfian distribution.
 		"uuid_v1":           genUUIDv1,           // Generate a Version 1 UUID (timestamp + node ID).
 		"uuid_v4":           genUUIDv4,           // Generate a Version 4 UUID (random).
 		"uuid_v6":           genUUIDv6,           // Generate a Version 6 UUID (reordered timestamp).
 		"uuid_v7":           genUUIDv7,           // Generate a Version 7 UUID (Unix timestamp + random).
-		"float_rand":        floatRand,           // Random float in [min, max] with precision.
-		"uniform_rand":      uniformRand,         // Uniform random float in [min, max].
+		"uniform_f":         floatRand,           // Uniform random float in [min, max] with precision.
+		"uniform":           uniformRand,         // Uniform random float in [min, max].
 		"seq":               env.seq,             // Auto-incrementing sequence (start + counter * step).
 		"zipf":              zipfRand,            // Zipfian-distributed random integer in [0, max].
 		"cond":              cond,                // Conditional: if predicate then trueVal else falseVal.
@@ -91,9 +91,9 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 		"json_arr":          jsonArr,             // Build a JSON array of N random values.
 		"point":             genPoint,            // Random geographic point within a radius.
 		"point_wkt":         genPointWKT,         // Random geographic point as WKT string.
-		"rand_timestamp":    randTimestamp,        // Random timestamp between min and max (RFC3339).
-		"rand_duration":     randDuration,         // Random duration between min and max.
-		"date_rand":         dateRand,            // Random date with custom format.
+		"timestamp":         randTimestamp,        // Random timestamp between min and max (RFC3339).
+		"duration":          randDuration,         // Random duration between min and max.
+		"date":              dateRand,            // Random date with custom format.
 		"date_offset":       dateOffset,          // Timestamp offset from now.
 		"weighted_sample_n": env.weightedSampleN, // N weighted random field values (comma-separated).
 		"bytes":             genBytes,            // Random bytes as hex-encoded string.
@@ -326,6 +326,19 @@ func (e *Env) pickWeighted() *Query {
 	}
 
 	return entries[len(entries)-1].query
+}
+
+// Eval compiles and runs an arbitrary expression against the env.
+func (e *Env) Eval(expression string) (any, error) {
+	e.envMutex.RLock()
+	envCopy := maps.Clone(e.env)
+	e.envMutex.RUnlock()
+
+	program, err := expr.Compile(expression, expr.Env(envCopy))
+	if err != nil {
+		return nil, err
+	}
+	return expr.Run(program, envCopy)
 }
 
 func (e *Env) SetEnv(name string, data []map[string]any) {

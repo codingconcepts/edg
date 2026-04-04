@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 	"sync"
 	"text/tabwriter"
 	"time"
@@ -39,7 +41,7 @@ func main() {
 	root.PersistentFlags().StringVar(&configFile, "config", "", "workload YAML config file")
 	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql]")
 
-	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd())
+	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd(), replCmd())
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -344,4 +346,53 @@ func printSummary(stats map[string]*queryStats, start time.Time, numWorkers int)
 	fmt.Fprintf(w, "Errors:\t%d\n", totalErrors)
 	fmt.Fprintf(w, "tpm:\t%.1f\n", tpm)
 	w.Flush()
+}
+
+func replCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "repl",
+		Short: "Interactive expression evaluator",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var req pkg.Request
+			if configFile != "" {
+				raw, err := os.ReadFile(configFile)
+				if err != nil {
+					return fmt.Errorf("reading %s: %w", configFile, err)
+				}
+				if err := yaml.Unmarshal(raw, &req); err != nil {
+					return fmt.Errorf("parsing %s: %w", configFile, err)
+				}
+			}
+
+			env, err := pkg.NewEnv(nil, &req)
+			if err != nil {
+				return err
+			}
+
+			fmt.Println("edg repl - type expressions to evaluate")
+
+			scanner := bufio.NewScanner(os.Stdin)
+			for {
+				fmt.Print(">> ")
+				if !scanner.Scan() {
+					break
+				}
+
+				line := strings.TrimSpace(scanner.Text())
+				if line == "" {
+					continue
+				}
+
+				result, err := env.Eval(line)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "error: %v\n", err)
+					continue
+				}
+				fmt.Println(result)
+			}
+
+			fmt.Println()
+			return scanner.Err()
+		},
+	}
 }
