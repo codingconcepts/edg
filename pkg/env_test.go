@@ -1709,7 +1709,7 @@ func TestSeq(t *testing.T) {
 
 	for i := range 5 {
 		got := env.seq(1, 1)
-		want := 1 + i
+		want := int64(1 + i)
 		if got != want {
 			t.Errorf("seq(1, 1) call %d = %d, want %d", i, got, want)
 		}
@@ -1721,7 +1721,7 @@ func TestSeq_StepAndStart(t *testing.T) {
 
 	for i := range 3 {
 		got := env.seq(100, 10)
-		want := 100 + i*10
+		want := int64(100 + i*10)
 		if got != want {
 			t.Errorf("seq(100, 10) call %d = %d, want %d", i, got, want)
 		}

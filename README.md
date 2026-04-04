@@ -460,10 +460,46 @@ CockroachDB:
 
 ```sh
 # Start CockroachDB.
-cockroach demo --insecure --no-example-database
+docker run -d \
+--name cockroachdb \
+-p 26257:26257 \
+cockroachdb/cockroach:v26.1.1 start-single-node --insecure
 
 # Run integration tests.
 URL="postgres://root@localhost:26257?sslmode=disable" \
 DRIVER="pgx" \
+go test ./pkg -v -db
+```
+
+MySQL:
+
+```sh
+docker run -d \
+  --name mysql \
+  -p 3306:3306 \
+  -e MYSQL_ROOT_PASSWORD=password \
+    mysql:9.6.0
+
+# Run integration tests.
+URL="root:password@tcp(localhost:3306)/mysql" \
+DRIVER="mysql" \
+go test ./pkg -v -db
+```
+
+Oracle
+
+```sh
+docker run \
+--name oracle \
+-d \
+-p 1521:1521 \
+-p 5500:5500 \
+-e ORACLE_PDB=defaultdb \
+-e ORACLE_PWD=password \
+container-registry.oracle.com/database/enterprise:19.19.0.0
+
+# Run integration tests.
+URL="oracle://system:password@localhost:1521/defaultdb" \
+DRIVER="oracle" \
 go test ./pkg -v -db
 ```

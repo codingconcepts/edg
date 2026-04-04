@@ -10,8 +10,10 @@ import (
 	"maps"
 	"math/rand/v2"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/brianvoe/gofakeit/v7"
@@ -45,8 +47,7 @@ type Env struct {
 	nurandCMutex sync.RWMutex
 	nurandC      map[int]int
 
-	seqMutex   sync.Mutex
-	seqCounter int
+	seqCounter int64
 }
 
 func NewEnv(db *sql.DB, r *Request) (*Env, error) {
@@ -666,6 +667,9 @@ func toInt(v any) int {
 		return int(n)
 	case int64:
 		return int(n)
+	case string:
+		i, _ := strconv.Atoi(n)
+		return i
 	default:
 		return 0
 	}
@@ -679,6 +683,9 @@ func toFloat(v any) float64 {
 		return float64(n)
 	case int64:
 		return float64(n)
+	case string:
+		f, _ := strconv.ParseFloat(n, 64)
+		return f
 	default:
 		return 0
 	}
@@ -815,15 +822,11 @@ func uniformRand(min, max any) float64 {
 // The counter is shared across all seq calls for a worker.
 //
 //	seq(start, step)
-func (e *Env) seq(start, step any) int {
-	e.seqMutex.Lock()
-	defer e.seqMutex.Unlock()
-
-	s := toInt(start)
-	st := toInt(step)
-	result := s + e.seqCounter*st
-	e.seqCounter++
-	return result
+func (e *Env) seq(start, step any) int64 {
+	s := int64(toInt(start))
+	st := int64(toInt(step))
+	counter := atomic.AddInt64(&e.seqCounter, 1) - 1
+	return s + counter*st
 }
 
 // zipfRand generates a Zipfian-distributed random integer in [0, max].
