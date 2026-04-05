@@ -55,12 +55,35 @@ go build -o edg .
 
 | Command | Description |
 |---|---|
+| `edg <expression>` | Evaluate a single expression and print the result |
 | `up` | Create schema (tables, indexes) |
 | `seed` | Populate tables with initial data |
 | `run` | Execute the benchmark workload |
 | `deseed` | Delete seeded data (truncate tables) |
 | `down` | Tear down schema (drop tables) |
 | `repl` | Interactive expression evaluator |
+
+Running `edg` with an expression (no subcommand) evaluates it and prints the result. Bare words are treated as [gofakeit](https://github.com/brianvoe/gofakeit) patterns, so `edg email` is equivalent to `edg "gen('email')"`. For expressions with parentheses or special characters, quote the argument.
+
+```
+edg email
+naomiroberts@robinson.net
+
+edg firstname
+Laura
+
+edg lastname
+Thompson
+
+edg "uuid_v4()"
+c8952841-6f5b-4743-a6de-2200415c2f03
+
+edg "regex('[A-Z]{3}-[0-9]{4}')"
+QVM-8314
+
+edg "set_rand(['a','b','c'], [])"
+b
+```
 
 A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `deseed` -> `down`.
 

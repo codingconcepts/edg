@@ -33,8 +33,34 @@ func main() {
 	log.SetFlags(0)
 
 	root := &cobra.Command{
-		Use:   "edg",
+		Use:   "edg [expression]",
 		Short: "Expression-based Data Generator",
+		Args:  cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+
+			input := strings.Join(args, " ")
+
+			var req pkg.Request
+			env, err := pkg.NewEnv(nil, &req)
+			if err != nil {
+				return err
+			}
+
+			// Try the expression as-is first; if it fails, wrap it as
+			// a gen() call so bare words like "email" just work.
+			result, err := env.Eval(input)
+			if err != nil {
+				result, err = env.Eval(fmt.Sprintf("gen('%s')", input))
+				if err != nil {
+					return fmt.Errorf("invalid expression: %s", input)
+				}
+			}
+			fmt.Println(result)
+			return nil
+		},
 	}
 
 	root.PersistentFlags().StringVar(&flagURL, "url", "", "database connection URL (env: URL)")
