@@ -13,6 +13,7 @@ Query arguments are written as expressions compiled at startup, giving you acces
   - [Flags](#flags)
 - [Configuration](#configuration)
   - [Globals](#globals)
+  - [Reference](#reference)
   - [Sections](#sections)
   - [Query Types](#query-types)
   - [Run Weights](#run-weights)
@@ -140,6 +141,9 @@ globals:
 # User-defined expression functions.
 expressions:
 
+# Static datasets available to ref_* functions without a database query.
+reference:
+
 # Schema creation queries.
 up:
 
@@ -181,6 +185,32 @@ args:
   - customers / districts   # evaluates to 3000
   - warehouses * 10         # evaluates to 10
 ```
+
+### Reference
+
+The `reference` section defines static datasets that are loaded into the environment at startup, making them available to `ref_rand`, `ref_same`, `ref_perm`, and `ref_diff` functions without needing an `init` query or database connection. Each key is a dataset name, and the value is a list of row objects:
+
+```yaml
+reference:
+  regions:
+    - {name: us, cities: [a, b, c]}
+    - {name: eu, cities: [d, e, f]}
+    - {name: ap, cities: [g, h, i]}
+```
+
+Reference datasets work exactly like datasets populated by `init` queries. You can use them in any arg expression:
+
+```yaml
+args:
+  # Random region row, access the 'name' field.
+  - ref_rand('regions').name
+
+  # Same row reused across all ref_same calls in this query execution.
+  - ref_same('regions').name
+  - set_rand(ref_same('regions').cities, [])
+```
+
+This is useful when your lookup data is small and known ahead of time, avoiding the need for a database round-trip.
 
 ### Sections
 
@@ -678,6 +708,7 @@ edg repl - type expressions to evaluate
 | [Populate](_examples/populate/) | Billion-row data population benchmark |
 | [Social](_examples/social/) | Social network with users, posts, follows, and tags |
 | [Aggregation](_examples/aggregation/) | Demonstrates aggregation functions (sum, avg, min, max, count, distinct) |
+| [Reference Data](_examples/reference_data/) | Static reference datasets without database queries |
 
 
 ## Integration tests
