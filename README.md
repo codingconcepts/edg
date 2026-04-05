@@ -62,6 +62,7 @@ go build -o edg .
 | `run` | Execute the benchmark workload |
 | `deseed` | Delete seeded data (truncate tables) |
 | `down` | Tear down schema (drop tables) |
+| `all` | Run up, seed, run, deseed, and down in sequence |
 | `repl` | Interactive expression evaluator |
 
 Running `edg` with an expression (no subcommand) evaluates it and prints the result. Bare words are treated as [gofakeit](https://github.com/brianvoe/gofakeit) patterns, so `edg email` is equivalent to `edg "gen('email')"`. For expressions with parentheses or special characters, quote the argument.
@@ -86,7 +87,7 @@ edg "set_rand(['a','b','c'], [])"
 b
 ```
 
-A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `deseed` -> `down`.
+A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `deseed` -> `down`. The `all` command runs this entire sequence in a single invocation.
 
 ### Flags
 
@@ -95,9 +96,9 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 | `--url` | | | Database connection URL (or set `URL` env var) |
 | `--config` | | `_examples/tpcc/crdb.yaml` | Path to the workload YAML config file |
 | `--driver` | | `pgx` | database/sql driver name (`pgx`, `oracle`, or `mysql`) |
-| `--duration` | `-d` | `1m` | Benchmark duration (run command only) |
-| `--workers` | `-w` | `1` | Number of concurrent workers (run command only) |
-| `--print-interval` | | `1s` | Progress reporting interval (run command only) |
+| `--duration` | `-d` | `1m` | Benchmark duration (run and all commands) |
+| `--workers` | `-w` | `1` | Number of concurrent workers (run and all commands) |
+| `--print-interval` | | `1s` | Progress reporting interval (run and all commands) |
 
 ### Example
 
@@ -128,6 +129,17 @@ edg down \
 --driver pgx \
 --config _examples/tpcc/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
+```
+
+Or use `all` to run the entire workflow in one command:
+
+```sh
+edg all \
+--driver pgx \
+--config _examples/tpcc/crdb.yaml \
+--url "postgres://root@localhost:26257?sslmode=disable" \
+-w 100 \
+-d 5m
 ```
 
 ## Configuration
@@ -245,6 +257,8 @@ seed:
 |---|---|
 | `query` (default) | Executes the SQL and reads result rows. Results are stored in separate memory for each worker by query name, making them available to `ref_*` functions. |
 | `exec` | Executes the SQL without reading results. Use for DDL, DML that returns no rows, or when results aren't needed. |
+| `query_batch` | Like `query`, but evaluates args repeatedly (controlled by `count` and `size`) and collects values into comma-separated strings per arg position. Each batch becomes a separate query execution whose results are stored. |
+| `exec_batch` | Like `exec`, but evaluates args repeatedly (controlled by `count` and `size`) and collects values into comma-separated strings per arg position. Each batch becomes a separate exec. |
 
 Queries can also specify a `wait` duration (e.g. `wait: 18s`) to introduce a keying/think-time delay after execution in the `run` section.
 

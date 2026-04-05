@@ -1,0 +1,70 @@
+globals:
+  products: 20
+  reviews: 50
+
+up:
+
+  - name: create_product
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS product (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name STRING NOT NULL
+      )
+
+  - name: create_review
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS review (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id UUID NOT NULL REFERENCES product(id),
+        rating INT NOT NULL,
+        body STRING NOT NULL
+      )
+
+seed:
+
+  - name: insert_products
+    type: query_batch
+    count: products
+    args:
+      - gen('productname')
+    query: |-
+      INSERT INTO product (name)
+      SELECT unnest(string_to_array('$1', ','))
+      RETURNING id, name
+
+  - name: insert_reviews
+    type: exec_batch
+    count: reviews
+    size: 10
+    args:
+      - ref_rand('insert_products').id
+      - norm(4, 1, 1, 5)
+      - gen('loremipsumsentence:5')
+    query: |-
+      INSERT INTO review (product_id, rating, body)
+      SELECT
+        unnest(string_to_array('$1', ','))::UUID,
+        unnest(string_to_array('$2', ','))::INT,
+        unnest(string_to_array('$3', ','))
+
+deseed:
+
+  - name: truncate_review
+    type: exec
+    query: TRUNCATE TABLE review CASCADE
+
+  - name: truncate_product
+    type: exec
+    query: TRUNCATE TABLE product CASCADE
+
+down:
+
+  - name: drop_review
+    type: exec
+    query: DROP TABLE IF EXISTS review
+
+  - name: drop_product
+    type: exec
+    query: DROP TABLE IF EXISTS product

@@ -158,7 +158,7 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 	} {
 		for i, query := range group.queries {
 			switch query.Type {
-			case QueryTypeQuery, QueryTypeExec, QueryTypeBatch, "":
+			case QueryTypeQuery, QueryTypeExec, QueryTypeQueryBatch, QueryTypeExecBatch, "":
 			default:
 				return nil, fmt.Errorf("unknown query type %q in %s query %d (%s)", query.Type, group.name, i, query.Name)
 			}

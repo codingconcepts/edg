@@ -67,14 +67,14 @@ func main() {
 	root.PersistentFlags().StringVar(&configFile, "config", "", "workload YAML config file")
 	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql]")
 
-	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd(), replCmd())
+	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd(), allCmd(), replCmd())
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
-func openDB() (*sql.DB, *pkg.Request, error) {
+func connect() (*sql.DB, *pkg.Request, error) {
 	url := flagURL
 	if url == "" {
 		url = os.Getenv("URL")
@@ -111,7 +111,7 @@ func upCmd() *cobra.Command {
 		Use:   "up",
 		Short: "Create schema and populate data",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, req, err := openDB()
+			db, req, err := connect()
 			if err != nil {
 				return err
 			}
@@ -132,7 +132,7 @@ func seedCmd() *cobra.Command {
 		Use:   "seed",
 		Short: "Populate tables with data",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, req, err := openDB()
+			db, req, err := connect()
 			if err != nil {
 				return err
 			}
@@ -153,7 +153,7 @@ func deseedCmd() *cobra.Command {
 		Use:   "deseed",
 		Short: "Delete seeded data from tables",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, req, err := openDB()
+			db, req, err := connect()
 			if err != nil {
 				return err
 			}
@@ -174,7 +174,7 @@ func downCmd() *cobra.Command {
 		Use:   "down",
 		Short: "Tear down schema",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, req, err := openDB()
+			db, req, err := connect()
 			if err != nil {
 				return err
 			}
@@ -190,6 +190,39 @@ func downCmd() *cobra.Command {
 	}
 }
 
+func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *pkg.Request, duration time.Duration, workers int, printInterval time.Duration) error {
+	initEnv, err := pkg.NewEnv(db, req)
+	if err != nil {
+		return err
+	}
+	if err := initEnv.Init(ctx); err != nil {
+		return err
+	}
+
+	results := make(chan pkg.QueryResult, workers*100)
+	start := time.Now()
+
+	go func() {
+		select {
+		case <-time.After(duration):
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	wg := startWorkers(ctx, workers, db, req, initEnv, results)
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	slog.Info("running", "workers", workers, "duration", duration)
+	printResults(results, printInterval, start, workers)
+
+	return nil
+}
+
 func runCmd() *cobra.Command {
 	var (
 		duration      time.Duration
@@ -201,7 +234,7 @@ func runCmd() *cobra.Command {
 		Use:   "run",
 		Short: "Run the benchmark workload",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, req, err := openDB()
+			db, req, err := connect()
 			if err != nil {
 				return err
 			}
@@ -210,38 +243,7 @@ func runCmd() *cobra.Command {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
 			defer cancel()
 
-			// Run init queries once and share results across workers.
-			initEnv, err := pkg.NewEnv(db, req)
-			if err != nil {
-				return err
-			}
-			if err := initEnv.Init(ctx); err != nil {
-				return err
-			}
-
-			results := make(chan pkg.QueryResult, workers*100)
-			start := time.Now()
-
-			// Timer cancels context after duration.
-			go func() {
-				select {
-				case <-time.After(duration):
-					cancel()
-				case <-ctx.Done():
-				}
-			}()
-
-			wg := startWorkers(ctx, workers, db, req, initEnv, results)
-
-			go func() {
-				wg.Wait()
-				close(results)
-			}()
-
-			slog.Info("running", "workers", workers, "duration", duration)
-			printResults(results, printInterval, start, workers)
-
-			return nil
+			return run(ctx, cancel, db, req, duration, workers, printInterval)
 		},
 	}
 
@@ -372,6 +374,59 @@ func printSummary(stats map[string]*queryStats, start time.Time, numWorkers int)
 	fmt.Fprintf(w, "Errors:\t%d\n", totalErrors)
 	fmt.Fprintf(w, "tpm:\t%.1f\n", tpm)
 	w.Flush()
+}
+
+func allCmd() *cobra.Command {
+	var (
+		duration      time.Duration
+		workers       int
+		printInterval time.Duration
+	)
+
+	cmd := &cobra.Command{
+		Use:   "all",
+		Short: "Run up, seed, run, deseed, and down in sequence",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, req, err := connect()
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+
+			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
+			defer cancel()
+
+			env, err := pkg.NewEnv(db, req)
+			if err != nil {
+				return err
+			}
+
+			if err := env.Up(ctx); err != nil {
+				return err
+			}
+			if err := env.Seed(ctx); err != nil {
+				return err
+			}
+
+			if err := run(ctx, cancel, db, req, duration, workers, printInterval); err != nil {
+				return err
+			}
+
+			// Reset context for teardown (the run phase cancelled it).
+			teardownCtx := context.Background()
+
+			if err := env.Deseed(teardownCtx); err != nil {
+				return err
+			}
+			return env.Down(teardownCtx)
+		},
+	}
+
+	cmd.Flags().DurationVarP(&duration, "duration", "d", time.Minute, "benchmark duration")
+	cmd.Flags().IntVarP(&workers, "workers", "w", 1, "number of concurrent workers")
+	cmd.Flags().DurationVar(&printInterval, "print-interval", time.Second, "progress reporting interval")
+
+	return cmd
 }
 
 func replCmd() *cobra.Command {

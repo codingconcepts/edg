@@ -40,9 +40,10 @@ type QueryType string
 type ConfigSection string
 
 const (
-	QueryTypeQuery QueryType = "query"
-	QueryTypeExec  QueryType = "exec"
-	QueryTypeBatch QueryType = "batch"
+	QueryTypeQuery     QueryType = "query"
+	QueryTypeExec      QueryType = "exec"
+	QueryTypeQueryBatch QueryType = "query_batch"
+	QueryTypeExecBatch  QueryType = "exec_batch"
 
 	ConfigSectionUp     ConfigSection = "up"
 	ConfigSectionSeed   ConfigSection = "seed"
@@ -110,13 +111,14 @@ func (q *Query) CompileArgs(e *Env) error {
 // inner slice becomes a separate arg set, causing the query to run once
 // per batch row. Otherwise a single arg set is returned.
 //
-// For batch queries (type: batch), args are evaluated repeatedly per row,
-// with values collected into comma-separated strings per arg position.
+// For batch queries (type: query_batch or exec_batch), args are evaluated
+// repeatedly per row, with values collected into comma-separated strings
+// per arg position.
 func (q *Query) GenerateArgs(e *Env) ([][]any, error) {
 	defer e.clearOneCache()
 	defer e.resetUniqIndex()
 
-	if q.Type == QueryTypeBatch {
+	if q.Type == QueryTypeQueryBatch || q.Type == QueryTypeExecBatch {
 		return q.generateBatchArgs(e)
 	}
 
@@ -155,7 +157,7 @@ func (q *Query) GenerateArgs(e *Env) ([][]any, error) {
 	return [][]any{completeArgs}, nil
 }
 
-// generateBatchArgs handles type: batch queries. It evaluates each arg
+// generateBatchArgs handles type: query_batch/exec_batch queries. It evaluates each arg
 // expression repeatedly (once per row), collecting values into CSV strings.
 // Count and Size control the total rows and batch grouping.
 func (q *Query) generateBatchArgs(e *Env) ([][]any, error) {
@@ -217,11 +219,11 @@ func (q *Query) generateBatchArgs(e *Env) ([][]any, error) {
 
 func (q *Query) Run(ctx context.Context, e *Env, args ...any) error {
 	switch q.Type {
-	case QueryTypeExec, QueryTypeBatch:
+	case QueryTypeExec, QueryTypeExecBatch:
 		if err := e.Exec(ctx, e.db, q, args...); err != nil {
 			return fmt.Errorf("executing exec %s: %w", q.Name, err)
 		}
-	case QueryTypeQuery, "":
+	case QueryTypeQuery, QueryTypeQueryBatch, "":
 		if err := e.Query(ctx, e.db, q, args...); err != nil {
 			return fmt.Errorf("executing query %s: %w", q.Name, err)
 		}

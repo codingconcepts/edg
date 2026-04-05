@@ -235,6 +235,16 @@ func TestNewEnv_RejectsUnknownQueryType(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "valid query_batch",
+			req:     &Request{Run: []*Query{{Name: "q", Type: QueryTypeQueryBatch, Query: "SELECT 1"}}},
+			wantErr: false,
+		},
+		{
+			name:    "valid exec_batch",
+			req:     &Request{Run: []*Query{{Name: "q", Type: QueryTypeExecBatch, Query: "SELECT 1"}}},
+			wantErr: false,
+		},
+		{
 			name:    "empty defaults to query",
 			req:     &Request{Run: []*Query{{Name: "q", Type: "", Query: "SELECT 1"}}},
 			wantErr: false,
@@ -374,7 +384,7 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 	env.env["ref_same"] = env.refSame
 
 	q := &Query{
-		Type:  QueryTypeBatch,
+		Type:  QueryTypeExecBatch,
 		Count: 10,
 		Size:  4,
 		Args:  []string{"gen('noun')", "ref_same('categories').name", "ref_same('categories').markup"},
@@ -444,7 +454,7 @@ func TestGenerateArgs_BatchType_GlobalRefs(t *testing.T) {
 	env.env["batch_size"] = 3
 
 	q := &Query{
-		Type:  QueryTypeBatch,
+		Type:  QueryTypeExecBatch,
 		Count: "products",
 		Size:  "batch_size",
 		Args:  []string{"const(42)"},
@@ -482,7 +492,7 @@ func TestGenerateArgs_BatchType_SizeDefaultsToCount(t *testing.T) {
 	env.env["const"] = constant
 
 	q := &Query{
-		Type:  QueryTypeBatch,
+		Type:  QueryTypeExecBatch,
 		Count: 5,
 		Args:  []string{"const('x')"},
 	}
@@ -510,7 +520,7 @@ func TestRequestParsesBatchType(t *testing.T) {
 	input := `
 seed:
   - name: populate_product
-    type: batch
+    type: exec_batch
     count: 100
     size: 50
     args:
@@ -527,8 +537,8 @@ seed:
 		t.Fatalf("expected 1 seed query, got %d", len(req.Seed))
 	}
 	q := req.Seed[0]
-	if q.Type != QueryTypeBatch {
-		t.Errorf("type = %q, want %q", q.Type, QueryTypeBatch)
+	if q.Type != QueryTypeExecBatch {
+		t.Errorf("type = %q, want %q", q.Type, QueryTypeExecBatch)
 	}
 	if toInt(q.Count) != 100 {
 		t.Errorf("count = %v, want 100", q.Count)

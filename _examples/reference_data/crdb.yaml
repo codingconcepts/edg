@@ -22,7 +22,7 @@ up:
 seed:
 
   - name: populate_customer
-    type: batch
+    type: exec_batch
     count: customers
     size: 10
     args:
