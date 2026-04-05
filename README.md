@@ -401,11 +401,18 @@ Expressions support the full expr-lang feature set, including:
 |---|---|
 | Arithmetic | `+`, `-`, `*`, `/`, `%`, `**` |
 | Comparison & logic | `==`, `!=`, `<`, `>`, `and`, `or`, `not` |
-| Conditionals | `args[0] > 10 ? 'yes' : 'no'`, `args[0] ?? 0` (nil coalescing) |
-| Math functions | `min()`, `max()`, `abs()`, `ceil()`, `floor()`, `round()` |
-| String functions | `upper()`, `lower()`, `trim()`, `split()`, `replace()` |
-| Type conversion | `int()`, `float()`, `string()` |
-| Pipe operator | `args[0] \| int` (equivalent to `int(args[0])`) |
+| Conditionals | `args[0] > 10 ? 'yes' : 'no'`, `args[0] ?? 0` (nil coalescing), `if`/`else` |
+| Math functions | `abs()`, `ceil()`, `floor()`, `round()`, `mean()`, `median()` |
+| String functions | `upper()`, `lower()`, `trim()`, `trimPrefix()`, `trimSuffix()`, `split()`, `splitAfter()`, `replace()`, `repeat()`, `indexOf()`, `lastIndexOf()`, `hasPrefix()`, `hasSuffix()` |
+| String operators | `contains`, `startsWith`, `endsWith`, `matches` (regex) |
+| Array functions | `filter()`, `map()`, `reduce()`, `sort()`, `sortBy()`, `reverse()`, `first()`, `last()`, `take()`, `flatten()`, `uniq()`, `concat()`, `join()`, `find()`, `findIndex()`, `findLast()`, `findLastIndex()`, `all()`, `any()`, `one()`, `none()`, `groupBy()` |
+| Map functions | `keys()`, `values()` |
+| Type conversion | `int()`, `float()`, `string()`, `type()`, `toJSON()`, `fromJSON()`, `toBase64()`, `fromBase64()`, `toPairs()`, `fromPairs()` |
+| Bitwise | `bitand()`, `bitor()`, `bitxor()`, `bitnand()`, `bitnot()`, `bitshl()`, `bitshr()`, `bitushr()` |
+| Operators | `\|` (pipe), `in` (membership), `..` (range), `[:]` (slice), `?.` (optional chaining) |
+| Language | `let` bindings, `#` predicates (current element in closures), `len()`, `get()` |
+
+See the [Expressions example](_examples/expression/) for a complete demonstration of every category.
 
 ### Examples
 
@@ -694,6 +701,21 @@ edg repl - type expressions to evaluate
 1842
 ```
 
+If your config includes a `reference` section, those datasets are also available in the REPL when loaded with `--config`:
+
+```sh
+edg repl --config _examples/reference_data/crdb.yaml
+```
+
+```
+>> ref_rand('regions').name
+eu
+>> ref_same('regions').cities
+[d e f]
+>> set_rand(ref_same('regions').cities, [])
+e
+```
+
 ## Example Workloads
 
 | Workload | Description |
@@ -709,6 +731,7 @@ edg repl - type expressions to evaluate
 | [Social](_examples/social/) | Social network with users, posts, follows, and tags |
 | [Aggregation](_examples/aggregation/) | Demonstrates aggregation functions (sum, avg, min, max, count, distinct) |
 | [Reference Data](_examples/reference_data/) | Static reference datasets without database queries |
+| [Expressions](_examples/expression/) | Demonstrates expr-lang built-in features (array, map, string, bitwise, etc.) |
 
 
 ## Integration tests

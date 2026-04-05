@@ -1,0 +1,235 @@
+globals:
+  prices: [9.99, 19.99, 4.99, 29.99, 14.99]
+  tags: [electronics, books, clothing, food, toys]
+  names: [Alice, Bob, Charlie, Diana, Eve]
+  threshold: 10
+  matrix: [[1, 2], [3, 4], [5, 6]]
+  products:
+    - {name: Widget, price: 29.99, category: tools}
+    - {name: Gadget, price: 9.99, category: electronics}
+    - {name: Gizmo, price: 19.99, category: tools}
+    - {name: Doohickey, price: 4.99, category: toys}
+    - {name: Thingamajig, price: 49.99, category: electronics}
+
+expressions:
+
+  # if / else (alternative to ternary for multi-branch logic)
+  grade: |-
+    if args[0] >= 90 { "A" }
+    else if args[0] >= 70 { "B" }
+    else { "F" }
+
+  # let bindings (local variables within an expression)
+  sum_of_squares: 'let a = float(args[0]); let b = float(args[1]); a**2 + b**2'
+
+up:
+
+  - name: create_expr_demo
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS expr_demo (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        label STRING NOT NULL,
+        result STRING NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+deseed:
+
+  - name: truncate
+    type: exec
+    query: TRUNCATE TABLE expr_demo
+
+down:
+
+  - name: drop
+    type: exec
+    query: DROP TABLE IF EXISTS expr_demo
+
+run:
+
+  - name: array_predicates
+    type: exec
+    args:
+      - 'all(prices, # > 0)'
+      - 'any(prices, # > 25)'
+      - 'one(prices, # < 5)'
+      - 'none(prices, # < 0)'
+    query: |-
+      INSERT INTO expr_demo (label, result) VALUES
+        ('all(# > 0)', $1::STRING),
+        ('any(# > 25)', $2::STRING),
+        ('one(# < 5)', $3::STRING),
+        ('none(# < 0)', $4::STRING)
+
+  - name: array_search
+    type: exec
+    args:
+      - 'find(prices, # > 20)'
+      - 'findIndex(prices, # > 20)'
+      - 'findLast(prices, # > 10)'
+      - 'findLastIndex(prices, # > 10)'
+    query: |-
+      INSERT INTO expr_demo (label, result) VALUES
+        ('find(# > 20)', $1::STRING),
+        ('findIndex(# > 20)', $2::STRING),
+        ('findLast(# > 10)', $3::STRING),
+        ('findLastIndex(# > 10)', $4::STRING)
+
+  - name: array_transform
+    type: exec
+    args:
+      - 'join(map(filter(prices, # > threshold), string(#)), ",")'
+      - 'join(map(prices, string(# * 2)), ",")'
+      - 'join(map(sort(prices), string(#)), ",")'
+      - 'join(map(sortBy(products, #.price), #.name), ",")'
+      - 'join(reverse(names), ",")'
+      - 'join(uniq(concat(tags, ["books", "games"])), ",")'
+      - 'join(map(flatten(matrix), string(#)), ",")'
+    query: |-
+      INSERT INTO expr_demo (label, result) VALUES
+        ('filter+map', $1::STRING),
+        ('map(# * 2)', $2::STRING),
+        ('sort', $3::STRING),
+        ('sortBy(#.price)', $4::STRING),
+        ('reverse', $5::STRING),
+        ('uniq+concat', $6::STRING),
+        ('flatten', $7::STRING)
+
+  - name: array_aggregate
+    type: exec
+    args:
+      - 'reduce(prices, #acc + #, 0)'
+      - 'mean(prices)'
+      - 'median(prices)'
+      - 'first(names)'
+      - 'last(names)'
+      - 'join(take(names, 3), ",")'
+      - 'len(names)'
+    query: |-
+      INSERT INTO expr_demo (label, result) VALUES
+        ('reduce(#acc + #)', $1::STRING),
+        ('mean', $2::STRING),
+        ('median', $3::STRING),
+        ('first', $4::STRING),
+        ('last', $5::STRING),
+        ('take(3)', $6::STRING),
+        ('len(array)', $7::STRING)
+
+  - name: map_functions
+    type: exec
+    args:
+      - 'join(keys({a: 1, b: 2, c: 3}), ",")'
+      - 'join(map(values({a: 1, b: 2, c: 3}), string(#)), ",")'
+      - 'toJSON(groupBy(products, #.category))'
+    query: |-
+      INSERT INTO expr_demo (label, result) VALUES
+        ('keys', $1::STRING),
+        ('values', $2::STRING),
+        ('groupBy(#.category)', $3::STRING)
+
+  - name: string_operators
+    type: exec
+    args:
+      - '"hello world" contains "world"'
+      - '"hello" startsWith "hel"'
+      - '"world" endsWith "rld"'
+      - '"hello123" matches "^[a-z]+[0-9]+$"'
+      - '"books" in tags'
+    query: |-
+      INSERT INTO expr_demo (label, result) VALUES
+        ('contains', $1::STRING),
+        ('startsWith', $2::STRING),
+        ('endsWith', $3::STRING),
+        ('matches (regex)', $4::STRING),
+        ('in (membership)', $5::STRING)
+
+  - name: string_functions
+    type: exec
+    args:
+      - trimPrefix("test_value", "test_")
+      - trimSuffix("image.png", ".png")
+      - 'join(splitAfter("a.b.c", "."), "|")'
+      - repeat("ab", 3)
+      - indexOf("hello world", "world")
+      - lastIndexOf("abcabc", "abc")
+      - hasPrefix("hello", "hel")
+      - hasSuffix("hello", "llo")
+    query: |-
+      INSERT INTO expr_demo (label, result) VALUES
+        ('trimPrefix', $1::STRING),
+        ('trimSuffix', $2::STRING),
+        ('splitAfter', $3::STRING),
+        ('repeat', $4::STRING),
+        ('indexOf', $5::STRING),
+        ('lastIndexOf', $6::STRING),
+        ('hasPrefix', $7::STRING),
+        ('hasSuffix', $8::STRING)
+
+  - name: type_conversion
+    type: exec
+    args:
+      - type(42)
+      - 'toJSON({name: "test", value: 42})'
+      - "string(fromJSON('{\"a\": 1}').a)"
+      - toBase64("hello")
+      - fromBase64("aGVsbG8=")
+      - 'len(toPairs({x: 1, y: 2}))'
+      - 'toJSON(fromPairs([["x", 1], ["y", 2]]))'
+    query: |-
+      INSERT INTO expr_demo (label, result) VALUES
+        ('type', $1::STRING),
+        ('toJSON', $2::STRING),
+        ('fromJSON', $3::STRING),
+        ('toBase64', $4::STRING),
+        ('fromBase64', $5::STRING),
+        ('toPairs', $6::STRING),
+        ('fromPairs', $7::STRING)
+
+  - name: operators
+    type: exec
+    args:
+      - 'reduce(1..5, #acc + #, 0)'
+      - 'join(names[1:3], ",")'
+      - '{name: "test"}?.missing ?? "default"'
+      - grade(85)
+      - sum_of_squares(3, 4)
+    query: |-
+      INSERT INTO expr_demo (label, result) VALUES
+        ('range 1..5', $1::STRING),
+        ('slice [1:3]', $2::STRING),
+        ('?. + ??', $3::STRING),
+        ('if/else', $4::STRING),
+        ('let bindings', $5::STRING)
+
+  - name: bitwise
+    type: exec
+    args:
+      - bitand(0xFF, 0x0F)
+      - bitor(0xF0, 0x0F)
+      - bitxor(0xFF, 0x0F)
+      - bitnand(0xFF, 0x0F)
+      - bitnot(0)
+      - bitshl(1, 8)
+      - bitshr(256, 4)
+      - bitushr(256, 4)
+    query: |-
+      INSERT INTO expr_demo (label, result) VALUES
+        ('bitand(0xFF, 0x0F)', $1::STRING),
+        ('bitor(0xF0, 0x0F)', $2::STRING),
+        ('bitxor(0xFF, 0x0F)', $3::STRING),
+        ('bitnand(0xFF, 0x0F)', $4::STRING),
+        ('bitnot(0)', $5::STRING),
+        ('bitshl(1, 8)', $6::STRING),
+        ('bitshr(256, 4)', $7::STRING),
+        ('bitushr(256, 4)', $8::STRING)
+
+  - name: misc
+    type: exec
+    args:
+      - len("hello")
+      - 'get({a: 1, b: 2}, "c") ?? "missing"'
+    query: |-
+      INSERT INTO expr_demo (label, result) VALUES
+        ('len(string)', $1::STRING),
+        ('get + ??', $2::STRING)
