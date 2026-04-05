@@ -3,6 +3,7 @@ package random
 import (
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"math"
 	"math/rand/v2"
 	"net"
@@ -18,6 +19,7 @@ const earthRadiusKM = 6371.0
 func UUIDv1() string {
 	u, err := uuid.NewUUID()
 	if err != nil {
+		slog.Warn("uuid_v1: failed to generate", "error", err)
 		return ""
 	}
 	return u.String()
@@ -32,6 +34,7 @@ func UUIDv4() string {
 func UUIDv6() string {
 	u, err := uuid.NewV6()
 	if err != nil {
+		slog.Warn("uuid_v6: failed to generate", "error", err)
 		return ""
 	}
 	return u.String()
@@ -41,6 +44,7 @@ func UUIDv6() string {
 func UUIDv7() string {
 	u, err := uuid.NewV7()
 	if err != nil {
+		slog.Warn("uuid_v7: failed to generate", "error", err)
 		return ""
 	}
 	return u.String()

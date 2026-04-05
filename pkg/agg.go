@@ -36,15 +36,11 @@ func (e *Env) aggSum(name, field string) float64 {
 //
 //	avg("orders", "amount")
 func (e *Env) aggAvg(name, field string) float64 {
-	data, ok := e.getDataset(name)
-	if !ok {
+	count := e.aggCount(name)
+	if count == 0 {
 		return 0
 	}
-	var total float64
-	for _, row := range data {
-		total += toFloat(row[field])
-	}
-	return total / float64(len(data))
+	return e.aggSum(name, field) / float64(count)
 }
 
 // aggMin returns the minimum value of a numeric field across all rows in a named dataset.

@@ -3,6 +3,7 @@ package pkg
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math/rand/v2"
 	"strings"
 	"sync/atomic"
@@ -89,7 +90,7 @@ func fisherYates(data []map[string]any, field string, n int) []string {
 	for i := range n {
 		j := i + rand.IntN(len(indices)-i)
 		indices[i], indices[j] = indices[j], indices[i]
-		parts[i] = fmt.Sprintf("%v", data[indices[i]][field])
+		parts[i] = fmt.Sprint(data[indices[i]][field])
 	}
 	return parts
 }
@@ -180,12 +181,14 @@ func (e *Env) refDiff(name string) map[string]any {
 func (e *Env) refEach(query string) [][]any {
 	rows, err := e.db.QueryContext(context.Background(), query)
 	if err != nil {
+		slog.Warn("ref_each: query failed", "error", err)
 		return nil
 	}
 	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
+		slog.Warn("ref_each: failed to get columns", "error", err)
 		return nil
 	}
 
@@ -197,6 +200,7 @@ func (e *Env) refEach(query string) [][]any {
 			ptrs[i] = &values[i]
 		}
 		if err := rows.Scan(ptrs...); err != nil {
+			slog.Warn("ref_each: failed to scan row", "error", err)
 			return nil
 		}
 		batch := make([]any, len(values))

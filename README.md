@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="drawing" width="350"/>
+</p>
+
 # edg
 
 A database workload runner driven by YAML configuration. Define your schema, seed data, and transactional workloads in a single config file, then run them against any supported database with concurrent workers and real-time throughput reporting.

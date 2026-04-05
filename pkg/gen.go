@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/rand/v2"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 func gen(s string) any {
 	val, err := gofakeit.Generate(wrap(s))
 	if err != nil {
+		slog.Warn("gen: failed to generate value", "pattern", s, "error", err)
 		return nil
 	}
 	return val
@@ -153,10 +155,12 @@ func genPointWKT(lat, lon, radiusKM any) string {
 func randTimestamp(min, max string) string {
 	minT, err := time.Parse(time.RFC3339, min)
 	if err != nil {
+		slog.Warn("timestamp: failed to parse min", "value", min, "error", err)
 		return ""
 	}
 	maxT, err := time.Parse(time.RFC3339, max)
 	if err != nil {
+		slog.Warn("timestamp: failed to parse max", "value", max, "error", err)
 		return ""
 	}
 	return random.Timestamp(minT, maxT).UTC().Format(time.RFC3339)
@@ -169,10 +173,12 @@ func randTimestamp(min, max string) string {
 func randDuration(min, max string) string {
 	minD, err := time.ParseDuration(min)
 	if err != nil {
+		slog.Warn("duration: failed to parse min", "value", min, "error", err)
 		return ""
 	}
 	maxD, err := time.ParseDuration(max)
 	if err != nil {
+		slog.Warn("duration: failed to parse max", "value", max, "error", err)
 		return ""
 	}
 	return random.Duration(minD, maxD).String()
@@ -185,10 +191,12 @@ func randDuration(min, max string) string {
 func dateRand(format, min, max string) string {
 	minT, err := time.Parse(time.RFC3339, min)
 	if err != nil {
+		slog.Warn("date: failed to parse min", "value", min, "error", err)
 		return ""
 	}
 	maxT, err := time.Parse(time.RFC3339, max)
 	if err != nil {
+		slog.Warn("date: failed to parse max", "value", max, "error", err)
 		return ""
 	}
 	return random.Timestamp(minT, maxT).UTC().Format(format)
@@ -202,6 +210,7 @@ func dateRand(format, min, max string) string {
 func dateOffset(duration string) string {
 	d, err := time.ParseDuration(duration)
 	if err != nil {
+		slog.Warn("date_offset: failed to parse duration", "value", duration, "error", err)
 		return ""
 	}
 	return time.Now().Add(d).UTC().Format(time.RFC3339)
