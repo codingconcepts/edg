@@ -1,0 +1,177 @@
+{"0": {
+    "doc": "Configuration",
+    "title": "Configuration",
+    "content": "Workloads are defined in a single YAML file with the following top-level keys: . # Variables available in all expressions. globals: # User-defined expression functions. expressions: # Static datasets available to ref_* functions without a database query. reference: # Schema creation queries. up: # Data population queries. seed: # Data cleanup queries. deseed: # Schema teardown queries. down: # Per-worker initialisation queries (run before workload). init: # Weighted transaction mix (optional). run_weights: # Workload queries. run: . ",
+    "url": "/edg/configuration.html",
+    
+    "relUrl": "/configuration.html"
+  },"1": {
+    "doc": "Configuration",
+    "title": "Globals",
+    "content": "The globals section defines top-level variables available in all expressions: . globals: warehouses: 1 districts: 10 customers: 30000 items: 100000 . These can be referenced directly in arg expressions, including in arithmetic: . args: - customers / districts # evaluates to 3000 - warehouses * 10 # evaluates to 10 . ",
+    "url": "/edg/configuration.html#globals",
+    
+    "relUrl": "/configuration.html#globals"
+  },"2": {
+    "doc": "Configuration",
+    "title": "Reference",
+    "content": "The reference section defines static datasets that are loaded into the environment at startup, making them available to ref_rand, ref_same, ref_perm, and ref_diff functions without needing an init query or database connection. Each key is a dataset name, and the value is a list of row objects: . reference: regions: - {name: us, cities: [a, b, c]} - {name: eu, cities: [d, e, f]} - {name: ap, cities: [g, h, i]} . Reference datasets work exactly like datasets populated by init queries. You can use them in any arg expression: . args: # Random region row, access the 'name' field. - ref_rand('regions').name # Same row reused across all ref_same calls in this query execution. - ref_same('regions').name - set_rand(ref_same('regions').cities, []) . This is useful when your lookup data is small and known ahead of time, avoiding the need for a database round-trip. ",
+    "url": "/edg/configuration.html#reference",
+    
+    "relUrl": "/configuration.html#reference"
+  },"3": {
+    "doc": "Configuration",
+    "title": "Sections",
+    "content": "Each section (up, seed, deseed, down, init, run) contains a list of named queries: . up: - name: create_users query: |- CREATE TABLE IF NOT EXISTS users ( id UUID PRIMARY KEY DEFAULT gen_random_uuid(), email STRING NOT NULL ) seed: - name: populate_users args: - gen_batch(1000, 100, 'email') query: |- INSERT INTO users (email) SELECT unnest(string_to_array('$1', ',')) . | up and down manage schema (CREATE/DROP). | seed and deseed manage data (INSERT/TRUNCATE). | init runs once per worker before the workload starts, typically to fetch reference data for use in run queries. | run contains the transactional workload queries executed in a loop. | . ",
+    "url": "/edg/configuration.html#sections",
+    
+    "relUrl": "/configuration.html#sections"
+  },"4": {
+    "doc": "Configuration",
+    "title": "Query Types",
+    "content": "| Type | Description | . | query (default) | Executes the SQL and reads result rows. Results are stored in separate memory for each worker by query name, making them available to ref_* functions. | . | exec | Executes the SQL without reading results. Use for DDL, DML that returns no rows, or when results aren’t needed. | . | query_batch | Like query, but evaluates args repeatedly (controlled by count and size) and collects values into comma-separated strings per arg position. Each batch becomes a separate query execution whose results are stored. | . | exec_batch | Like exec, but evaluates args repeatedly (controlled by count and size) and collects values into comma-separated strings per arg position. Each batch becomes a separate exec. | . Queries can also specify a wait duration (e.g. wait: 18s) to introduce a keying/think-time delay after execution in the run section. ",
+    "url": "/edg/configuration.html#query-types",
+    
+    "relUrl": "/configuration.html#query-types"
+  },"5": {
+    "doc": "Configuration",
+    "title": "Run Weights",
+    "content": "The optional run_weights map controls the transaction mix during workload execution. Each key is a query name from the run section, and the value is a relative weight. On each iteration, a single transaction is chosen by weighted random selection: . run_weights: new_order: 45 payment: 43 order_status: 4 delivery: 4 stock_level: 4 . If run_weights is omitted, all run queries execute sequentially on each iteration. ",
+    "url": "/edg/configuration.html#run-weights",
+    
+    "relUrl": "/configuration.html#run-weights"
+  },"6": {
+    "doc": "Distributions",
+    "title": "Distributions",
+    "content": " ",
+    "url": "/edg/distributions.html",
+    
+    "relUrl": "/distributions.html"
+  },"7": {
+    "doc": "Distributions",
+    "title": "Numeric Distributions",
+    "content": "| Function | Signature | Description | . | uniform | uniform(min, max) | Flat distribution, every value equally likely | . | zipf | zipf(s, v, max) | Power-law skew, low values dominate | . | norm_f | norm_f(mean, stddev, min, max, precision) | Bell curve centered on mean | . | exp_f | exp_f(rate, min, max, precision) | Exponential decay from min | . | lognorm_f | lognorm_f(mu, sigma, min, max, precision) | Right-skewed with a long tail | . ",
+    "url": "/edg/distributions.html#numeric-distributions",
+    
+    "relUrl": "/distributions.html#numeric-distributions"
+  },"8": {
+    "doc": "Distributions",
+    "title": "Set Distributions",
+    "content": "Pick from a predefined set of values using a distribution to control which items are selected most often. | Function | Signature | Description | . | set_rand | set_rand(values, weights) | Uniform or weighted random selection from a set | . | set_norm | set_norm(values, mean, stddev) | Normal distribution over indices; mean index picked most often | . | set_exp | set_exp(values, rate) | Exponential distribution over indices; lower indices picked most often | . | set_lognorm | set_lognorm(values, mu, sigma) | Log-normal distribution over indices; right-skewed selection | . | set_zipf | set_zipf(values, s, v) | Zipfian distribution over indices; strong power-law skew toward first items | . ",
+    "url": "/edg/distributions.html#set-distributions",
+    
+    "relUrl": "/distributions.html#set-distributions"
+  },"9": {
+    "doc": "Examples",
+    "title": "Examples",
+    "content": " ",
+    "url": "/edg/examples.html",
+    
+    "relUrl": "/examples.html"
+  },"10": {
+    "doc": "Examples",
+    "title": "Argument Expressions",
+    "content": "args: # Always passes the integer 42. - const(42) # Evaluates the expression warehouses * 10 using globals; both forms are equivalent. - expr(warehouses * 10) - warehouses * 10 # Generates a random integer between 1 and 10 using gofakeit. - gen('number:1,10') # Returns a random row from the 'fetch_warehouses' init query, pinned to this # worker for its lifetime, and extracts the w_id field. - ref_perm('fetch_warehouses').w_id # Non-uniform random int using TPC-C NURand. - nurand(1023, 1, customers / districts) # Generates between 5 and 15 unique NURand values as a comma-separated string. - nurand_n(8191, 1, items, 5, 15) # Drives batched execution: the parent query runs 10 times with $1 = 0..9. - batch(customers / batch_size) # Generates 100,000 unique emails via gofakeit, split into batches of 10,000. - gen_batch(customers, batch_size, 'email') # Picks a random payment method with uniform probability. - set_rand(['credit_card', 'debit_card', 'paypal'], []) # Picks a random rating weighted toward 4 and 5 stars. - set_rand(['1', '2', '3', '4', '5'], [5, 10, 20, 35, 30]) # Picks a quantity using normal distribution. # mean=2 (value '3' at index 2 is most common), stddev=0.8 (~68% pick indices 1-3). - set_norm([1, 2, 3, 4, 5], 2, 0.8) # Picks a priority level using exponential distribution. # Higher rate concentrates picks toward the first item ('low'). - set_exp(['low', 'medium', 'high', 'critical'], 0.5) # Picks a tier using log-normal distribution (right-skewed toward early indices). - set_lognorm(['free', 'basic', 'pro', 'enterprise'], 0.5, 0.5) # Picks a category using Zipfian distribution (strong skew toward first items). - set_zipf(['electronics', 'clothing', 'books', 'food', 'toys'], 2.0, 1.0) # Generates a random UUID v4 (random) or v7 (time-ordered, sortable). - uuid_v4() - uuid_v7() # Random float between 0.01 and 999.99 with 2 decimal places (e.g. for prices). - uniform_f(0.01, 999.99, 2) # Uniform random float between 0 and 1 (e.g. for percentages). - uniform(0, 1) # Auto-incrementing sequence: 1, 2, 3, ... (shared across calls for the worker). - seq(1, 1) # Auto-incrementing with custom start and step: 100, 110, 120, ... - seq(100, 10) # Formatted order number using template and seq: \"ORD-00001\", \"ORD-00002\", ... - template('ORD-%05d', seq(1, 1)) # Zipfian distribution: hot-key pattern where value 0 is most frequent. # s=2.0 controls skew (higher = more skewed), v=1.0, max=999. - zipf(2.0, 1.0, 999) # Normally-distributed integer review rating centred on 4, mostly 3-5. - norm(4, 1, 1, 5) # Normally-distributed float price centred on 50.00, rounded to 2 decimal places. - norm_f(50.0, 15.0, 1.0, 100.0, 2) # Conditional value based on a random roll. - cond(gen('number:1,100') &gt; 95, 'premium', 'standard') # First non-nil fallback value. - coalesce(ref_rand('optional_data').value, 'default') # Generate a product code matching a regex pattern. - regex('[A-Z]{3}-[0-9]{4}') # Build a JSON metadata object for a JSONB column. - json_obj('source', 'web', 'version', 2, 'active', true) # Build a JSON array of 1-5 random email addresses. - json_arr(1, 5, 'email') # Random geographic point within 10km of London, access lat/lon separately. - point(51.5074, -0.1278, 10.0).lat - point(51.5074, -0.1278, 10.0).lon # Random geographic point as WKT for native geometry columns. - point_wkt(51.5074, -0.1278, 10.0) # Random timestamp between two dates (RFC3339 format). - timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z') # Random date formatted as YYYY-MM-DD. - date('2006-01-02', '2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z') # Timestamp 72 hours in the past (e.g. for TTL or expiry columns). - date_offset('-72h') # Random duration between 1 hour and 24 hours. - duration('1h', '24h') # Pick 3-8 products weighted by their popularity column. - weighted_sample_n('fetch_products', 'id', 'popularity', 3, 8) # Regex: generate a random US phone number. - regex('\\\\([0-9]{3}\\\\) [0-9]{3}-[0-9]{4}') # Regex: generate a random hex colour code. - regex('#[0-9a-f]{6}') # Regex: generate a random IPv4 address. - regex('[0-9]{1,3}\\\\.[0-9]{1,3}\\\\.[0-9]{1,3}\\\\.[0-9]{1,3}') # Regex: generate a random MAC address. - regex('[0-9a-f]{2}(:[0-9a-f]{2}){5}') # Regex: generate a random license plate (e.g. \"AB12 CDE\"). - regex('[A-Z]{2}[0-9]{2} [A-Z]{3}') # Exponentially-distributed float in [0, 100] with 2 decimal places. - exp_f(0.5, 0, 100, 2) # Log-normally-distributed float in [1, 1000] with 2 decimal places. - lognorm_f(1.0, 0.5, 1, 1000, 2) # Random IP address within a CIDR block (e.g. for network simulation). - inet('192.168.1.0/24') # Random 16 bytes as a hex-encoded CockroachDB/PostgreSQL BYTES literal. - bytes(16) # Random fixed-length bit string of 8 bits (e.g. \"10110011\"). - bit(8) # Random variable-length bit string of 1-16 bits. - varbit(16) # PostgreSQL/CockroachDB array literal with 2-5 random email addresses. - array(2, 5, 'email') # Random time of day between 08:00 and 18:00 (HH:MM:SS format). - time('08:00:00', '18:00:00') # Random time of day with timezone suffix (for TIMETZ columns). - timez('09:00:00', '17:00:00') # Sum of the 'price' field across all rows in the 'fetch_products' dataset. - sum('fetch_products', 'price') # Average price across all products. - avg('fetch_products', 'price') # Minimum and maximum price in the dataset. - min('fetch_products', 'price') - max('fetch_products', 'price') # Total number of rows in the dataset. - count('fetch_products') # Number of distinct category IDs across all products. - distinct('fetch_products', 'category_id') . ",
+    "url": "/edg/examples.html#argument-expressions",
+    
+    "relUrl": "/examples.html#argument-expressions"
+  },"11": {
+    "doc": "Examples",
+    "title": "Example Workloads",
+    "content": "| Workload | Description | . | TPC-C | Full TPC-C benchmark with all 5 transaction profiles | . | Bank | Bank account operations for contention and correctness testing | . | E-Commerce | E-commerce with categories, products, customers, and orders | . | IoT | IoT devices, sensors, and time-series readings | . | Normal | Product reviews with normal distribution ratings | . | Pipeline | Multi-table sequential reads and writes | . | SaaS | Multi-tenant SaaS with tenants, users, projects, and tasks | . | Populate | Billion-row data population benchmark | . | Social | Social network with users, posts, follows, and tags | . | Aggregation | Demonstrates aggregation functions (sum, avg, min, max, count, distinct) | . | Reference Data | Static reference datasets without database queries | . | Expressions | Demonstrates expr-lang built-in features (array, map, string, bitwise, etc.) | . ",
+    "url": "/edg/examples.html#example-workloads",
+    
+    "relUrl": "/examples.html#example-workloads"
+  },"12": {
+    "doc": "Expressions",
+    "title": "Expressions",
+    "content": "Query arguments are written as expressions compiled at startup using expr-lang/expr. Each expression has access to the built-in functions, globals, and any user-defined expressions. ",
+    "url": "/edg/expressions.html",
+    
+    "relUrl": "/expressions.html"
+  },"13": {
+    "doc": "Expressions",
+    "title": "Functions",
+    "content": "| Function | Returns | Description | . | const(value) | any | Returns the value as-is. Useful for literal constants. | . | expr(expression) | any | Evaluates an arithmetic expression. Alias for const, the expr engine handles the arithmetic. | . | gen(pattern) | string | Generates a random value using gofakeit patterns (e.g. gen('number:1,100')). | . | global(name) | any | Looks up a value from the globals section by name. Globals are also available directly as variables, so global('warehouses') and warehouses are equivalent. | . | ref_rand(name) | map | Returns a random row from a named dataset (populated by an init query). Access fields with dot notation: ref_rand('fetch_warehouses').w_id. | . | ref_same(name) | map | Returns a random row, but the same row is reused across all ref_same calls within a single query execution. Cleared between iterations. | . | ref_perm(name) | map | Returns a random row on first call, then the same row for the entire lifetime of the worker. | . | ref_diff(name) | map | Returns unique rows across multiple calls within the same query execution. Uses a swap-based index to avoid repeats. | . | batch(n) | [][]any | Returns sequential integers [0, n) as batch arg sets, | . | gen_batch(total, batchSize, pattern) | [][]any | Generates total values using gofakeit pattern, grouped into batches of batchSize. Each batch arg is a comma-separated string of generated values. | . | ref_each(query) | [][]any | Executes a SQL query and returns all rows. Each row becomes a separate arg set. | . | ref_n(name, field, min, max) | string | Picks N unique random rows (N in [min, max]) from a named dataset, extracts field from each, and returns a comma-separated string. | . | nurand(A, x, y) | int | TPC-C Non-Uniform Random: (((random(0,A) \\| random(x,y)) + C) / (y-x+1)) + x. | . | nurand_n(A, x, y, min, max) | string | Generates N unique NURand values (N in [min, max]) as a comma-separated string. | . | set_rand(values, weights) | any | Picks a random item from a set. If weights are provided, weighted random selection is used; otherwise uniform. | . | set_norm(values, mean, stddev) | any | Picks an item from a set using normal distribution. | . | set_exp(values, rate) | any | Picks an item from a set using exponential distribution. | . | set_lognorm(values, mu, sigma) | any | Picks an item from a set using log-normal distribution. | . | set_zipf(values, s, v) | any | Picks an item from a set using Zipfian distribution. | . | exp(rate, min, max) | float64 | Exponentially-distributed random number in [min, max], rounded to 0 decimal places. | . | exp_f(rate, min, max, precision) | float64 | Exponentially-distributed random number in [min, max], rounded to precision decimal places. | . | lognorm(mu, sigma, min, max) | float64 | Log-normally-distributed random number in [min, max], rounded to 0 decimal places. | . | lognorm_f(mu, sigma, min, max, precision) | float64 | Log-normally-distributed random number in [min, max], rounded to precision decimal places. | . | norm(mean, stddev, min, max) | float64 | Normally-distributed random number in [min, max], rounded to 0 decimal places. | . | norm_f(mean, stddev, min, max, precision) | float64 | Normally-distributed random number in [min, max], rounded to precision decimal places. | . | norm_n(mean, stddev, min, max, minN, maxN) | string | N unique normally-distributed values (N in [minN, maxN]) as a comma-separated string. | . | uuid_v1() | string | Generates a Version 1 UUID (timestamp + node ID). | . | uuid_v4() | string | Generates a Version 4 UUID (random). | . | uuid_v6() | string | Generates a Version 6 UUID (reordered timestamp). | . | uuid_v7() | string | Generates a Version 7 UUID (Unix timestamp + random, sortable). | . | uniform_f(min, max, precision) | float64 | Uniform random float in [min, max] rounded to precision decimal places. | . | uniform(min, max) | float64 | Uniform random float in [min, max]. | . | seq(start, step) | int | Auto-incrementing sequence per worker. Returns start + counter * step. | . | zipf(s, v, max) | int | Zipfian-distributed random integer in [0, max]. | . | cond(predicate, trueVal, falseVal) | any | Returns trueVal if predicate is true, falseVal otherwise. | . | coalesce(v1, v2, ...) | any | Returns the first non-nil value from arguments. | . | template(format, args...) | string | Formats a string using Go’s fmt.Sprintf syntax. | . | regex(pattern) | string | Generates a random string matching the given regular expression. | . | json_obj(k1, v1, k2, v2, ...) | string | Builds a JSON object string from key-value pair arguments. | . | json_arr(minN, maxN, pattern) | string | Builds a JSON array of N random values (N in [minN, maxN]) generated by a gofakeit pattern. | . | bytes(n) | string | Random n bytes as a hex-encoded string with \\x prefix. | . | bit(n) | string | Random fixed-length bit string of exactly n bits. | . | varbit(n) | string | Random variable-length bit string of 1 to n bits. | . | inet(cidr) | string | Random IP address within the given CIDR block. | . | array(minN, maxN, pattern) | string | PostgreSQL/CockroachDB array literal with a random number of elements. | . | time(min, max) | string | Random time of day between min and max (HH:MM:SS format). | . | timez(min, max) | string | Random time of day with +00:00 timezone suffix. | . | point(lat, lon, radiusKM) | map | Generates a random geographic point within radiusKM of (lat, lon). Access fields with .lat and .lon. | . | point_wkt(lat, lon, radiusKM) | string | Generates a random geographic point as a WKT string: POINT(lon lat). | . | timestamp(min, max) | string | Random timestamp between min and max (RFC3339). | . | duration(min, max) | string | Random duration between min and max (Go duration strings). | . | date(format, min, max) | string | Random timestamp formatted using a Go time format string. | . | date_offset(duration) | string | Returns the current time offset by duration, formatted as RFC3339. | . | weighted_sample_n(name, field, weightField, minN, maxN) | string | Picks N unique rows using weighted selection, returns a comma-separated string. | . | sum(name, field) | float64 | Sum of a numeric field across all rows in a named dataset. | . | avg(name, field) | float64 | Average of a numeric field across all rows in a named dataset. | . | min(name, field) | float64 | Minimum value of a numeric field in a named dataset. | . | max(name, field) | float64 | Maximum value of a numeric field in a named dataset. | . | count(name) | int | Number of rows in a named dataset. | . | distinct(name, field) | int | Number of distinct values for a field in a named dataset. | . ",
+    "url": "/edg/expressions.html#functions",
+    
+    "relUrl": "/expressions.html#functions"
+  },"14": {
+    "doc": "Expressions",
+    "title": "User-Defined Expressions",
+    "content": "The expressions section lets you define named functions from expr-lang expression strings. Each expression becomes a callable function available in any query arg. Expressions can reference globals, built-in functions, and other expressions. Arguments passed to the function are available via the args slice. globals: total_rows: 10000 num_buckets: 10 expressions: # No-arg expressions (computed from globals). rows_per_bucket: \"total_rows / num_buckets\" ten_percent: \"int(ceil(total_rows * 0.1))\" # Parameterized expressions (use args[0], args[1], etc.). clamp: \"max(min(args[0], args[1]), 0)\" pct_of: \"int(ceil(args[0] * args[1] / 100))\" like_prefix: \"string(args[0]) + '%'\" pick_label: \"args[0] &gt; 1000 ? 'large' : 'small'\" wrapped_offset: \"abs(args[0] - args[1]) % args[2]\" power_scale: \"int(floor(float(args[0]) ** 2))\" is_active: \"not (args[0] == 0) and (args[0] != args[1] or args[0] &lt; args[2])\" safe_val: \"args[0] ?? args[1]\" round_ratio: \"round(float(args[0]) / float(args[1]))\" normalize: \"lower(trim(replace(args[0], ' ', '_')))\" shout: \"upper(split(args[0], ',')[0])\" add_piped: \"(args[0] + args[1]) | int\" run: - name: example_query query: &gt;- SELECT * FROM t WHERE bucket = $1 AND label = $2 AND name LIKE $3 AND score &gt;= $4 AND active = $5 AND tag = $6 AND rank &gt;= $7 AND tier = $8 AND fallback = $9 AND weight = $10 AND grp = $11 AND max_id &lt;= $12 LIMIT $13 OFFSET $14 args: - gen('number:1,' + num_buckets) # $1 random int 1-num_buckets - pick_label(total_rows) # $2 \"large\" - like_prefix('foo') # $3 \"foo%\" - pct_of(total_rows, 5) # $4 500 - is_active(1, 2, 100) # $5 true - normalize(' Foo Bar ') # $6 \"foo_bar\" - power_scale(3) # $7 9 - shout('hello,world') # $8 \"HELLO\" - safe_val('premium', 'basic') # $9 \"premium\" - round_ratio(total_rows, num_buckets) # $10 1000 - wrapped_offset(7, 20, num_buckets) # $11 3 - add_piped(rows_per_bucket, ten_percent) # $12 2000 - clamp(rows_per_bucket, 500) # $13 500 - ten_percent # $14 1000 . Expressions support the full expr-lang feature set, including: . | Category | Examples | . | Arithmetic | +, -, *, /, %, ** | . | Comparison &amp; logic | ==, !=, &lt;, &gt;, and, or, not | . | Conditionals | args[0] &gt; 10 ? 'yes' : 'no', args[0] ?? 0 (nil coalescing), if/else | . | Math functions | abs(), ceil(), floor(), round(), mean(), median() | . | String functions | upper(), lower(), trim(), trimPrefix(), trimSuffix(), split(), splitAfter(), replace(), repeat(), indexOf(), lastIndexOf(), hasPrefix(), hasSuffix() | . | String operators | contains, startsWith, endsWith, matches (regex) | . | Array functions | filter(), map(), reduce(), sort(), sortBy(), reverse(), first(), last(), take(), flatten(), uniq(), concat(), join(), find(), findIndex(), findLast(), findLastIndex(), all(), any(), one(), none(), groupBy() | . | Map functions | keys(), values() | . | Type conversion | int(), float(), string(), type(), toJSON(), fromJSON(), toBase64(), fromBase64(), toPairs(), fromPairs() | . | Bitwise | bitand(), bitor(), bitxor(), bitnand(), bitnot(), bitshl(), bitshr(), bitushr() | . | Operators | \\| (pipe), in (membership), .. (range), [:] (slice), ?. (optional chaining) | . | Language | let bindings, # predicates (current element in closures), len(), get() | . See the Expressions example for a complete demonstration of every category. ",
+    "url": "/edg/expressions.html#user-defined-expressions",
+    
+    "relUrl": "/expressions.html#user-defined-expressions"
+  },"15": {
+    "doc": "Home",
+    "title": "edg",
+    "content": "A database workload runner driven by YAML configuration. Define your schema, seed data, and transactional workloads in a single config file, then run them against any supported database with concurrent workers and real-time throughput reporting. Query arguments are written as expressions compiled at startup, giving you access to global constants, random data generation, reference lookups, and TPC-C-compliant non-uniform random distributions. ",
+    "url": "/edg/#edg",
+    
+    "relUrl": "/#edg"
+  },"16": {
+    "doc": "Home",
+    "title": "Supported Databases",
+    "content": "| Database | Driver | URL scheme | . | CockroachDB / PostgreSQL | pgx | postgres://... | . | Oracle | oracle | oracle://... | . | MySQL | mysql | user:password@tcp(host:port)/database?parseTime=true | . ",
+    "url": "/edg/#supported-databases",
+    
+    "relUrl": "/#supported-databases"
+  },"17": {
+    "doc": "Home",
+    "title": "Home",
+    "content": ". ",
+    "url": "/edg/",
+    
+    "relUrl": "/"
+  },"18": {
+    "doc": "Installation",
+    "title": "Installation",
+    "content": "go install github.com/codingconcepts/edg@latest . Or build from source: . git clone https://github.com/codingconcepts/edg cd edg go build -o edg . ",
+    "url": "/edg/installation.html",
+    
+    "relUrl": "/installation.html"
+  },"19": {
+    "doc": "REPL",
+    "title": "REPL",
+    "content": "The repl command starts an interactive session where you can evaluate any expression from the function table. No database connection is required – it’s a quick way to explore functions, test distributions, and prototype argument expressions before adding them to a workload config. edg repl . &gt;&gt; uniform(0, 100) 73.37 &gt;&gt; norm(50, 10, 0, 100) 53 &gt;&gt; set_norm([1, 2, 3, 4, 5], 2, 0.8) 3 &gt;&gt; uuid_v4() a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d &gt;&gt; template('ORD-%05d', seq(1, 1)) ORD-00001 &gt;&gt; zipf(2.0, 1.0, 999) 0 &gt;&gt; regex('[A-Z]{3}-[0-9]{4}') QVM-8314 &gt;&gt; regex('#[0-9a-f]{6}') #a3c2f1 &gt;&gt; regex('[A-Z]{2}[0-9]{2} [A-Z]{3}') KD42 BXR &gt;&gt; exp_f(0.5, 0, 100, 2) 12.74 &gt;&gt; lognorm_f(1.0, 0.5, 1, 1000, 2) 3.41 &gt;&gt; inet('192.168.1.0/24') 192.168.1.47 &gt;&gt; bytes(16) \\x4a7f2b9c01de38f56a8b3c4d5e6f7a8b &gt;&gt; bit(8) 10110011 &gt;&gt; varbit(16) 101011 &gt;&gt; array(2, 5, 'email') {john@example.com,anne@test.net,mike@domain.org} &gt;&gt; time('08:00:00', '18:00:00') 14:23:07 &gt;&gt; timez('09:00:00', '17:00:00') 11:45:32+00:00 &gt;&gt; 1 + 2 3 . ",
+    "url": "/edg/repl.html",
+    
+    "relUrl": "/repl.html"
+  },"20": {
+    "doc": "REPL",
+    "title": "Loading Config",
+    "content": "To load globals and user-defined expressions from a workload config, pass --config: . edg repl --config _examples/tpcc/crdb.yaml . edg repl - type expressions to evaluate &gt;&gt; warehouses 1 &gt;&gt; warehouses * 10 10 &gt;&gt; nurand(1023, 1, 3000) 1842 . If your config includes a reference section, those datasets are also available in the REPL when loaded with --config: . edg repl --config _examples/reference_data/crdb.yaml . &gt;&gt; ref_rand('regions').name eu &gt;&gt; ref_same('regions').cities [d e f] &gt;&gt; set_rand(ref_same('regions').cities, []) e . ",
+    "url": "/edg/repl.html#loading-config",
+    
+    "relUrl": "/repl.html#loading-config"
+  },"21": {
+    "doc": "Usage",
+    "title": "Usage",
+    "content": " ",
+    "url": "/edg/usage.html",
+    
+    "relUrl": "/usage.html"
+  },"22": {
+    "doc": "Usage",
+    "title": "Commands",
+    "content": "| Command | Description | . | edg &lt;expression&gt; | Evaluate a single expression and print the result | . | up | Create schema (tables, indexes) | . | seed | Populate tables with initial data | . | run | Execute the benchmark workload | . | deseed | Delete seeded data (truncate tables) | . | down | Tear down schema (drop tables) | . | all | Run up, seed, run, deseed, and down in sequence | . | repl | Interactive expression evaluator | . Running edg with an expression (no subcommand) evaluates it and prints the result. Bare words are treated as gofakeit patterns, so edg email is equivalent to edg \"gen('email')\". For expressions with parentheses or special characters, quote the argument. edg email naomiroberts@robinson.net edg firstname Laura edg lastname Thompson edg \"uuid_v4()\" c8952841-6f5b-4743-a6de-2200415c2f03 edg \"regex('[A-Z]{3}-[0-9]{4}')\" QVM-8314 edg \"set_rand(['a','b','c'], [])\" b . A typical workflow runs the commands in order: up -&gt; seed -&gt; run -&gt; deseed -&gt; down. The all command runs this entire sequence in a single invocation. ",
+    "url": "/edg/usage.html#commands",
+    
+    "relUrl": "/usage.html#commands"
+  },"23": {
+    "doc": "Usage",
+    "title": "Flags",
+    "content": "| Flag | Short | Default | Description | . | --url |   |   | Database connection URL (or set URL env var) | . | --config |   | _examples/tpcc/crdb.yaml | Path to the workload YAML config file | . | --driver |   | pgx | database/sql driver name (pgx, oracle, or mysql) | . | --duration | -d | 1m | Benchmark duration (run and all commands) | . | --workers | -w | 1 | Number of concurrent workers (run and all commands) | . | --print-interval |   | 1s | Progress reporting interval (run and all commands) | . ",
+    "url": "/edg/usage.html#flags",
+    
+    "relUrl": "/usage.html#flags"
+  },"24": {
+    "doc": "Usage",
+    "title": "Example",
+    "content": "edg up \\ --driver pgx \\ --config _examples/tpcc/crdb.yaml \\ --url \"postgres://root@localhost:26257?sslmode=disable\" edg seed \\ --driver pgx \\ --config _examples/tpcc/crdb.yaml \\ --url \"postgres://root@localhost:26257?sslmode=disable\" edg run \\ --driver pgx \\ --config _examples/tpcc/crdb.yaml \\ --url \"postgres://root@localhost:26257?sslmode=disable\" \\ -w 100 \\ -d 1m edg deseed \\ --driver pgx \\ --config _examples/tpcc/crdb.yaml \\ --url \"postgres://root@localhost:26257?sslmode=disable\" edg down \\ --driver pgx \\ --config _examples/tpcc/crdb.yaml \\ --url \"postgres://root@localhost:26257?sslmode=disable\" . Or use all to run the entire workflow in one command: . edg all \\ --driver pgx \\ --config _examples/tpcc/crdb.yaml \\ --url \"postgres://root@localhost:26257?sslmode=disable\" \\ -w 100 \\ -d 5m . ",
+    "url": "/edg/usage.html#example",
+    
+    "relUrl": "/usage.html#example"
+  }
+}

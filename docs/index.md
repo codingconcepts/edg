@@ -1,5 +1,11 @@
+---
+title: Home
+layout: home
+nav_order: 1
+---
+
 <p align="center">
-  <img src="assets/logo.png" alt="drawing" width="350"/>
+  <img src="{{ '/assets/logo.png' | relative_url }}" alt="edg logo" width="350"/>
 </p>
 
 # edg
@@ -15,22 +21,3 @@ Query arguments are written as expressions compiled at startup, giving you acces
 | CockroachDB / PostgreSQL | `pgx` | `postgres://...` |
 | Oracle | `oracle` | `oracle://...` |
 | MySQL | `mysql` | `user:password@tcp(host:port)/database?parseTime=true` |
-
-## Quick Start
-
-```sh
-go install github.com/codingconcepts/edg@latest
-```
-
-```sh
-edg all \
---driver pgx \
---config _examples/tpcc/crdb.yaml \
---url "postgres://root@localhost:26257?sslmode=disable" \
--w 100 \
--d 5m
-```
-
-## Documentation
-
-Full documentation is available at **[codingconcepts.github.io/edg](https://codingconcepts.github.io/edg/)**.

@@ -1,3 +1,5 @@
+.PHONY: docs
+
 build:
 	go build .
 	mv ./edg ~/dev/bin
@@ -14,6 +16,10 @@ integration_test:
 	docker compose -f docker-compose.test.yml up --abort-on-container-exit --force-recreate
 	docker compose -f docker-compose.test.yml down
 	rm -f edg-test
+
+docs:
+	(cd docs && bundle install)
+	(cd docs && bundle exec jekyll serve)
 
 teardown:
 	- docker compose -f _examples/compose_crdb.yml down
