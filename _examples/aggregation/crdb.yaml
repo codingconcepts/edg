@@ -1,0 +1,88 @@
+globals:
+  products: 500
+  batch_size: 100
+
+up:
+
+  - name: create_product
+    query: |-
+      CREATE TABLE IF NOT EXISTS product (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        category STRING NOT NULL,
+        price DECIMAL(10,2) NOT NULL,
+        stock_qty INT NOT NULL
+      )
+
+  - name: create_agg_snapshot
+    query: |-
+      CREATE TABLE IF NOT EXISTS agg_snapshot (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        total_products INT NOT NULL,
+        total_value DECIMAL(12,2) NOT NULL,
+        avg_price DECIMAL(10,2) NOT NULL,
+        min_price DECIMAL(10,2) NOT NULL,
+        max_price DECIMAL(10,2) NOT NULL,
+        distinct_categories INT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+seed:
+
+  - name: populate_product
+    args:
+      - products
+    query: |-
+      INSERT INTO product (id, category, price, stock_qty)
+      SELECT
+        gen_random_uuid(),
+        (ARRAY['electronics','clothing','books','food','toys'])[floor(random()::FLOAT8 * 5 + 1)::INT],
+        (random()::FLOAT8 * 499 + 1)::DECIMAL(10,2),
+        floor(random()::FLOAT8 * 200 + 1)::INT
+      FROM generate_series(1, $1) AS s
+
+deseed:
+
+  - name: truncate_agg_snapshot
+    type: exec
+    query: TRUNCATE TABLE agg_snapshot
+
+  - name: truncate_product
+    type: exec
+    query: TRUNCATE TABLE product
+
+down:
+
+  - name: drop_agg_snapshot
+    type: exec
+    query: DROP TABLE IF EXISTS agg_snapshot
+
+  - name: drop_product
+    type: exec
+    query: DROP TABLE IF EXISTS product
+
+run:
+
+  # Fetch a random sample of 1–10 products for the aggregation dataset.
+  - name: fetch_products
+    type: query
+    args:
+      - gen('number:1,10')
+    query: |-
+      SELECT id, category, price, stock_qty
+      FROM product
+      ORDER BY random()
+      LIMIT $1::INT
+
+  # Record an aggregation snapshot over the fetched products.
+  - name: record_snapshot
+    type: exec
+    args:
+      - count('fetch_products')
+      - sum('fetch_products', 'price')
+      - avg('fetch_products', 'price')
+      - min('fetch_products', 'price')
+      - max('fetch_products', 'price')
+      - distinct('fetch_products', 'category')
+    query: |-
+      INSERT INTO agg_snapshot (total_products, total_value, avg_price, min_price, max_price, distinct_categories)
+      VALUES ($1, $2::DECIMAL, $3::DECIMAL, $4::DECIMAL, $5::DECIMAL, $6)

@@ -295,6 +295,12 @@ Query arguments are written as expressions compiled at startup using [expr-lang/
 | `date(format, min, max)` | `string` | Random timestamp between `min` and `max` (RFC3339), formatted using a Go time format string. |
 | `date_offset(duration)` | `string` | Returns the current time offset by `duration` (e.g. `"-72h"`, `"30m"`), formatted as RFC3339. |
 | `weighted_sample_n(name, field, weightField, minN, maxN)` | `string` | Picks N unique rows (N in [minN, maxN]) from a named dataset using weighted selection based on `weightField`, extracts `field`, and returns a comma-separated string. |
+| `sum(name, field)` | `float64` | Sum of a numeric field across all rows in a named dataset. |
+| `avg(name, field)` | `float64` | Average of a numeric field across all rows in a named dataset. |
+| `min(name, field)` | `float64` | Minimum value of a numeric field in a named dataset. |
+| `max(name, field)` | `float64` | Maximum value of a numeric field in a named dataset. |
+| `count(name)` | `int` | Number of rows in a named dataset. |
+| `distinct(name, field)` | `int` | Number of distinct values for a field in a named dataset. |
 
 ### User-Defined Expressions
 
@@ -533,6 +539,22 @@ args:
 
   # Random time of day with timezone suffix (for TIMETZ columns).
   - timez('09:00:00', '17:00:00')
+
+  # Sum of the 'price' field across all rows in the 'fetch_products' dataset.
+  - sum('fetch_products', 'price')
+
+  # Average price across all products.
+  - avg('fetch_products', 'price')
+
+  # Minimum and maximum price in the dataset.
+  - min('fetch_products', 'price')
+  - max('fetch_products', 'price')
+
+  # Total number of rows in the dataset.
+  - count('fetch_products')
+
+  # Number of distinct category IDs across all products.
+  - distinct('fetch_products', 'category_id')
 ```
 
 ## Distributions
@@ -655,6 +677,7 @@ edg repl - type expressions to evaluate
 | [SaaS](_examples/saas/) | Multi-tenant SaaS with tenants, users, projects, and tasks |
 | [Populate](_examples/populate/) | Billion-row data population benchmark |
 | [Social](_examples/social/) | Social network with users, posts, follows, and tags |
+| [Aggregation](_examples/aggregation/) | Demonstrates aggregation functions (sum, avg, min, max, count, distinct) |
 
 
 ## Integration tests

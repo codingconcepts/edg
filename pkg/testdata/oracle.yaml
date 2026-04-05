@@ -171,6 +171,18 @@ up:
         source_id NUMBER(10)
       )
 
+  - name: create_agg
+    type: exec
+    query: |-
+      CREATE TABLE test_agg (
+        sum_val NUMBER,
+        avg_val NUMBER,
+        min_val NUMBER,
+        max_val NUMBER,
+        count_val NUMBER(10),
+        distinct_val NUMBER(10)
+      )
+
 seed:
 
   - name: seed_ref_source
@@ -207,6 +219,10 @@ seed:
       INSERT INTO test_ref_each (source_id) VALUES ($1)
 
 deseed:
+
+  - name: truncate_agg
+    type: exec
+    query: TRUNCATE TABLE test_agg
 
   - name: truncate_ref_each
     type: exec
@@ -277,6 +293,15 @@ deseed:
     query: TRUNCATE TABLE test_ref_source
 
 down:
+
+  - name: drop_agg
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE test_agg PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
 
   - name: drop_ref_each
     type: exec
@@ -585,3 +610,17 @@ run:
     query: |-
       INSERT INTO test_ref_perm (perm_id)
       VALUES (:1)
+
+  # Test: sum, avg, min, max, count, distinct
+  - name: insert_agg
+    type: exec
+    args:
+      - sum('ref_source', 'id')
+      - avg('ref_source', 'id')
+      - min('ref_source', 'id')
+      - max('ref_source', 'id')
+      - count('ref_source')
+      - distinct('ref_source', 'weight')
+    query: |-
+      INSERT INTO test_agg (sum_val, avg_val, min_val, max_val, count_val, distinct_val)
+      VALUES (:1, :2, :3, :4, :5, :6)

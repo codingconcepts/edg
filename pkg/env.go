@@ -103,6 +103,12 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 		"array":             genArray,            // CockroachDB/PostgreSQL array literal.
 		"time":              genTime,             // Random time of day (HH:MM:SS).
 		"timez":             genTimez,            // Random time of day with timezone (HH:MM:SS+00:00).
+		"sum":               env.aggSum,          // Sum a numeric field across all rows in a dataset.
+		"avg":               env.aggAvg,          // Average a numeric field across all rows in a dataset.
+		"min":               env.aggMin,          // Minimum value of a numeric field in a dataset.
+		"max":               env.aggMax,          // Maximum value of a numeric field in a dataset.
+		"count":             env.aggCount,        // Number of rows in a dataset.
+		"distinct":          env.aggDistinct,     // Number of distinct values for a field in a dataset.
 	}
 
 	// Add each global variable to map itself for cleaner access.

@@ -171,6 +171,18 @@ up:
         source_id INT
       )
 
+  - name: create_agg
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS test_agg (
+        sum_val FLOAT8,
+        avg_val FLOAT8,
+        min_val FLOAT8,
+        max_val FLOAT8,
+        count_val INT,
+        distinct_val INT
+      )
+
 seed:
 
   # Seed reference source data first.
@@ -209,6 +221,10 @@ seed:
       INSERT INTO test_ref_each (source_id) VALUES ($1)
 
 deseed:
+
+  - name: truncate_agg
+    type: exec
+    query: TRUNCATE TABLE test_agg
 
   - name: truncate_ref_each
     type: exec
@@ -279,6 +295,10 @@ deseed:
     query: TRUNCATE TABLE test_ref_source
 
 down:
+
+  - name: drop_agg
+    type: exec
+    query: DROP TABLE IF EXISTS test_agg
 
   - name: drop_ref_each
     type: exec
@@ -515,3 +535,17 @@ run:
     query: |-
       INSERT INTO test_ref_perm (perm_id)
       VALUES ($1)
+
+  # Test: sum, avg, min, max, count, distinct
+  - name: insert_agg
+    type: exec
+    args:
+      - sum('ref_source', 'id')
+      - avg('ref_source', 'id')
+      - min('ref_source', 'id')
+      - max('ref_source', 'id')
+      - count('ref_source')
+      - distinct('ref_source', 'weight')
+    query: |-
+      INSERT INTO test_agg (sum_val, avg_val, min_val, max_val, count_val, distinct_val)
+      VALUES ($1, $2, $3, $4, $5, $6)

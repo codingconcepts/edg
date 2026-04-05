@@ -42,6 +42,7 @@ var (
 		"test_distributions", "test_refs", "test_ref_diff", "test_ref_perm",
 		"test_binary", "test_arrays",
 		"test_gen_batch", "test_batch", "test_ref_each",
+		"test_agg",
 	}
 )
 
@@ -152,6 +153,7 @@ func TestIntegration_CockroachDB(t *testing.T) {
 		"binary":        "SELECT bytes_val, bit_val, varbit_val, inet_val FROM test_binary",
 		"arrays":        "SELECT arr_val FROM test_arrays",
 		"batch_vals":    "SELECT val FROM test_batch ORDER BY val",
+		"agg":           "SELECT sum_val, avg_val, min_val, max_val, count_val, distinct_val FROM test_agg",
 	}
 
 	runIntegrationTests(t, crdbConfig, queries)
@@ -179,6 +181,7 @@ func TestIntegration_MySQL(t *testing.T) {
 		"binary":        "SELECT bytes_val, bit_val, varbit_val, inet_val FROM test_binary",
 		"arrays":        "SELECT arr_val FROM test_arrays",
 		"batch_vals":    "SELECT val FROM test_batch ORDER BY val",
+		"agg":           "SELECT sum_val, avg_val, min_val, max_val, count_val, distinct_val FROM test_agg",
 	}
 
 	runIntegrationTests(t, mysqlConfig, queries)
@@ -206,6 +209,7 @@ func TestIntegration_Oracle(t *testing.T) {
 		"binary":        "SELECT bytes_val, bit_val, varbit_val, inet_val FROM test_binary",
 		"arrays":        "SELECT arr_val FROM test_arrays",
 		"batch_vals":    "SELECT val FROM test_batch ORDER BY val",
+		"agg":           "SELECT sum_val, avg_val, min_val, max_val, count_val, distinct_val FROM test_agg",
 	}
 
 	runIntegrationTests(t, oracleConfig, queries)
@@ -325,6 +329,7 @@ func testRun(t *testing.T, env *Env, ctx context.Context, queries map[string]str
 	t.Run("refs", func(t *testing.T) { testRunRefs(t, queries) })
 	t.Run("ref_diff", func(t *testing.T) { testRunRefDiff(t, queries) })
 	t.Run("ref_perm", func(t *testing.T) { testRunRefPerm(t, queries) })
+	t.Run("agg", func(t *testing.T) { testRunAgg(t, queries) })
 }
 
 func testRunScalars(t *testing.T, queries map[string]string) {
@@ -716,6 +721,44 @@ func testRunRefDiff(t *testing.T, queries map[string]string) {
 		rows.Scan(&id1, &id2)
 		if id1 == id2 {
 			t.Errorf("ref_diff returned same id for both args: %d", id1)
+		}
+	}
+}
+
+func testRunAgg(t *testing.T, queries map[string]string) {
+	if got := rowCount(t, "test_agg"); got != runIterations {
+		t.Errorf("rows = %d, want %d", got, runIterations)
+	}
+
+	// ref_source has ids 1..20 and weight = id * 10.
+	// All aggregation values are deterministic.
+	rows, err := db.Query(queries["agg"])
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var sumVal, avgVal, minVal, maxVal float64
+		var countVal, distinctVal int
+		rows.Scan(&sumVal, &avgVal, &minVal, &maxVal, &countVal, &distinctVal)
+
+		if sumVal != 210 {
+			t.Errorf("sum_val = %v, want 210", sumVal)
+		}
+		if avgVal != 10.5 {
+			t.Errorf("avg_val = %v, want 10.5", avgVal)
+		}
+		if minVal != 1 {
+			t.Errorf("min_val = %v, want 1", minVal)
+		}
+		if maxVal != 20 {
+			t.Errorf("max_val = %v, want 20", maxVal)
+		}
+		if countVal != 20 {
+			t.Errorf("count_val = %d, want 20", countVal)
+		}
+		if distinctVal != 20 {
+			t.Errorf("distinct_val = %d, want 20", distinctVal)
 		}
 	}
 }
