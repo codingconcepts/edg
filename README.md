@@ -33,4 +33,4 @@ edg all \
 
 ## Documentation
 
-Full documentation is available at **[codingconcepts.github.io/edg](https://codingconcepts.github.io/edg/)**.
+View the docs [here](https://codingconcepts.github.io/edg).
