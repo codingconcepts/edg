@@ -64,12 +64,12 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 		"nurand":            env.nuRand,          // Non-Uniform Random per TPC-C spec.
 		"nurand_n":          env.nuRandN,         // N unique Non-Uniform Random values (comma-separated).
 		"norm":              env.normRand,        // Normal-distribution random integer in [min, max].
-		"norm_f":             env.normRandF,       // Normal-distribution random float with precision.
-		"norm_n":             env.normRandN,       // N unique normal-distribution random values (comma-separated).
+		"norm_f":            env.normRandF,       // Normal-distribution random float with precision.
+		"norm_n":            env.normRandN,       // N unique normal-distribution random values (comma-separated).
 		"exp":               expRand,             // Exponential-distribution random float in [min, max].
-		"exp_f":              expRandF,            // Exponential-distribution random float with precision.
+		"exp_f":             expRandF,            // Exponential-distribution random float with precision.
 		"lognorm":           lognormRand,         // Log-normal-distribution random float in [min, max].
-		"lognorm_f":          lognormRandF,        // Log-normal-distribution random float with precision.
+		"lognorm_f":         lognormRandF,        // Log-normal-distribution random float with precision.
 		"set_rand":          setRand,             // Pick from a set (uniform or weighted random).
 		"set_norm":          setNormal,           // Pick from a set using normal distribution.
 		"set_exp":           setExp,              // Pick from a set using exponential distribution.
@@ -91,8 +91,8 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 		"json_arr":          jsonArr,             // Build a JSON array of N random values.
 		"point":             genPoint,            // Random geographic point within a radius.
 		"point_wkt":         genPointWKT,         // Random geographic point as WKT string.
-		"timestamp":         randTimestamp,        // Random timestamp between min and max (RFC3339).
-		"duration":          randDuration,         // Random duration between min and max.
+		"timestamp":         randTimestamp,       // Random timestamp between min and max (RFC3339).
+		"duration":          randDuration,        // Random duration between min and max.
 		"date":              dateRand,            // Random date with custom format.
 		"date_offset":       dateOffset,          // Timestamp offset from now.
 		"weighted_sample_n": env.weightedSampleN, // N weighted random field values (comma-separated).
@@ -113,6 +113,12 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 
 	// Add each global variable to map itself for cleaner access.
 	maps.Copy(env.env, r.Globals)
+
+	// Load reference datasets into the environment so they're available
+	// via ref_rand, ref_same, etc. without a database query.
+	for name, rows := range r.Reference {
+		env.SetEnv(name, slices.Clone(rows))
+	}
 
 	// Register user-defined expressions as callable functions.
 	// First pass: add stubs so the compiler sees all expression names.
@@ -152,7 +158,7 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 	} {
 		for i, query := range group.queries {
 			switch query.Type {
-			case QueryTypeQuery, QueryTypeExec, "":
+			case QueryTypeQuery, QueryTypeExec, QueryTypeBatch, "":
 			default:
 				return nil, fmt.Errorf("unknown query type %q in %s query %d (%s)", query.Type, group.name, i, query.Name)
 			}

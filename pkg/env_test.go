@@ -524,6 +524,116 @@ func TestInitFrom_IndependentCopies(t *testing.T) {
 	}
 }
 
+func TestReference_LoadedIntoEnv(t *testing.T) {
+	req := &Request{
+		Reference: map[string][]map[string]any{
+			"regions": {
+				{"name": "eu", "region": "eu-west-2"},
+				{"name": "us", "region": "us-east-1"},
+			},
+		},
+	}
+
+	env, err := NewEnv(nil, req)
+	if err != nil {
+		t.Fatalf("NewEnv failed: %v", err)
+	}
+
+	raw, ok := env.env["regions"]
+	if !ok {
+		t.Fatal("reference data not loaded into env")
+	}
+
+	rows := raw.([]map[string]any)
+	if len(rows) != 2 {
+		t.Fatalf("loaded %d rows, want 2", len(rows))
+	}
+	if rows[0]["name"] != "eu" {
+		t.Errorf("row 0 name = %v, want eu", rows[0]["name"])
+	}
+	if rows[1]["region"] != "us-east-1" {
+		t.Errorf("row 1 region = %v, want us-east-1", rows[1]["region"])
+	}
+}
+
+func TestReference_IndependentCopies(t *testing.T) {
+	req := &Request{
+		Reference: map[string][]map[string]any{
+			"items": {
+				{"id": 1},
+				{"id": 2},
+			},
+		},
+	}
+
+	env1, err := NewEnv(nil, req)
+	if err != nil {
+		t.Fatalf("NewEnv env1 failed: %v", err)
+	}
+	env2, err := NewEnv(nil, req)
+	if err != nil {
+		t.Fatalf("NewEnv env2 failed: %v", err)
+	}
+
+	// Mutating env1's copy should not affect env2.
+	data1 := env1.env["items"].([]map[string]any)
+	data1[0] = map[string]any{"id": 999}
+
+	data2 := env2.env["items"].([]map[string]any)
+	if data2[0]["id"] != 1 {
+		t.Error("reference data is shared between envs; expected independent copies")
+	}
+}
+
+func TestReference_NilIsNoOp(t *testing.T) {
+	req := &Request{}
+
+	env, err := NewEnv(nil, req)
+	if err != nil {
+		t.Fatalf("NewEnv failed: %v", err)
+	}
+
+	// Should not panic or add unexpected keys.
+	if _, ok := env.env["regions"]; ok {
+		t.Error("unexpected 'regions' key in env with nil reference")
+	}
+}
+
+func TestReference_RefRand(t *testing.T) {
+	req := &Request{
+		Reference: map[string][]map[string]any{
+			"colors": {
+				{"name": "red"},
+				{"name": "blue"},
+				{"name": "green"},
+			},
+		},
+		Run: []*Query{
+			{Args: []string{"ref_rand('colors').name"}},
+		},
+	}
+
+	env, err := NewEnv(nil, req)
+	if err != nil {
+		t.Fatalf("NewEnv failed: %v", err)
+	}
+
+	argSets, err := req.Run[0].GenerateArgs(env)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	got, ok := argSets[0][0].(string)
+	if !ok {
+		t.Fatalf("ref_rand('colors').name = %v (%T), want string", argSets[0][0], argSets[0][0])
+	}
+
+	valid := got == "red" || got == "blue" || got == "green"
+	if !valid {
+		t.Errorf("ref_rand('colors').name = %q, want one of red/blue/green", got)
+	}
+}
+
 func TestRunSection_Exec(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

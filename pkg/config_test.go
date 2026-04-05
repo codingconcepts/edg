@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -358,6 +359,182 @@ func TestGenerateArgs_MixedBatchAndScalar(t *testing.T) {
 		if args[2] != 3000 {
 			t.Errorf("arg set %d: args[2] = %v, want 3000", i, args[2])
 		}
+	}
+}
+
+func TestGenerateArgs_BatchType(t *testing.T) {
+	env := testEnv(map[string][]map[string]any{
+		"categories": {
+			{"name": "electronics", "markup": 1.5},
+			{"name": "clothing", "markup": 1.3},
+			{"name": "books", "markup": 1.1},
+		},
+	})
+	env.env["gen"] = gen
+	env.env["ref_same"] = env.refSame
+
+	q := &Query{
+		Type:  QueryTypeBatch,
+		Count: 10,
+		Size:  4,
+		Args:  []string{"gen('noun')", "ref_same('categories').name", "ref_same('categories').markup"},
+	}
+	if err := q.CompileArgs(env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	argSets, err := q.GenerateArgs(env)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	// 10 total, batches of 4: expect 3 batches (4, 4, 2).
+	if len(argSets) != 3 {
+		t.Fatalf("expected 3 arg sets, got %d", len(argSets))
+	}
+
+	// Each arg set should have 3 args (one per expression).
+	for i, args := range argSets {
+		if len(args) != 3 {
+			t.Fatalf("arg set %d: expected 3 args, got %d", i, len(args))
+		}
+	}
+
+	// First two batches should have 4 CSV values, last should have 2.
+	for _, args := range argSets[:2] {
+		csv := args[0].(string)
+		parts := strings.Split(csv, ",")
+		if len(parts) != 4 {
+			t.Errorf("expected 4 CSV values, got %d: %q", len(parts), csv)
+		}
+	}
+	lastCSV := argSets[2][0].(string)
+	parts := strings.Split(lastCSV, ",")
+	if len(parts) != 2 {
+		t.Errorf("last batch: expected 2 CSV values, got %d: %q", len(parts), lastCSV)
+	}
+
+	// Verify ref_same correlation: name and markup should match per row.
+	validPairs := map[string]string{
+		"electronics": "1.5",
+		"clothing":    "1.3",
+		"books":       "1.1",
+	}
+	for _, args := range argSets {
+		names := strings.Split(args[1].(string), ",")
+		markups := strings.Split(args[2].(string), ",")
+		if len(names) != len(markups) {
+			t.Fatalf("name/markup length mismatch: %d vs %d", len(names), len(markups))
+		}
+		for j := range names {
+			want, ok := validPairs[names[j]]
+			if !ok {
+				t.Errorf("unexpected category name: %q", names[j])
+			} else if markups[j] != want {
+				t.Errorf("row %d: name=%q markup=%q, want markup=%q", j, names[j], markups[j], want)
+			}
+		}
+	}
+}
+
+func TestGenerateArgs_BatchType_GlobalRefs(t *testing.T) {
+	env := testEnv(nil)
+	env.env["const"] = constant
+	env.env["products"] = 7
+	env.env["batch_size"] = 3
+
+	q := &Query{
+		Type:  QueryTypeBatch,
+		Count: "products",
+		Size:  "batch_size",
+		Args:  []string{"const(42)"},
+	}
+	if err := q.CompileArgs(env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	argSets, err := q.GenerateArgs(env)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	// 7 / 3 = 3 batches (3, 3, 1).
+	if len(argSets) != 3 {
+		t.Fatalf("expected 3 batches, got %d", len(argSets))
+	}
+
+	// First two batches: 3 values each.
+	for _, args := range argSets[:2] {
+		parts := strings.Split(args[0].(string), ",")
+		if len(parts) != 3 {
+			t.Errorf("expected 3 CSV values, got %d", len(parts))
+		}
+	}
+	// Last batch: 1 value.
+	parts := strings.Split(argSets[2][0].(string), ",")
+	if len(parts) != 1 {
+		t.Errorf("last batch: expected 1 CSV value, got %d", len(parts))
+	}
+}
+
+func TestGenerateArgs_BatchType_SizeDefaultsToCount(t *testing.T) {
+	env := testEnv(nil)
+	env.env["const"] = constant
+
+	q := &Query{
+		Type:  QueryTypeBatch,
+		Count: 5,
+		Args:  []string{"const('x')"},
+	}
+	if err := q.CompileArgs(env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	argSets, err := q.GenerateArgs(env)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	// No size set, so all 5 in one batch.
+	if len(argSets) != 1 {
+		t.Fatalf("expected 1 batch, got %d", len(argSets))
+	}
+
+	parts := strings.Split(argSets[0][0].(string), ",")
+	if len(parts) != 5 {
+		t.Errorf("expected 5 CSV values, got %d", len(parts))
+	}
+}
+
+func TestRequestParsesBatchType(t *testing.T) {
+	input := `
+seed:
+  - name: populate_product
+    type: batch
+    count: 100
+    size: 50
+    args:
+      - gen('productname')
+    query: |-
+      INSERT INTO product (name) SELECT unnest(string_to_array('$1', ','))
+`
+	var req Request
+	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if len(req.Seed) != 1 {
+		t.Fatalf("expected 1 seed query, got %d", len(req.Seed))
+	}
+	q := req.Seed[0]
+	if q.Type != QueryTypeBatch {
+		t.Errorf("type = %q, want %q", q.Type, QueryTypeBatch)
+	}
+	if toInt(q.Count) != 100 {
+		t.Errorf("count = %v, want 100", q.Count)
+	}
+	if toInt(q.Size) != 50 {
+		t.Errorf("size = %v, want 50", q.Size)
 	}
 }
 
