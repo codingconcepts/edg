@@ -5,9 +5,13 @@ weight: 1
 
 # Installation
 
+### With the Go toolchain
+
 ```sh
 go install github.com/codingconcepts/edg@latest
 ```
+
+### Dock
 
 Or pull the Docker image:
 
@@ -26,7 +30,7 @@ docker run --rm \
   --url "postgres://root@host.docker.internal:26257?sslmode=disable"
 ```
 
-Or build from source:
+### From source
 
 ```sh
 git clone https://github.com/codingconcepts/edg
