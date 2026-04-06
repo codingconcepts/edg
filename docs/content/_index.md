@@ -1,12 +1,9 @@
 ---
 title: Home
-layout: home
-nav_order: 1
+type: docs
 ---
 
-<p align="center">
-  <img src="{{ '/assets/logo.png' | relative_url }}" alt="edg logo" width="350"/>
-</p>
+{{< logo >}}
 
 # edg
 

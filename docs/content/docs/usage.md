@@ -1,7 +1,6 @@
 ---
 title: Usage
-layout: default
-nav_order: 3
+weight: 2
 ---
 
 # Usage

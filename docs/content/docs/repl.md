@@ -1,7 +1,6 @@
 ---
 title: REPL
-layout: default
-nav_order: 8
+weight: 7
 ---
 
 # REPL

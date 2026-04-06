@@ -25,5 +25,8 @@ go.work.sum
 # .idea/
 .vscode/
 
+# Hugo build output
+docs/public/
+
 # Local files
 bench.md

@@ -1,7 +1,6 @@
 ---
 title: Distributions
-layout: default
-nav_order: 7
+weight: 6
 ---
 
 # Distributions

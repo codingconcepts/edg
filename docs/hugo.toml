@@ -1,0 +1,14 @@
+baseURL = "https://codingconcepts.github.io/edg/"
+languageCode = "en-us"
+title = "edg"
+theme = "hugo-book"
+
+[params]
+  BookTheme = "dark"
+  BookSearch = true
+  BookToC = true
+  BookRepo = "https://github.com/codingconcepts/edg"
+  BookSection = "docs"
+
+[markup.goldmark.renderer]
+  unsafe = true

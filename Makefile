@@ -18,8 +18,7 @@ integration_test:
 	rm -f edg-test
 
 docs:
-	(cd docs && bundle install)
-	(cd docs && bundle exec jekyll serve)
+	(cd docs && hugo server --disableFastRender)
 
 teardown:
 	- docker compose -f _examples/compose_crdb.yml down
