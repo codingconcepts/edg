@@ -35,7 +35,7 @@ jobs:
 
       - name: Build with Hugo
         working-directory: docs
-        run: hugo --minify --baseURL "https://codingconcepts.github.io/edg/"
+        run: hugo --minify --baseURL "https://edg.run/"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
