@@ -74,6 +74,19 @@ Query arguments are written as expressions compiled at startup using [expr-lang/
 | `count(name)` | `int` | Number of rows in a named dataset. |
 | `distinct(name, field)` | `int` | Number of distinct values for a field in a named dataset. |
 
+## Function Lifecycle
+
+Several functions maintain state. Understanding when that state resets is important for getting correct results:
+
+| Function | Scope | Resets |
+|---|---|---|
+| `ref_rand(name)` | None | Fresh random row on every call |
+| `ref_same(name)` | Per-query | Picks a row on first call within a query; all subsequent `ref_same` calls for the same dataset within that query return the same row. **Cleared before the next query.** |
+| `ref_perm(name)` | Per-worker | Picks a row on first call and returns that same row for the entire lifetime of the worker. Never resets. |
+| `ref_diff(name)` | Per-query | Returns a unique row on each call within a query (no repeats). Index resets before the next query. |
+| `seq(start, step)` | Per-worker | Counter starts at 0 for each worker and increments on every call. Two workers both calling `seq(1, 1)` will produce the same sequence independently -- values are **not globally unique**. |
+| `nurand(A, x, y)` | Per-worker | The TPC-C constant C is generated once per worker per A value and stays fixed for the worker's lifetime. |
+
 ## User-Defined Expressions
 
 The `expressions` section lets you define named functions from [expr-lang](https://expr-lang.org/docs/language-definition) expression strings. Each expression becomes a callable function available in any query arg. Expressions can reference globals, built-in functions, and other expressions. Arguments passed to the function are available via the `args` slice.

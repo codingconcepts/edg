@@ -75,6 +75,10 @@ type Query struct {
 	compiledSize  *vm.Program
 }
 
+func (q *Query) isBatch() bool {
+	return q.Type == QueryTypeQueryBatch || q.Type == QueryTypeExecBatch
+}
+
 func (q *Query) CompileArgs(e *Env) error {
 	compiledArgs := make([]*vm.Program, len(q.Args))
 

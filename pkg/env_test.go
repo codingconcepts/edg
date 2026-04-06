@@ -663,16 +663,16 @@ func TestRunSection_Exec(t *testing.T) {
 	}
 }
 
-func TestRunSection_InlinesArgsForNonRunSection(t *testing.T) {
+func TestRunSection_SeedUsesBindParams(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("creating sqlmock: %v", err)
 	}
 	defer db.Close()
 
-	// The seed section inlines $1 → 100, so the executed query should
-	// contain the literal value, not a bind parameter.
-	mock.ExpectExec("INSERT INTO items SELECT generate_series\\(1, 100\\)").
+	// Non-batch seed queries use bind params, same as run.
+	mock.ExpectExec("INSERT INTO items SELECT generate_series").
+		WithArgs(100).
 		WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{

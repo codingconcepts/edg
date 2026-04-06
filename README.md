@@ -34,3 +34,14 @@ edg all \
 ## Documentation
 
 View the docs [here](https://codingconcepts.github.io/edg).
+
+## Todos
+
+Column-name lowercasing should be removed. The column should always match the name in the database.
+
+Why do seed and up work differently to run? Can't they all work the same?
+
+Add docs for run_weights and count/size for batch queries in the most appropriate place. For the batch queries, I think a decent amount of explanation and examples are required.
+
+Update the docs for all of the medium impact things.
+

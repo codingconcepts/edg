@@ -121,7 +121,83 @@ seed:
 | `query_batch` | Like `query`, but evaluates args repeatedly (controlled by `count` and `size`) and collects values into comma-separated strings per arg position. Each batch becomes a separate query execution whose results are stored. |
 | `exec_batch` | Like `exec`, but evaluates args repeatedly (controlled by `count` and `size`) and collects values into comma-separated strings per arg position. Each batch becomes a separate exec. |
 
-Queries can also specify a `wait` duration (e.g. `wait: 18s`) to introduce a keying/think-time delay after execution in the `run` section.
+### Batch Fields
+
+The `query_batch` and `exec_batch` types use two additional fields to control how args are generated and grouped:
+
+| Field | Description |
+|---|---|
+| `count` | Total number of rows to generate. Evaluated as an expression, so it can reference globals. |
+| `size` | Number of rows per batch. If omitted or zero, defaults to `count` (single batch). Also evaluated as an expression. |
+
+Each arg expression is evaluated once per row. The results are collected into comma-separated strings per arg position. For example, with `count: 1000` and `size: 100`, you get 10 batches, each containing a comma-separated string of 100 generated values.
+
+```yaml
+seed:
+  - name: populate_users
+    type: exec_batch
+    count: customers          # expression: uses the 'customers' global
+    size: batch_size          # expression: uses the 'batch_size' global
+    args:
+      - gen('email')
+    query: |-
+      INSERT INTO users (email)
+      SELECT unnest(string_to_array('$1', ','))
+```
+
+### Wait
+
+Queries can specify a `wait` duration (e.g. `wait: 18s`) to introduce a keying/think-time delay after execution. This only applies to queries in the `run` section and is ignored in other sections.
+
+### Placeholders
+
+Arg placeholders (`$1`, `$2`, etc.) are passed to the database in one of two ways: **inlined** or as **bind params**.
+
+#### Inlining
+
+Inlining means edg performs a text replacement on the SQL string _before_ sending it to the database. Every `$N` in the query is replaced with the literal arg value. For example, given:
+
+```yaml
+args:
+  - gen_batch(1000, 100, 'email')
+query: |-
+  INSERT INTO users (email)
+  SELECT unnest(string_to_array('$1', ','))
+```
+
+If `$1` evaluates to `alice@x.com,bob@y.com,...`, the SQL sent to the database becomes:
+
+```sql
+INSERT INTO users (email)
+SELECT unnest(string_to_array('alice@x.com,bob@y.com,...', ','))
+```
+
+The database never sees `$1`, it receives a fully formed query with the values baked in. This is used for:
+
+- **`query_batch` / `exec_batch`** types (always inlined).
+- **Batch-expanded queries** using `gen_batch`, `batch`, or `ref_each` (in any section).
+
+Inlining lets you use `$N` as a universal placeholder syntax across all drivers (pgx, MySQL, Oracle) without worrying about driver-specific bind param formats. It also avoids a pgx-stdlib issue where numeric values are sent as DECIMAL, which CockroachDB can't mix with INT in arithmetic.
+
+Because the value is embedded in the SQL text, quoted placeholders like `'$1'` are common in batch patterns, the quotes become part of the final SQL string (e.g. `string_to_array('alice@x.com,...', ',')`).
+
+#### Bind params
+
+All other queries use native driver bind parameters. The placeholder stays in the SQL and the values are sent separately, allowing the database to cache query plans and avoid re-parsing.
+
+Each driver has its own placeholder format:
+
+| Driver | Placeholder format |
+|---|---|
+| `pgx` (PostgreSQL / CockroachDB) | `$1`, `$2`, `$3` |
+| `mysql` | `?` (positional) |
+| `oracle` | `:1`, `:2`, `:3` |
+
+Since `run` queries always use bind params, their SQL must use the correct format for the target driver.
+
+### Column Name Normalisation
+
+When a `query` or `query_batch` result is stored, all column names are lowercased before being added to the environment. This means a SQL column `W_ID` becomes accessible as `ref_rand('fetch_warehouses').w_id`, not `.W_ID`.
 
 ## Run Weights
 

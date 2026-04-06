@@ -27,7 +27,7 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 | Flag | Short | Default | Description |
 |---|---|---|---|
 | `--url` | | | Database connection URL (or set `URL` env var) |
-| `--config` | | `_examples/tpcc/crdb.yaml` | Path to the workload YAML config file |
+| `--config` | | | Path to the workload YAML config file (required for database commands, optional for `repl`) |
 | `--driver` | | `pgx` | database/sql driver name (`pgx`, `oracle`, or `mysql`) |
 | `--duration` | `-d` | `1m` | Benchmark duration (run and all commands) |
 | `--workers` | `-w` | `1` | Number of concurrent workers (run and all commands) |
@@ -74,3 +74,50 @@ edg all \
 -w 100 \
 -d 5m
 ```
+
+## Run Behaviour
+
+### Workers and Initialisation
+
+Each worker gets its own isolated environment. The `init` section runs once, and its results are cloned to each worker so that functions like `ref_rand` and `ref_diff` don't interfere across workers. Per-worker state includes sequence counters (`seq`), permanent row picks (`ref_perm`), and NURand constants.
+
+### Error Handling
+
+Query errors during `run` are **non-fatal**. The worker logs the error and increments an error counter but continues to the next iteration. This lets you observe error rates without aborting the benchmark. Errors in other sections (`up`, `seed`, `deseed`, `down`, `init`) are fatal and stop execution immediately.
+
+### Interrupting with Ctrl+C
+
+Pressing `Ctrl+C` during `run` or `all` cancels the workload gracefully. Workers finish their current iteration and stop. When using `all`, the cleanup phases (`deseed` and `down`) still run after interruption, using a fresh context.
+
+### Output
+
+During the run, progress is printed at the `--print-interval` (default: every second):
+
+```
+5s elapsed
+QUERY       COUNT  ERRORS  AVG LATENCY  QPS
+get_user    4820   0       1.037ms      964.0
+```
+
+After all workers complete, a final summary is printed:
+
+```
+summary
+Duration:  1m0.001s
+Workers:   10
+
+QUERY       COUNT   ERRORS  AVG LATENCY  QPS
+get_user    58241   0       1.028ms      970.7
+
+Transactions:  58241
+Errors:        0
+tpm:           3494460.0
+```
+
+| Metric | Description |
+|---|---|
+| COUNT | Total successful query executions |
+| ERRORS | Total failed query executions |
+| AVG LATENCY | Mean execution time per query |
+| QPS | Queries per second (count / elapsed seconds) |
+| tpm | Transactions per minute across all queries |

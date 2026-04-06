@@ -5,7 +5,7 @@ weight: 7
 
 # REPL
 
-The `repl` command starts an interactive session where you can evaluate any expression from the function table. No database connection is required -- it's a quick way to explore functions, test distributions, and prototype argument expressions before adding them to a workload config.
+The `repl` command starts an interactive session where you can evaluate any expression from the function table. No database connection or config file is required -- it's a quick way to explore functions, test distributions, and prototype argument expressions before adding them to a workload config.
 
 ```sh
 edg repl

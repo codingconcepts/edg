@@ -171,10 +171,12 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 	return &env, nil
 }
 
-// runSection runs a list of queries, handling batched args from ref_each.
-// Batch args are inlined directly into the SQL to avoid pgx-stdlib
-// sending numeric values as DECIMAL, which CockroachDB can't mix
-// with INT in arithmetic expressions.
+// runSection runs a list of queries. Args are inlined into the SQL
+// (string replacement of $N placeholders) when the query is a batch
+// type or when batch-expanded (multiple arg sets from gen_batch/batch/
+// ref_each). This provides cross-driver placeholder compatibility and
+// avoids pgx-stdlib DECIMAL type issues. All other queries use native
+// driver bind params.
 func (e *Env) runSection(ctx context.Context, queries []*Query, section ConfigSection) error {
 	verbose := section != ConfigSectionInit && section != ConfigSectionRun
 
@@ -192,15 +194,17 @@ func (e *Env) runSection(ctx context.Context, queries []*Query, section ConfigSe
 
 		queryStart := time.Now()
 
+		// Inline $N placeholders when the query is a batch type or
+		// when batch-expanded (multiple arg sets from gen_batch/batch/ref_each).
+		// Simple scalar queries always use native bind params.
+		shouldInline := q.isBatch() || len(argSets) > 1
+
 		for i, args := range argSets {
 			if verbose && len(argSets) > 1 {
 				slog.Info("running query", "section", section, "query", q.Name, "batch", fmt.Sprintf("%d/%d", i+1, len(argSets)))
 			}
 
-			// Non-run sections use $N as framework-level placeholders
-			// that get inlined before execution. Run-section queries
-			// use driver-native bind params (:N for Oracle, $N for pgx).
-			if section != ConfigSectionRun && len(args) > 0 {
+			if shouldInline && len(args) > 0 {
 				inlined := q.Query
 				for j := len(args) - 1; j >= 0; j-- {
 					placeholder := fmt.Sprintf("$%d", j+1)
