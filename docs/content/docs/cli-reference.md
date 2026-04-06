@@ -1,9 +1,9 @@
 ---
-title: Usage
-weight: 2
+title: CLI Reference
+weight: 3
 ---
 
-# Usage
+# CLI Reference
 
 ## Commands
 
@@ -19,26 +19,6 @@ weight: 2
 | `repl` | Interactive expression evaluator |
 
 Running `edg` with an expression (no subcommand) evaluates it and prints the result. Bare words are treated as [gofakeit](https://github.com/brianvoe/gofakeit) patterns, so `edg email` is equivalent to `edg "gen('email')"`. For expressions with parentheses or special characters, quote the argument.
-
-```
-edg email
-naomiroberts@robinson.net
-
-edg firstname
-Laura
-
-edg lastname
-Thompson
-
-edg "uuid_v4()"
-c8952841-6f5b-4743-a6de-2200415c2f03
-
-edg "regex('[A-Z]{3}-[0-9]{4}')"
-QVM-8314
-
-edg "set_rand(['a','b','c'], [])"
-b
-```
 
 A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `deseed` -> `down`. The `all` command runs this entire sequence in a single invocation.
 
