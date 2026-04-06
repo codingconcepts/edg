@@ -172,69 +172,69 @@ reference:
     - {code: ap-south, zone: ap, cities: [mumbai, singapore, tokyo]}
 ```
 
-| Category | Expression | Output |
+| Category | Expression | Example output |
 |---|---|---|
 | Arithmetic | `3 + 4 * 2` | `11` |
 | Arithmetic | `10 % 3` | `1` |
 | Arithmetic | `2 ** 8` | `256` |
-| Comparison & logic | `5 > 3 and 2 != 1` | `true` |
-| Comparison & logic | `not (1 == 2)` | `true` |
-| Conditionals | `150 > 0 ? 'in_stock' : 'sold_out'` | `in_stock` |
+| Comparison & logic | `ref_rand('products').stock > 0 and ref_rand('products').active` | `true` |
+| Comparison & logic | `not (ref_rand('products').category == 'stationery')` | `true` |
+| Conditionals | `ref_rand('products').stock > 0 ? 'in_stock' : 'sold_out'` | `in_stock` |
 | Conditionals | `nil ?? 'unknown'` | `unknown` |
 | Math functions | `abs(-7)` | `7` |
 | Math functions | `ceil(3.2)` | `4` |
-| Math functions | `floor(49.99)` | `49` |
-| Math functions | `round(29.99)` | `30` |
+| Math functions | `floor(ref_rand('products').price)` | `29` |
+| Math functions | `round(ref_rand('products').price)` | `30` |
 | Math functions | `mean([29.99, 49.99, 4.99, 1.99, 9.99])` | `19.39` |
 | Math functions | `median([1.99, 4.99, 9.99, 29.99, 49.99])` | `9.99` |
-| String functions | `upper('widget')` | `WIDGET` |
-| String functions | `lower('ELECTRONICS')` | `electronics` |
+| String functions | `upper(ref_rand('products').name)` | `WIDGET` |
+| String functions | `lower(ref_rand('products').category)` | `electronics` |
 | String functions | `trim('  gadget  ')` | `gadget` |
-| String functions | `trimPrefix('us-east', 'us-')` | `east` |
-| String functions | `trimSuffix('eu-west', '-west')` | `eu` |
+| String functions | `trimPrefix(ref_same('regions').code, ref_same('regions').zone + '-')` | `east` |
+| String functions | `trimSuffix(ref_same('regions').code, '-' + trimPrefix(ref_same('regions').code, ref_same('regions').zone + '-'))` | `us` |
 | String functions | `split('new_york,boston,miami', ',')` | `[new_york, boston, miami]` |
 | String functions | `splitAfter('us,eu,ap', ',')` | `[us,, eu,, ap]` |
-| String functions | `replace('new_york', '_', ' ')` | `new york` |
+| String functions | `replace(ref_same('regions').code, '-', '_')` | `us_east` |
 | String functions | `repeat('*', 5)` | `*****` |
 | String functions | `indexOf('london', 'on')` | `1` |
 | String functions | `lastIndexOf('london', 'on')` | `4` |
-| String functions | `hasPrefix('us-east', 'us-')` | `true` |
-| String functions | `hasSuffix('eu-west', '-west')` | `true` |
-| String operators | `'electronics' contains 'electron'` | `true` |
-| String operators | `'us-east' startsWith 'us'` | `true` |
-| String operators | `'eu-west' endsWith 'west'` | `true` |
-| String operators | `'us-east' matches '[a-z]+-[a-z]+'` | `true` |
-| Array functions | `filter(['Widget', 'Gadget', 'Cable'], {# endsWith 'et'})` | `[Widget, Gadget]` |
-| Array functions | `map(['us', 'eu', 'ap'], {upper(#)})` | `[US, EU, AP]` |
+| String functions | `hasPrefix(ref_same('regions').code, 'us')` | `true` |
+| String functions | `hasSuffix(ref_same('regions').code, 'east')` | `true` |
+| String operators | `ref_rand('products').category contains 'electron'` | `true` |
+| String operators | `ref_same('regions').code startsWith 'us'` | `true` |
+| String operators | `ref_same('regions').code endsWith 'east'` | `true` |
+| String operators | `ref_same('regions').code matches '[a-z]+-[a-z]+'` | `true` |
+| Array functions | `filter(ref_same('regions').cities, {# startsWith 'b'})` | `[boston]` |
+| Array functions | `map(ref_same('regions').cities, {upper(#)})` | `[NEW_YORK, BOSTON, MIAMI]` |
 | Array functions | `reduce([29.99, 49.99, 4.99, 1.99, 9.99], {#acc + #}, 0)` | `96.95` |
-| Array functions | `sort(['miami', 'boston', 'new_york'])` | `[boston, miami, new_york]` |
+| Array functions | `sort(ref_same('regions').cities)` | `[boston, miami, new_york]` |
 | Array functions | `sortBy(['Pen', 'Widget', 'Cable'], {len(#)})` | `[Pen, Cable, Widget]` |
-| Array functions | `reverse(['london', 'paris', 'dublin'])` | `[dublin, paris, london]` |
-| Array functions | `first(['new_york', 'boston', 'miami'])` | `new_york` |
-| Array functions | `last(['mumbai', 'singapore', 'tokyo'])` | `tokyo` |
-| Array functions | `take(['london', 'paris', 'dublin'], 2)` | `[london, paris]` |
+| Array functions | `reverse(ref_same('regions').cities)` | `[miami, boston, new_york]` |
+| Array functions | `first(ref_same('regions').cities)` | `new_york` |
+| Array functions | `last(ref_same('regions').cities)` | `miami` |
+| Array functions | `take(ref_same('regions').cities, 2)` | `[new_york, boston]` |
 | Array functions | `flatten([['new_york', 'boston'], ['london', 'paris']])` | `[new_york, boston, london, paris]` |
 | Array functions | `uniq(['electronics', 'stationery', 'electronics'])` | `[electronics, stationery]` |
-| Array functions | `concat(['new_york', 'boston'], ['london', 'paris'])` | `[new_york, boston, london, paris]` |
-| Array functions | `join(['london', 'paris', 'dublin'], ', ')` | `london, paris, dublin` |
-| Array functions | `find(['Widget', 'Gadget', 'Cable'], {# startsWith 'G'})` | `Gadget` |
-| Array functions | `findIndex(['Widget', 'Gadget', 'Cable'], {# startsWith 'G'})` | `1` |
-| Array functions | `findLast(['Widget', 'Gadget', 'Cable'], {# endsWith 'et'})` | `Gadget` |
-| Array functions | `findLastIndex(['Widget', 'Gadget', 'Cable'], {# endsWith 'et'})` | `1` |
-| Array functions | `all([150, 80, 500, 1000], {# > 0})` | `true` |
-| Array functions | `any([150, 80, 0], {# == 0})` | `true` |
-| Array functions | `one([150, 80, 0], {# == 0})` | `true` |
-| Array functions | `none(['Widget', 'Gadget', 'Cable'], {# == 'Pen'})` | `true` |
-| Array functions | `groupBy(['new_york', 'boston', 'miami'], {len(#) > 5})` | `{false: [boston, miami], true: [new_york]}` |
-| Map functions | `keys({name: 'Widget', price: 29.99, active: true})` | `[name, price, active]` |
-| Map functions | `values({name: 'Widget', price: 29.99, active: true})` | `[Widget, 29.99, true]` |
+| Array functions | `concat(ref_same('regions').cities, ['london', 'paris'])` | `[new_york, boston, miami, london, paris]` |
+| Array functions | `join(ref_same('regions').cities, ', ')` | `new_york, boston, miami` |
+| Array functions | `find(ref_same('regions').cities, {# startsWith 'b'})` | `boston` |
+| Array functions | `findIndex(ref_same('regions').cities, {# startsWith 'b'})` | `1` |
+| Array functions | `findLast(ref_same('regions').cities, {# endsWith 'i'})` | `miami` |
+| Array functions | `findLastIndex(ref_same('regions').cities, {# endsWith 'i'})` | `2` |
+| Array functions | `all(ref_same('regions').cities, {len(#) > 3})` | `true` |
+| Array functions | `any(ref_same('regions').cities, {# == 'miami'})` | `true` |
+| Array functions | `one(ref_same('regions').cities, {# == 'miami'})` | `true` |
+| Array functions | `none(ref_same('regions').cities, {# == 'tokyo'})` | `true` |
+| Array functions | `groupBy(ref_same('regions').cities, {len(#) > 5})` | `{false: [miami, boston], true: [new_york]}` |
+| Map functions | `keys(ref_rand('products'))` | `[name, category, price, stock, active]` |
+| Map functions | `values(ref_rand('products'))` | `[Widget, electronics, 29.99, 150, true]` |
 | Type conversion | `int('42')` | `42` |
-| Type conversion | `float(150)` | `150.0` |
-| Type conversion | `string(29.99)` | `29.99` |
-| Type conversion | `type(29.99)` | `float` |
-| Type conversion | `toJSON({name: 'Widget', price: 29.99})` | `{"name":"Widget","price":29.99}` |
+| Type conversion | `float(ref_rand('products').stock)` | `150.0` |
+| Type conversion | `string(ref_rand('products').price)` | `29.99` |
+| Type conversion | `type(ref_rand('products').price)` | `float` |
+| Type conversion | `toJSON(ref_rand('products'))` | `{"active":true,"category":"electronics","name":"Widget","price":29.99,"stock":150}` |
 | Type conversion | `fromJSON('{"code":"us-east","zone":"us"}')` | `{code: us-east, zone: us}` |
-| Type conversion | `toBase64('Widget')` | `V2lkZ2V0` |
+| Type conversion | `toBase64(ref_rand('products').name)` | `V2lkZ2V0` |
 | Type conversion | `fromBase64('V2lkZ2V0')` | `Widget` |
 | Type conversion | `toPairs({name: 'Widget', price: 29.99})` | `[[name, Widget], [price, 29.99]]` |
 | Type conversion | `fromPairs([['name', 'Widget'], ['price', 29.99]])` | `{name: Widget, price: 29.99}` |
@@ -244,13 +244,13 @@ reference:
 | Bitwise | `bitnot(0b1100)` | `-13` |
 | Bitwise | `bitshl(1, 4)` | `16` |
 | Bitwise | `bitshr(16, 4)` | `1` |
-| Operators | `29.99 \| int` | `29` |
-| Operators | `'eu' in ['us', 'eu', 'ap']` | `true` |
+| Operators | `ref_rand('products').price \| int` | `29` |
+| Operators | `ref_same('regions').zone in ['us', 'eu', 'ap']` | `true` |
 | Operators | `1..5` | `[1, 2, 3, 4]` |
-| Operators | `['new_york', 'boston', 'miami'][0:2]` | `[new_york, boston]` |
-| Operators | `{name: 'Widget', details: {color: 'red'}}?.details?.color` | `red` |
-| Language | `let markup = 10; 29.99 + markup` | `39.99` |
-| Language | `all(['Widget', 'Gadget', 'Cable'], {len(#) > 0})` | `true` |
-| Language | `len(['new_york', 'boston', 'miami'])` | `3` |
-| Language | `get({code: 'us-east', zone: 'us'}, 'zone')` | `us` |
+| Operators | `ref_same('regions').cities[0:2]` | `[new_york, boston]` |
+| Operators | `ref_rand('products')?.name` | `Widget` |
+| Language | `let p = ref_rand('products'); p.price + 10` | `39.99` |
+| Language | `all(ref_same('regions').cities, {len(#) > 0})` | `true` |
+| Language | `len(ref_same('regions').cities)` | `3` |
+| Language | `get(ref_rand('products'), 'name')` | `Widget` |
 
