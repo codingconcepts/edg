@@ -33,6 +33,6 @@ edg all \
 
 ## Documentation
 
-View the docs [here](https://codingconcepts.github.io/edg).
+View the docs [here](https://edg.run/docs).
 
 ## Todos
