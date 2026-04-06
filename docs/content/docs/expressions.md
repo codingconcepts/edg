@@ -174,30 +174,30 @@ reference:
 
 | Category | Expression | Example output |
 |---|---|---|
-| Arithmetic | `3 + 4 * 2` | `11` |
-| Arithmetic | `10 % 3` | `1` |
-| Arithmetic | `2 ** 8` | `256` |
+| Arithmetic | `3 + 4 * 2`<br><br>`ref_rand('products').price + ref_rand('products').stock * 2` | `11`<br><br>`329.99` |
+| Arithmetic | `10 % 3`<br><br>`ref_rand('products').stock % 7` | `1`<br><br>`3` |
+| Arithmetic | `2 ** 8`<br><br>`len(ref_same('regions').cities) ** 3` | `256`<br><br>`27` |
 | Comparison & logic | `ref_rand('products').stock > 0 and ref_rand('products').active` | `true` |
 | Comparison & logic | `not (ref_rand('products').category == 'stationery')` | `true` |
 | Conditionals | `ref_rand('products').stock > 0 ? 'in_stock' : 'sold_out'` | `in_stock` |
-| Conditionals | `nil ?? 'unknown'` | `unknown` |
-| Math functions | `abs(-7)` | `7` |
-| Math functions | `ceil(3.2)` | `4` |
+| Conditionals | `nil ?? 'unknown'`<br><br>`ref_rand('products')?.description ?? 'none'` | `unknown`<br><br>`none` |
+| Math functions | `abs(-7)`<br><br>`abs(ref_rand('products').stock - 200)` | `7`<br><br>`50` |
+| Math functions | `ceil(3.2)`<br><br>`ceil(ref_rand('products').price)` | `4`<br><br>`30` |
 | Math functions | `floor(ref_rand('products').price)` | `29` |
 | Math functions | `round(ref_rand('products').price)` | `30` |
-| Math functions | `mean([29.99, 49.99, 4.99, 1.99, 9.99])` | `19.39` |
-| Math functions | `median([1.99, 4.99, 9.99, 29.99, 49.99])` | `9.99` |
+| Math functions | `mean([29.99, 49.99, 4.99, 1.99, 9.99])`<br><br>`mean(map(ref_same('regions').cities, {len(#)}))` | `19.39`<br><br>`6.33` |
+| Math functions | `median([1.99, 4.99, 9.99, 29.99, 49.99])`<br><br>`median(map(ref_same('regions').cities, {len(#)}))` | `9.99`<br><br>`6` |
 | String functions | `upper(ref_rand('products').name)` | `WIDGET` |
 | String functions | `lower(ref_rand('products').category)` | `electronics` |
-| String functions | `trim('  gadget  ')` | `gadget` |
+| String functions | `trim('  gadget  ')`<br><br>`trim(ref_rand('products').name)` | `gadget`<br><br>`Widget` |
 | String functions | `trimPrefix(ref_same('regions').code, ref_same('regions').zone + '-')` | `east` |
 | String functions | `trimSuffix(ref_same('regions').code, '-' + trimPrefix(ref_same('regions').code, ref_same('regions').zone + '-'))` | `us` |
-| String functions | `split('new_york,boston,miami', ',')` | `[new_york, boston, miami]` |
-| String functions | `splitAfter('us,eu,ap', ',')` | `[us,, eu,, ap]` |
+| String functions | `split('new_york,boston,miami', ',')`<br><br>`split(ref_same('regions').code, '-')` | `[new_york, boston, miami]`<br><br>`[us, east]` |
+| String functions | `splitAfter('us,eu,ap', ',')`<br><br>`splitAfter(ref_same('regions').code, '-')` | `[us,, eu,, ap]`<br><br>`[us-, east]` |
 | String functions | `replace(ref_same('regions').code, '-', '_')` | `us_east` |
-| String functions | `repeat('*', 5)` | `*****` |
-| String functions | `indexOf('london', 'on')` | `1` |
-| String functions | `lastIndexOf('london', 'on')` | `4` |
+| String functions | `repeat('*', 5)`<br><br>`repeat(ref_same('regions').zone, 3)` | `*****`<br><br>`ususus` |
+| String functions | `indexOf('london', 'on')`<br><br>`indexOf(ref_rand('products').category, 'c')` | `1`<br><br>`3` |
+| String functions | `lastIndexOf('london', 'on')`<br><br>`lastIndexOf(ref_rand('products').category, 'c')` | `4`<br><br>`9` |
 | String functions | `hasPrefix(ref_same('regions').code, 'us')` | `true` |
 | String functions | `hasSuffix(ref_same('regions').code, 'east')` | `true` |
 | String operators | `ref_rand('products').category contains 'electron'` | `true` |
@@ -206,15 +206,15 @@ reference:
 | String operators | `ref_same('regions').code matches '[a-z]+-[a-z]+'` | `true` |
 | Array functions | `filter(ref_same('regions').cities, {# startsWith 'b'})` | `[boston]` |
 | Array functions | `map(ref_same('regions').cities, {upper(#)})` | `[NEW_YORK, BOSTON, MIAMI]` |
-| Array functions | `reduce([29.99, 49.99, 4.99, 1.99, 9.99], {#acc + #}, 0)` | `96.95` |
+| Array functions | `reduce([29.99, 49.99, 4.99, 1.99, 9.99], {#acc + #}, 0)`<br><br>`reduce(ref_same('regions').cities, {#acc + len(#)}, 0)` | `96.95`<br><br>`19` |
 | Array functions | `sort(ref_same('regions').cities)` | `[boston, miami, new_york]` |
-| Array functions | `sortBy(['Pen', 'Widget', 'Cable'], {len(#)})` | `[Pen, Cable, Widget]` |
+| Array functions | `sortBy(['Pen', 'Widget', 'Cable'], {len(#)})`<br><br>`sortBy(ref_same('regions').cities, {len(#)})` | `[Pen, Cable, Widget]`<br><br>`[miami, boston, new_york]` |
 | Array functions | `reverse(ref_same('regions').cities)` | `[miami, boston, new_york]` |
 | Array functions | `first(ref_same('regions').cities)` | `new_york` |
 | Array functions | `last(ref_same('regions').cities)` | `miami` |
 | Array functions | `take(ref_same('regions').cities, 2)` | `[new_york, boston]` |
-| Array functions | `flatten([['new_york', 'boston'], ['london', 'paris']])` | `[new_york, boston, london, paris]` |
-| Array functions | `uniq(['electronics', 'stationery', 'electronics'])` | `[electronics, stationery]` |
+| Array functions | `flatten([['new_york', 'boston'], ['london', 'paris']])`<br><br>`flatten([ref_same('regions').cities, ['sydney', 'tokyo']])` | `[new_york, boston, london, paris]`<br><br>`[new_york, boston, miami, sydney, tokyo]` |
+| Array functions | `uniq(['electronics', 'stationery', 'electronics'])`<br><br>`uniq(concat(ref_same('regions').cities, ref_same('regions').cities))` | `[electronics, stationery]`<br><br>`[new_york, boston, miami]` |
 | Array functions | `concat(ref_same('regions').cities, ['london', 'paris'])` | `[new_york, boston, miami, london, paris]` |
 | Array functions | `join(ref_same('regions').cities, ', ')` | `new_york, boston, miami` |
 | Array functions | `find(ref_same('regions').cities, {# startsWith 'b'})` | `boston` |
@@ -228,29 +228,46 @@ reference:
 | Array functions | `groupBy(ref_same('regions').cities, {len(#) > 5})` | `{false: [miami, boston], true: [new_york]}` |
 | Map functions | `keys(ref_rand('products'))` | `[name, category, price, stock, active]` |
 | Map functions | `values(ref_rand('products'))` | `[Widget, electronics, 29.99, 150, true]` |
-| Type conversion | `int('42')` | `42` |
+| Type conversion | `int('42')`<br><br>`int(ref_rand('products').price)` | `42`<br><br>`29` |
 | Type conversion | `float(ref_rand('products').stock)` | `150.0` |
 | Type conversion | `string(ref_rand('products').price)` | `29.99` |
 | Type conversion | `type(ref_rand('products').price)` | `float` |
 | Type conversion | `toJSON(ref_rand('products'))` | `{"active":true,"category":"electronics","name":"Widget","price":29.99,"stock":150}` |
-| Type conversion | `fromJSON('{"code":"us-east","zone":"us"}')` | `{code: us-east, zone: us}` |
+| Type conversion | `fromJSON('{"code":"us-east","zone":"us"}')`<br><br>`fromJSON('{"id":' + string(ref_rand('products').stock) + '}')` | `{code: us-east, zone: us}`<br><br>`{id: 150}` |
 | Type conversion | `toBase64(ref_rand('products').name)` | `V2lkZ2V0` |
-| Type conversion | `fromBase64('V2lkZ2V0')` | `Widget` |
-| Type conversion | `toPairs({name: 'Widget', price: 29.99})` | `[[name, Widget], [price, 29.99]]` |
-| Type conversion | `fromPairs([['name', 'Widget'], ['price', 29.99]])` | `{name: Widget, price: 29.99}` |
-| Bitwise | `bitand(0b1100, 0b1010)` | `8` |
-| Bitwise | `bitor(0b1100, 0b1010)` | `14` |
-| Bitwise | `bitxor(0b1100, 0b1010)` | `6` |
-| Bitwise | `bitnot(0b1100)` | `-13` |
-| Bitwise | `bitshl(1, 4)` | `16` |
-| Bitwise | `bitshr(16, 4)` | `1` |
+| Type conversion | `fromBase64('V2lkZ2V0')`<br><br>`fromBase64(toBase64(ref_rand('products').name))` | `Widget`<br><br>`Widget` |
+| Type conversion | `toPairs({name: 'Widget', price: 29.99})`<br><br>`toPairs(ref_rand('products'))` | `[[name, Widget], [price, 29.99]]`<br><br>`[[active, true], [category, electronics], [name, Widget], [price, 29.99], [stock, 150]]` |
+| Type conversion | `fromPairs([['name', 'Widget'], ['price', 29.99]])`<br><br>`fromPairs([['product', ref_rand('products').name], ['zone', ref_same('regions').zone]])` | `{name: Widget, price: 29.99}`<br><br>`{product: Widget, zone: us}` |
+| Bitwise | `bitand(0b1100, 0b1010)`<br><br>`bitand(ref_rand('products').stock, 0xFF)` | `8`<br><br>`150` |
+| Bitwise | `bitor(0b1100, 0b1010)`<br><br>`bitor(ref_rand('products').stock, 1)` | `14`<br><br>`151` |
+| Bitwise | `bitxor(0b1100, 0b1010)`<br><br>`bitxor(ref_rand('products').stock, 0xFF)` | `6`<br><br>`105` |
+| Bitwise | `bitnot(0b1100)`<br><br>`bitnot(ref_rand('products').stock)` | `-13`<br><br>`-151` |
+| Bitwise | `bitshl(1, 4)`<br><br>`bitshl(1, len(ref_same('regions').cities))` | `16`<br><br>`8` |
+| Bitwise | `bitshr(16, 4)`<br><br>`bitshr(ref_rand('products').stock, 1)` | `1`<br><br>`75` |
 | Operators | `ref_rand('products').price \| int` | `29` |
 | Operators | `ref_same('regions').zone in ['us', 'eu', 'ap']` | `true` |
-| Operators | `1..5` | `[1, 2, 3, 4]` |
+| Operators | `1..5`<br><br>`1..len(ref_same('regions').cities) + 1` | `[1, 2, 3, 4]`<br><br>`[1, 2, 3]` |
 | Operators | `ref_same('regions').cities[0:2]` | `[new_york, boston]` |
 | Operators | `ref_rand('products')?.name` | `Widget` |
 | Language | `let p = ref_rand('products'); p.price + 10` | `39.99` |
 | Language | `all(ref_same('regions').cities, {len(#) > 0})` | `true` |
 | Language | `len(ref_same('regions').cities)` | `3` |
 | Language | `get(ref_rand('products'), 'name')` | `Widget` |
+
+### Advanced expr expressions
+
+These examples combine multiple functions and reference lookups to show more advanced usage patterns.
+
+| Description | Expression | Example output |
+|---|---|---|
+| Conditional formatting | `let p = ref_rand('products'); p.stock > 100 ? upper(p.name) : lower(p.name)` | `WIDGET` |
+| Discount pricing | `let p = ref_rand('products'); p.active ? round(p.price * 0.9) : 0` | `27` |
+| Multi-condition classification | `let p = ref_rand('products'); p.price > 10 and p.stock > 0 ? 'premium' : (p.active ? 'basic' : 'discontinued')` | `premium` |
+| Derived metric | `let p = ref_rand('products'); int(ceil(p.price * float(p.stock) / 100))` | `45` |
+| Derived slug | `let p = ref_rand('products'); replace(lower(p.name + '_' + p.category), ' ', '_')` | `widget_electronics` |
+| Conditional string ops | `let r = ref_same('regions'); hasPrefix(r.code, 'us') ? upper(first(r.cities)) : lower(last(r.cities))` | `NEW_YORK` |
+| Chained array ops | `join(take(sort(map(ref_same('regions').cities, {upper(#)})), 2), ', ')` | `BOSTON, MIAMI` |
+| Reduce mapped values | `reduce(map(ref_same('regions').cities, {len(#)}), {#acc + #}, 0)` | `19` |
+| Filtered count | `len(filter(ref_same('regions').cities, {len(#) > 5}))` | `2` |
+| JSON from refs | `toJSON(fromPairs([['product', ref_rand('products').name], ['zone', ref_same('regions').zone]]))` | `{"product":"Widget","zone":"us"}` |
 
