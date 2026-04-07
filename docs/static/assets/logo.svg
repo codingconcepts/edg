@@ -1,0 +1,142 @@
+<svg id="edg-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" overflow="visible">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@700&amp;display=swap');
+
+    @keyframes edg-breathe {
+      0%, 100% { transform: scale(1); }
+      33% { transform: scale(1.06); }
+      66% { transform: scale(1.02); }
+    }
+    @keyframes edg-spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    #edg-blob-wrap {
+      animation: edg-breathe 15s ease-in-out infinite, edg-spin 30s linear infinite;
+      transform-origin: 195px 190px;
+    }
+    .edg-letter {
+      font-family: 'Comfortaa', sans-serif;
+      font-weight: 700;
+      font-size: 145px;
+      fill: #ffffff;
+    }
+  </style>
+
+  <defs>
+    <linearGradient id="edg-grad" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0%" />
+      <stop offset="50%" />
+      <stop offset="100%" />
+    </linearGradient>
+  </defs>
+
+  <!-- Animated blob -->
+  <g id="edg-blob-wrap">
+    <path id="edg-blob" fill="url(#edg-grad)"
+      d="M255,91 C342,77 349,198 296,271 C242,343 101,350 78,248 C55,155 166,112 255,91Z">
+      <animate
+        attributeName="d"
+        dur="12s"
+        repeatCount="indefinite"
+        calcMode="spline"
+        keyTimes="0;0.25;0.5;0.75;1"
+        keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1"
+        values="
+          M255,91 C342,77 349,198 296,271 C242,343 101,350 78,248 C55,155 166,112 255,91Z;
+          M274,89 C357,107 329,219 281,290 C228,361 86,331 65,230 C44,128 195,73 274,89Z;
+          M241,100 C336,56 363,212 302,275 C241,338 116,361 82,257 C48,153 138,141 241,100Z;
+          M262,84 C349,93 340,192 290,266 C240,340 95,356 72,245 C49,134 167,80 262,84Z;
+          M255,91 C342,77 349,198 296,271 C242,343 101,350 78,248 C55,155 166,112 255,91Z
+        "
+      />
+    </path>
+  </g>
+
+  <!-- "edg" letterforms: backwards e, d, g — overlapping slightly -->
+  <!-- backwards e (mirrored horizontally around its center) -->
+  <text class="edg-letter" text-anchor="middle"
+        transform="translate(161, 225) scale(-1, 1)"
+        x="0" y="0">e</text>
+  <!-- d -->
+  <text class="edg-letter" text-anchor="middle"
+        x="225" y="225">d</text>
+  <!-- g -->
+  <text class="edg-letter" text-anchor="middle"
+        x="223" y="225">g</text>
+
+  <script type="text/javascript">
+  //<![CDATA[
+  (function () {
+    // ============================================================
+    // GRADIENT CONFIGURATION
+    // Each entry is [topColor, midColor, bottomColor].
+    // Call svg.setGradients([...]) at runtime to swap them.
+    // ============================================================
+    var gradients = [
+      ['#5CE1C8', '#A8E06C', '#F5C842'],
+      ['#667EEA', '#9B6FD4', '#F093FB'],
+      ['#FF6B6B', '#FF8E53', '#FED330'],
+      ['#00C9FF', '#44D492', '#92FE9D']
+    ];
+
+    var MS_PER_TRANSITION = 4000;
+    var grad = document.getElementById('edg-grad');
+    var stops = grad.querySelectorAll('stop');
+    var svg = document.getElementById('edg-logo') || document.documentElement;
+
+    // Runtime API
+    svg.setGradients = function (g) { gradients = g; };
+    svg.getGradients = function () { return gradients; };
+
+    function hex2rgb(h) {
+      return [
+        parseInt(h.slice(1, 3), 16),
+        parseInt(h.slice(3, 5), 16),
+        parseInt(h.slice(5, 7), 16)
+      ];
+    }
+
+    function rgb2hex(r, g, b) {
+      return '#' + [r, g, b].map(function (v) {
+        return Math.round(Math.max(0, Math.min(255, v)))
+          .toString(16).padStart(2, '0');
+      }).join('');
+    }
+
+    function ease(t) {
+      return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    }
+
+    var t0 = null;
+
+    function frame(ts) {
+      if (!t0) t0 = ts;
+      var total = gradients.length * MS_PER_TRANSITION;
+      var pos = (ts - t0) % total;
+      var idx = Math.floor(pos / MS_PER_TRANSITION);
+      var t = ease((pos % MS_PER_TRANSITION) / MS_PER_TRANSITION);
+      var from = gradients[idx];
+      var to = gradients[(idx + 1) % gradients.length];
+
+      for (var i = 0; i < 3; i++) {
+        var a = hex2rgb(from[i]), b = hex2rgb(to[i]);
+        stops[i].setAttribute('stop-color', rgb2hex(
+          a[0] + (b[0] - a[0]) * t,
+          a[1] + (b[1] - a[1]) * t,
+          a[2] + (b[2] - a[2]) * t
+        ));
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // Set initial gradient
+    for (var i = 0; i < 3; i++) {
+      stops[i].setAttribute('stop-color', gradients[0][i]);
+    }
+
+    requestAnimationFrame(frame);
+  })();
+  //]]>
+  </script>
+</svg>
