@@ -10,12 +10,10 @@ test:
 bench:
 	go test ./... -bench=. -benchmem -count=1 -benchtime=100ms
 
-integration_test:
-	CGO_ENABLED=0 GOOS=linux go test ./pkg -v -c -o edg-test
-	docker build -t edg-test -f Dockerfile.test .
-	docker compose -f docker-compose.test.yml up --abort-on-container-exit --force-recreate
-	docker compose -f docker-compose.test.yml down
-	rm -f edg-test
+integration_test_crdb:
+	URL="postgres://root@localhost:26257?sslmode=disable" \
+	DRIVER="pgx" \
+	go test ./pkg -v -db
 
 docs:
 	(cd docs && hugo server --disableFastRender)

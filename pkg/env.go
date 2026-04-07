@@ -40,6 +40,10 @@ type Env struct {
 }
 
 func NewEnv(db *sql.DB, r *Request) (*Env, error) {
+	if err := r.Validate(); err != nil {
+		return nil, fmt.Errorf("config validation: %w", err)
+	}
+
 	env := Env{
 		db:        db,
 		oneCache:  map[string]any{},
@@ -111,18 +115,31 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 		"distinct":          env.aggDistinct,     // Number of distinct values for a field in a dataset.
 	}
 
+	// Check that globals don't shadow built-in functions.
+	for name := range r.Globals {
+		if _, exists := env.env[name]; exists {
+			return nil, fmt.Errorf("global %q shadows a built-in function", name)
+		}
+	}
+
 	// Add each global variable to map itself for cleaner access.
 	maps.Copy(env.env, r.Globals)
 
 	// Load reference datasets into the environment so they're available
 	// via ref_rand, ref_same, etc. without a database query.
 	for name, rows := range r.Reference {
+		if _, exists := env.env[name]; exists {
+			return nil, fmt.Errorf("reference dataset %q shadows a built-in function or global", name)
+		}
 		env.SetEnv(name, slices.Clone(rows))
 	}
 
 	// Register user-defined expressions as callable functions.
 	// First pass: add stubs so the compiler sees all expression names.
 	for name := range r.Expressions {
+		if _, exists := env.env[name]; exists {
+			return nil, fmt.Errorf("expression %q shadows a built-in function, global, or reference dataset", name)
+		}
 		env.env[name] = func(args ...any) (any, error) {
 			return nil, fmt.Errorf("expression %q used before compilation", name)
 		}
@@ -290,7 +307,10 @@ func (e *Env) InitFrom(source *Env) {
 		if !ok {
 			continue
 		}
-		copied := slices.Clone(data)
+		copied := make([]map[string]any, len(data))
+		for i, row := range data {
+			copied[i] = maps.Clone(row)
+		}
 		e.SetEnv(q.Name, copied)
 	}
 }

@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"log/slog"
 	"math"
 )
 
@@ -27,7 +28,12 @@ func (e *Env) aggSum(name, field string) float64 {
 	}
 	var total float64
 	for _, row := range data {
-		total += toFloat(row[field])
+		v, err := toFloat(row[field])
+		if err != nil {
+			slog.Warn("sum: skipping non-numeric value", "field", field, "value", row[field])
+			continue
+		}
+		total += v
 	}
 	return total
 }
@@ -53,7 +59,11 @@ func (e *Env) aggMin(name, field string) float64 {
 	}
 	result := math.Inf(1)
 	for _, row := range data {
-		v := toFloat(row[field])
+		v, err := toFloat(row[field])
+		if err != nil {
+			slog.Warn("min: skipping non-numeric value", "field", field, "value", row[field])
+			continue
+		}
 		if v < result {
 			result = v
 		}
@@ -71,7 +81,11 @@ func (e *Env) aggMax(name, field string) float64 {
 	}
 	result := math.Inf(-1)
 	for _, row := range data {
-		v := toFloat(row[field])
+		v, err := toFloat(row[field])
+		if err != nil {
+			slog.Warn("max: skipping non-numeric value", "field", field, "value", row[field])
+			continue
+		}
 		if v > result {
 			result = v
 		}

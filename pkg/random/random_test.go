@@ -45,7 +45,10 @@ func TestUniform(t *testing.T) {
 func TestZipf(t *testing.T) {
 	bins := make([]int, 100)
 	for range 10000 {
-		v := Zipf(2.0, 1.0, 99)
+		v, err := Zipf(2.0, 1.0, 99)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < 0 || v > 99 {
 			t.Fatalf("Zipf(2.0, 1.0, 99) = %d, out of range [0, 99]", v)
 		}
@@ -59,10 +62,10 @@ func TestZipf(t *testing.T) {
 }
 
 func TestZipf_InvalidParams(t *testing.T) {
-	// s <= 1 should return 0 (NewZipf returns nil).
-	v := Zipf(0.5, 1.0, 100)
-	if v != 0 {
-		t.Errorf("Zipf with s <= 1 = %d, want 0", v)
+	// s <= 1 should return an error (NewZipf returns nil).
+	_, err := Zipf(0.5, 1.0, 100)
+	if err == nil {
+		t.Error("Zipf with s <= 1 should return error")
 	}
 }
 
@@ -77,7 +80,10 @@ func TestNorm_DefaultPrecision(t *testing.T) {
 
 	sum := 0.0
 	for range n {
-		v := Norm(mean, stddev, min, max)
+		v, err := Norm(mean, stddev, min, max)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < min || v > max {
 			t.Fatalf("Norm value %v outside [%.0f, %.0f]", v, min, max)
 		}
@@ -96,7 +102,10 @@ func TestNorm_DefaultPrecision(t *testing.T) {
 
 func TestNorm_WithPrecision(t *testing.T) {
 	for range 1000 {
-		v := Norm(50, 10, 1, 100, 2)
+		v, err := Norm(50, 10, 1, 100, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < 1 || v > 100 {
 			t.Fatalf("Norm with precision 2: %v outside [1, 100]", v)
 		}
@@ -122,7 +131,10 @@ func TestNorm_Distribution(t *testing.T) {
 	within2 := 0
 
 	for range n {
-		v := Norm(mean, stddev, min, max)
+		v, err := Norm(mean, stddev, min, max)
+		if err != nil {
+			t.Fatal(err)
+		}
 		dist := math.Abs(v - mean)
 		switch {
 		case dist <= stddev:
@@ -154,7 +166,10 @@ func TestExp_DefaultPrecision(t *testing.T) {
 
 	sum := 0.0
 	for range n {
-		v := Exp(rate, min, max)
+		v, err := Exp(rate, min, max)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < min || v > max {
 			t.Fatalf("Exp value %v outside [%.0f, %.0f]", v, min, max)
 		}
@@ -175,7 +190,10 @@ func TestExp_DefaultPrecision(t *testing.T) {
 
 func TestExp_WithPrecision(t *testing.T) {
 	for range 1000 {
-		v := Exp(0.5, 0, 100, 2)
+		v, err := Exp(0.5, 0, 100, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < 0 || v > 100 {
 			t.Fatalf("Exp with precision 2: %v outside [0, 100]", v)
 		}
@@ -202,7 +220,10 @@ func TestExp_Distribution(t *testing.T) {
 	// so P ≈ 1 - e^(-0.5*2.5) ≈ 71.3%.
 	belowMedian := 0
 	for range n {
-		v := Exp(rate, min, max)
+		v, err := Exp(rate, min, max)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v <= 2 {
 			belowMedian++
 		}
@@ -224,7 +245,10 @@ func TestLogNorm_DefaultPrecision(t *testing.T) {
 	)
 
 	for range n {
-		v := LogNorm(mu, sigma, min, max)
+		v, err := LogNorm(mu, sigma, min, max)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < min || v > max {
 			t.Fatalf("LogNorm value %v outside [%.0f, %.0f]", v, min, max)
 		}
@@ -237,7 +261,10 @@ func TestLogNorm_DefaultPrecision(t *testing.T) {
 
 func TestLogNorm_WithPrecision(t *testing.T) {
 	for range 1000 {
-		v := LogNorm(2.0, 0.5, 1, 100, 2)
+		v, err := LogNorm(2.0, 0.5, 1, 100, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < 1 || v > 100 {
 			t.Fatalf("LogNorm with precision 2: %v outside [1, 100]", v)
 		}
@@ -265,7 +292,10 @@ func TestLogNorm_Distribution(t *testing.T) {
 	sum := 0.0
 
 	for range n {
-		v := LogNorm(mu, sigma, min, max)
+		v, err := LogNorm(mu, sigma, min, max)
+		if err != nil {
+			t.Fatal(err)
+		}
 		sum += v
 		if v <= expectedMedian {
 			belowMedian++

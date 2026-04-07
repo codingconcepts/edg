@@ -524,6 +524,24 @@ func TestInitFrom_IndependentCopies(t *testing.T) {
 	}
 }
 
+func TestNewEnv_GlobalShadowsBuiltin(t *testing.T) {
+	req := &Request{
+		Globals: map[string]any{
+			"ref_rand": "oops",
+		},
+	}
+
+	_, err := NewEnv(nil, req)
+	if err == nil {
+		t.Fatal("expected error when global shadows a built-in, got nil")
+	}
+
+	want := `global "ref_rand" shadows a built-in function`
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err.Error(), want)
+	}
+}
+
 func TestReference_LoadedIntoEnv(t *testing.T) {
 	req := &Request{
 		Reference: map[string][]map[string]any{

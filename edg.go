@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -68,8 +69,17 @@ func main() {
 	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql]")
 
 	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd(), allCmd(), replCmd())
+	root.SilenceUsage = true
+	root.SilenceErrors = true
 
 	if err := root.Execute(); err != nil {
+		if ctx := root.Context(); ctx != nil && ctx.Err() != nil {
+			fmt.Fprintln(os.Stderr, "cancelled")
+		} else if errors.Is(err, context.Canceled) {
+			fmt.Fprintln(os.Stderr, "cancelled")
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		os.Exit(1)
 	}
 }
@@ -408,17 +418,17 @@ func allCmd() *cobra.Command {
 				return err
 			}
 
-			if err := run(ctx, cancel, db, req, duration, workers, printInterval); err != nil {
+			// Create a child context for run's duration timeout so the
+			// parent context remains live for teardown.
+			runCtx, runCancel := context.WithCancel(ctx)
+			if err := run(runCtx, runCancel, db, req, duration, workers, printInterval); err != nil {
 				return err
 			}
 
-			// Reset context for teardown (the run phase cancelled it).
-			teardownCtx := context.Background()
-
-			if err := env.Deseed(teardownCtx); err != nil {
+			if err := env.Deseed(ctx); err != nil {
 				return err
 			}
-			return env.Down(teardownCtx)
+			return env.Down(ctx)
 		},
 	}
 

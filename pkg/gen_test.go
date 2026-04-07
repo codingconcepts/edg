@@ -11,19 +11,28 @@ import (
 )
 
 func TestGen(t *testing.T) {
-	result := gen("number:1,100")
+	result, err := gen("number:1,100")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == nil {
 		t.Fatal("gen returned nil for valid pattern")
 	}
 
-	result = gen("{number:1,100}")
+	result, err = gen("{number:1,100}")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == nil {
 		t.Fatal("gen returned nil for already-wrapped pattern")
 	}
 }
 
 func TestGenBatch(t *testing.T) {
-	result := genBatch(25, 10, "email")
+	result, err := genBatch(25, 10, "email")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(result) != 3 {
 		t.Fatalf("genBatch(25, 10) returned %d batches, want 3", len(result))
 	}
@@ -60,7 +69,10 @@ func TestGenBatch(t *testing.T) {
 }
 
 func TestGenBatch_ExactMultiple(t *testing.T) {
-	result := genBatch(20, 10, "email")
+	result, err := genBatch(20, 10, "email")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(result) != 2 {
 		t.Fatalf("genBatch(20, 10) returned %d batches, want 2", len(result))
 	}
@@ -74,7 +86,10 @@ func TestGenBatch_ExactMultiple(t *testing.T) {
 
 func TestFloatRand(t *testing.T) {
 	for range 1000 {
-		v := floatRand(1.0, 10.0, 2)
+		v, err := floatRand(1.0, 10.0, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < 1.0 || v > 10.0 {
 			t.Fatalf("floatRand(1.0, 10.0, 2) = %v, out of range", v)
 		}
@@ -87,7 +102,10 @@ func TestFloatRand(t *testing.T) {
 
 func TestUniformRand(t *testing.T) {
 	for range 1000 {
-		v := uniformRand(5.0, 15.0)
+		v, err := uniformRand(5.0, 15.0)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < 5.0 || v >= 15.0 {
 			t.Fatalf("uniformRand(5.0, 15.0) = %v, out of range", v)
 		}
@@ -97,7 +115,10 @@ func TestUniformRand(t *testing.T) {
 func TestZipfRand(t *testing.T) {
 	bins := make([]int, 100)
 	for range 10000 {
-		v := zipfRand(2.0, 1.0, 99)
+		v, err := zipfRand(2.0, 1.0, 99)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < 0 || v > 99 {
 			t.Fatalf("zipfRand out of range: %d", v)
 		}
@@ -109,7 +130,12 @@ func TestZipfRand(t *testing.T) {
 }
 
 func TestZipfRand_InvalidParams(t *testing.T) {
-	if v := zipfRand(0.5, 1.0, 100); v != 0 {
+	v, err := zipfRand(0.5, 1.0, 100)
+	if err != nil {
+		// Invalid params returning an error is acceptable.
+		return
+	}
+	if v != 0 {
 		t.Errorf("zipfRand with s <= 1 = %d, want 0", v)
 	}
 }
@@ -168,7 +194,10 @@ func TestGenPoint(t *testing.T) {
 	radiusKM := 10.0
 
 	for range 100 {
-		p := genPoint(centerLat, centerLon, radiusKM)
+		p, err := genPoint(centerLat, centerLon, radiusKM)
+		if err != nil {
+			t.Fatal(err)
+		}
 		lat := p["lat"].(float64)
 		lon := p["lon"].(float64)
 
@@ -190,10 +219,13 @@ func TestGenPointWKT(t *testing.T) {
 	radiusKM := 10.0
 
 	for range 100 {
-		wkt := genPointWKT(centerLat, centerLon, radiusKM)
+		wkt, err := genPointWKT(centerLat, centerLon, radiusKM)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		var lon, lat float64
-		_, err := fmt.Sscanf(wkt, "POINT(%f %f)", &lon, &lat)
+		_, err = fmt.Sscanf(wkt, "POINT(%f %f)", &lon, &lat)
 		if err != nil {
 			t.Fatalf("genPointWKT returned invalid WKT %q: %v", wkt, err)
 		}
@@ -213,7 +245,10 @@ func TestGenPointWKT(t *testing.T) {
 func TestRandTimestamp(t *testing.T) {
 	min := "2020-01-01T00:00:00Z"
 	max := "2025-01-01T00:00:00Z"
-	result := randTimestamp(min, max)
+	result, err := randTimestamp(min, max)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == "" {
 		t.Fatal("randTimestamp returned empty string")
 	}
@@ -230,13 +265,17 @@ func TestRandTimestamp(t *testing.T) {
 }
 
 func TestRandTimestamp_InvalidInput(t *testing.T) {
-	if result := randTimestamp("bad", "2025-01-01T00:00:00Z"); result != "" {
-		t.Errorf("randTimestamp with bad min = %q, want empty", result)
+	_, err := randTimestamp("bad", "2025-01-01T00:00:00Z")
+	if err == nil {
+		t.Fatal("randTimestamp with bad min should return error")
 	}
 }
 
 func TestRandDuration(t *testing.T) {
-	result := randDuration("1h", "24h")
+	result, err := randDuration("1h", "24h")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == "" {
 		t.Fatal("randDuration returned empty string")
 	}
@@ -251,13 +290,17 @@ func TestRandDuration(t *testing.T) {
 }
 
 func TestRandDuration_InvalidInput(t *testing.T) {
-	if result := randDuration("bad", "24h"); result != "" {
-		t.Errorf("randDuration with bad min = %q, want empty", result)
+	_, err := randDuration("bad", "24h")
+	if err == nil {
+		t.Fatal("randDuration with bad min should return error")
 	}
 }
 
 func TestDateRand(t *testing.T) {
-	result := dateRand("2006-01-02", "2020-01-01T00:00:00Z", "2025-01-01T00:00:00Z")
+	result, err := dateRand("2006-01-02", "2020-01-01T00:00:00Z", "2025-01-01T00:00:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == "" {
 		t.Fatal("dateRand returned empty string")
 	}
@@ -272,7 +315,10 @@ func TestDateRand(t *testing.T) {
 }
 
 func TestDateOffset(t *testing.T) {
-	result := dateOffset("1h")
+	result, err := dateOffset("1h")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == "" {
 		t.Fatal("dateOffset returned empty string")
 	}
@@ -293,8 +339,9 @@ func TestDateOffset(t *testing.T) {
 }
 
 func TestDateOffset_InvalidInput(t *testing.T) {
-	if result := dateOffset("bad"); result != "" {
-		t.Errorf("dateOffset with bad duration = %q, want empty", result)
+	_, err := dateOffset("bad")
+	if err == nil {
+		t.Fatal("dateOffset with bad duration should return error")
 	}
 }
 
@@ -308,7 +355,10 @@ func TestExpRand(t *testing.T) {
 
 	sum := 0.0
 	for range n {
-		v := expRand(rate, min, max)
+		v, err := expRand(rate, min, max)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < min || v > max {
 			t.Fatalf("expRand value %v outside [%.0f, %.0f]", v, min, max)
 		}
@@ -324,7 +374,10 @@ func TestExpRand(t *testing.T) {
 
 func TestExpRandF(t *testing.T) {
 	for range 100 {
-		v := expRandF(0.5, 0.0, 100.0, 2)
+		v, err := expRandF(0.5, 0.0, 100.0, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < 0 || v > 100 {
 			t.Fatalf("expRandF value %v outside [0, 100]", v)
 		}
@@ -345,7 +398,10 @@ func TestLognormRand(t *testing.T) {
 	)
 
 	for range n {
-		v := lognormRand(mu, sigma, min, max)
+		v, err := lognormRand(mu, sigma, min, max)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < min || v > max {
 			t.Fatalf("lognormRand value %v outside [%.0f, %.0f]", v, min, max)
 		}
@@ -354,7 +410,10 @@ func TestLognormRand(t *testing.T) {
 
 func TestLognormRandF(t *testing.T) {
 	for range 100 {
-		v := lognormRandF(2.0, 0.5, 1.0, 100.0, 2)
+		v, err := lognormRandF(2.0, 0.5, 1.0, 100.0, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < 1 || v > 100 {
 			t.Fatalf("lognormRandF value %v outside [1, 100]", v)
 		}
@@ -366,7 +425,10 @@ func TestLognormRandF(t *testing.T) {
 }
 
 func TestGenBytes(t *testing.T) {
-	result := genBytes(8)
+	result, err := genBytes(8)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.HasPrefix(result, `\x`) {
 		t.Fatalf("genBytes(8) = %q, want \\x prefix", result)
 	}
@@ -376,7 +438,10 @@ func TestGenBytes(t *testing.T) {
 }
 
 func TestGenBit(t *testing.T) {
-	result := genBit(8)
+	result, err := genBit(8)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(result) != 8 {
 		t.Fatalf("genBit(8) length = %d, want 8", len(result))
 	}
@@ -388,7 +453,10 @@ func TestGenBit(t *testing.T) {
 
 func TestGenVarBit(t *testing.T) {
 	for range 100 {
-		result := genVarBit(16)
+		result, err := genVarBit(16)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if len(result) < 1 || len(result) > 16 {
 			t.Fatalf("genVarBit(16) length = %d, want 1-16", len(result))
 		}
@@ -413,7 +481,10 @@ func TestGenInet_InvalidCIDR(t *testing.T) {
 }
 
 func TestGenArray(t *testing.T) {
-	result := genArray(3, 3, "number:1,100")
+	result, err := genArray(3, 3, "number:1,100")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.HasPrefix(result, "{") || !strings.HasSuffix(result, "}") {
 		t.Fatalf("genArray = %q, want {}-wrapped", result)
 	}
@@ -426,7 +497,10 @@ func TestGenArray(t *testing.T) {
 
 func TestGenArray_Range(t *testing.T) {
 	for range 100 {
-		result := genArray(2, 5, "letter")
+		result, err := genArray(2, 5, "letter")
+		if err != nil {
+			t.Fatal(err)
+		}
 		inner := result[1 : len(result)-1]
 		parts := strings.Split(inner, ",")
 		if len(parts) < 2 || len(parts) > 5 {
@@ -477,7 +551,10 @@ func TestNormRandF(t *testing.T) {
 	env := testEnv(nil)
 
 	for range 100 {
-		v := env.normRandF(50, 10, 1, 100, 2)
+		v, err := env.normRandF(50, 10, 1, 100, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < 1 || v > 100 {
 			t.Fatalf("normRandF value %v outside [1, 100]", v)
 		}
@@ -500,7 +577,7 @@ func BenchmarkGenBatch(b *testing.B) {
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
 			for range b.N {
-				genBatch(tc.total, tc.batch, "number:1,1000")
+				genBatch(tc.total, tc.batch, "number:1,1000") //nolint:errcheck
 			}
 		})
 	}

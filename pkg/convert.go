@@ -12,44 +12,53 @@ func constant(v any) any {
 
 // batch returns sequential integers [0, n) as a [][]any batch set,
 // driving batched query execution without requiring a SQL query.
-func batch(n any) [][]any {
-	count := toInt(n)
+func batch(n any) ([][]any, error) {
+	count, err := toInt(n)
+	if err != nil {
+		return nil, fmt.Errorf("batch: %w", err)
+	}
 	result := make([][]any, count)
 	for i := range count {
 		result[i] = []any{i}
 	}
-	return result
+	return result, nil
 }
 
-func toInt(v any) int {
+func toInt(v any) (int, error) {
 	switch n := v.(type) {
 	case int:
-		return n
+		return n, nil
 	case float64:
-		return int(n)
+		return int(n), nil
 	case int64:
-		return int(n)
+		return int(n), nil
 	case string:
-		i, _ := strconv.Atoi(n)
-		return i
+		i, err := strconv.Atoi(n)
+		if err != nil {
+			return 0, fmt.Errorf("cannot convert %q to int: %w", n, err)
+		}
+		return i, nil
 	default:
-		return 0
+		return 0, fmt.Errorf("cannot convert %T (%v) to int", v, v)
 	}
 }
 
-func toFloat(v any) float64 {
+func toFloat(v any) (float64, error) {
 	switch n := v.(type) {
 	case float64:
-		return n
+		return n, nil
 	case int:
-		return float64(n)
+		return float64(n), nil
 	case int64:
-		return float64(n)
+		return float64(n), nil
 	case string:
-		f, _ := strconv.ParseFloat(n, 64)
-		return f
+		f, err := strconv.ParseFloat(n, 64)
+		if err != nil {
+			return 0, fmt.Errorf("cannot convert %q to float: %w", n, err)
+		}
+		return f, nil
 	default:
-		return 0
+		return 0, fmt.Errorf("cannot convert %T (%v) to float", v, v)
 	}
 }
 
@@ -87,4 +96,21 @@ func coalesce(values ...any) any {
 //	template('ORD-%05d-%s', seq(1, 1), ref_rand('w').id)
 func tmpl(format string, args ...any) string {
 	return fmt.Sprintf(format, args...)
+}
+
+// sqlFormatValue formats a value for safe inline substitution in SQL.
+// Strings are single-quoted with embedded quotes escaped ('→'');
+// numeric types are returned as-is; nil becomes NULL. The escaping
+// is the same across PostgreSQL, MySQL, and Oracle.
+func sqlFormatValue(v any) string {
+	if v == nil {
+		return "NULL"
+	}
+	switch v.(type) {
+	case int, int64, float64:
+		return fmt.Sprint(v)
+	default:
+		s := fmt.Sprint(v)
+		return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+	}
 }

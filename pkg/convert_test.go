@@ -42,18 +42,29 @@ func TestWrap(t *testing.T) {
 
 func TestToFloat(t *testing.T) {
 	tests := []struct {
-		name  string
-		input any
-		want  float64
+		name    string
+		input   any
+		want    float64
+		wantErr bool
 	}{
-		{"float64", 3.14, 3.14},
-		{"int", 42, 42.0},
-		{"int64", int64(99), 99.0},
-		{"unsupported", "hello", 0},
+		{"float64", 3.14, 3.14, false},
+		{"int", 42, 42.0, false},
+		{"int64", int64(99), 99.0, false},
+		{"unsupported", "hello", 0, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := toFloat(tt.input); got != tt.want {
+			got, err := toFloat(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("toFloat(%v) expected error, got nil", tt.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("toFloat(%v) unexpected error: %v", tt.input, err)
+			}
+			if got != tt.want {
 				t.Errorf("toFloat(%v) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
@@ -61,7 +72,10 @@ func TestToFloat(t *testing.T) {
 }
 
 func TestBatch(t *testing.T) {
-	result := batch(3)
+	result, err := batch(3)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(result) != 3 {
 		t.Fatalf("batch(3) returned %d sets, want 3", len(result))
 	}
@@ -76,7 +90,10 @@ func TestBatch(t *testing.T) {
 }
 
 func TestBatch_Zero(t *testing.T) {
-	result := batch(0)
+	result, err := batch(0)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(result) != 0 {
 		t.Errorf("batch(0) returned %d sets, want 0", len(result))
 	}
@@ -130,7 +147,7 @@ func BenchmarkToInt(b *testing.B) {
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
 			for range b.N {
-				toInt(tc.input)
+				toInt(tc.input) //nolint:errcheck
 			}
 		})
 	}

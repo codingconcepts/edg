@@ -67,11 +67,31 @@ func setRand(values []any, weights []any) (any, error) {
 
 	intWeights := make([]int, len(weights))
 	for i, w := range weights {
-		intWeights[i] = toInt(w)
+		iw, err := toInt(w)
+		if err != nil {
+			return nil, fmt.Errorf("set_rand weight %d: %w", i, err)
+		}
+		intWeights[i] = iw
 	}
 
 	wi := buildWeightedItems(values, intWeights)
 	return wi.choose(), nil
+}
+
+// pickFromSet handles the common guard and index-to-value lookup
+// shared by the distribution-based set functions.
+func pickFromSet(name string, values []any, indexFn func(max float64) (int, error)) (any, error) {
+	if len(values) == 0 {
+		return nil, fmt.Errorf("%s requires at least one value", name)
+	}
+	if len(values) == 1 {
+		return values[0], nil
+	}
+	idx, err := indexFn(float64(len(values) - 1))
+	if err != nil {
+		return nil, err
+	}
+	return values[idx], nil
 }
 
 // setNormal picks an item from a set using normal distribution.
@@ -79,33 +99,20 @@ func setRand(values []any, weights []any) (any, error) {
 // controls the spread: ~68% of picks fall within mean +/- stddev
 // indices, ~95% within mean +/- 2*stddev.
 //
-// For example, with values ['a','b','c','d','e'], mean=2, stddev=0.8:
-//
-//   - index 2 ('c') is picked most often
-//
-//   - ~68% of picks land in indices 1-3 ('b','c','d')
-//
-//   - ~95% of picks land in indices 0-4 ('a'..'e')
-//
-//   - a smaller stddev (e.g. 0.3) concentrates picks more tightly around the mean
-//
-//   - a larger stddev (e.g. 2.0) spreads picks more evenly across the set
-//
-//     set_norm(['a', 'b', 'c', 'd', 'e'], 2, 0.8)
-func setNormal(values []any, mean, stddev any) (any, error) {
-	if len(values) == 0 {
-		return nil, errors.New("set_norm requires at least one value")
+//	set_norm(['a', 'b', 'c', 'd', 'e'], 2, 0.8)
+func setNormal(values []any, rawMean, rawStddev any) (any, error) {
+	m, err := toFloat(rawMean)
+	if err != nil {
+		return nil, fmt.Errorf("set_norm mean: %w", err)
 	}
-
-	if len(values) == 1 {
-		return values[0], nil
+	s, err := toFloat(rawStddev)
+	if err != nil {
+		return nil, fmt.Errorf("set_norm stddev: %w", err)
 	}
-
-	m := toFloat(mean)
-	s := toFloat(stddev)
-
-	idx := int(random.Norm(m, s, 0, float64(len(values)-1)))
-	return values[idx], nil
+	return pickFromSet("set_norm", values, func(max float64) (int, error) {
+		v, err := random.Norm(m, s, 0, max)
+		return int(v), err
+	})
 }
 
 // setExp picks an item from a set using exponential distribution.
@@ -113,18 +120,15 @@ func setNormal(values []any, mean, stddev any) (any, error) {
 // higher rate means stronger concentration on the first items.
 //
 //	set_exp(['a', 'b', 'c', 'd', 'e'], 0.5)
-func setExp(values []any, rate any) (any, error) {
-	if len(values) == 0 {
-		return nil, errors.New("set_exp requires at least one value")
+func setExp(values []any, rawRate any) (any, error) {
+	r, err := toFloat(rawRate)
+	if err != nil {
+		return nil, fmt.Errorf("set_exp rate: %w", err)
 	}
-
-	if len(values) == 1 {
-		return values[0], nil
-	}
-
-	r := toFloat(rate)
-	idx := int(random.Exp(r, 0, float64(len(values)-1)))
-	return values[idx], nil
+	return pickFromSet("set_exp", values, func(max float64) (int, error) {
+		v, err := random.Exp(r, 0, max)
+		return int(v), err
+	})
 }
 
 // setLognormal picks an item from a set using log-normal distribution.
@@ -132,19 +136,19 @@ func setExp(values []any, rate any) (any, error) {
 // normal distribution, mapped onto the set's indices.
 //
 //	set_lognorm(['a', 'b', 'c', 'd', 'e'], 1.0, 0.5)
-func setLognormal(values []any, mu, sigma any) (any, error) {
-	if len(values) == 0 {
-		return nil, errors.New("set_lognorm requires at least one value")
+func setLognormal(values []any, rawMu, rawSigma any) (any, error) {
+	m, err := toFloat(rawMu)
+	if err != nil {
+		return nil, fmt.Errorf("set_lognorm mu: %w", err)
 	}
-
-	if len(values) == 1 {
-		return values[0], nil
+	s, err := toFloat(rawSigma)
+	if err != nil {
+		return nil, fmt.Errorf("set_lognorm sigma: %w", err)
 	}
-
-	m := toFloat(mu)
-	s := toFloat(sigma)
-	idx := int(random.LogNorm(m, s, 0, float64(len(values)-1)))
-	return values[idx], nil
+	return pickFromSet("set_lognorm", values, func(max float64) (int, error) {
+		v, err := random.LogNorm(m, s, 0, max)
+		return int(v), err
+	})
 }
 
 // setZipfian picks an item from a set using Zipfian distribution.
@@ -152,15 +156,16 @@ func setLognormal(values []any, mu, sigma any) (any, error) {
 // are selected exponentially more often.
 //
 //	set_zipf(['a', 'b', 'c', 'd', 'e'], 2.0, 1.0)
-func setZipfian(values []any, s, v any) (any, error) {
-	if len(values) == 0 {
-		return nil, errors.New("set_zipf requires at least one value")
+func setZipfian(values []any, rawS, rawV any) (any, error) {
+	s, err := toFloat(rawS)
+	if err != nil {
+		return nil, fmt.Errorf("set_zipf s: %w", err)
 	}
-
-	if len(values) == 1 {
-		return values[0], nil
+	v, err := toFloat(rawV)
+	if err != nil {
+		return nil, fmt.Errorf("set_zipf v: %w", err)
 	}
-
-	idx := random.Zipf(toFloat(s), toFloat(v), len(values)-1)
-	return values[idx], nil
+	return pickFromSet("set_zipf", values, func(max float64) (int, error) {
+		return random.Zipf(s, v, int(max))
+	})
 }

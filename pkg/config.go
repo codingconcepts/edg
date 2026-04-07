@@ -171,7 +171,11 @@ func (q *Query) generateBatchArgs(e *Env) ([][]any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating count: %w", err)
 		}
-		count = toInt(v)
+		c, err := toInt(v)
+		if err != nil {
+			return nil, fmt.Errorf("count: %w", err)
+		}
+		count = c
 	}
 
 	size := count
@@ -180,7 +184,11 @@ func (q *Query) generateBatchArgs(e *Env) ([][]any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating size: %w", err)
 		}
-		size = toInt(v)
+		s, err := toInt(v)
+		if err != nil {
+			return nil, fmt.Errorf("size: %w", err)
+		}
+		size = s
 	}
 	if size <= 0 {
 		size = count
@@ -207,7 +215,7 @@ func (q *Query) generateBatchArgs(e *Env) ([][]any, error) {
 				if err != nil {
 					return nil, fmt.Errorf("error running batch arg %d row %d: %w", i, b*size+row, err)
 				}
-				perArg[i][row] = fmt.Sprint(v)
+				perArg[i][row] = sqlFormatValue(v)
 			}
 		}
 
@@ -230,6 +238,58 @@ func (q *Query) Run(ctx context.Context, e *Env, args ...any) error {
 	case QueryTypeQuery, QueryTypeQueryBatch, "":
 		if err := e.Query(ctx, e.db, q, args...); err != nil {
 			return fmt.Errorf("executing query %s: %w", q.Name, err)
+		}
+	}
+
+	return nil
+}
+
+// Validate checks the Request for structural issues that would cause
+// confusing runtime errors.
+func (r *Request) Validate() error {
+	// When run_weights is configured, every run query needs a name for selection.
+	if len(r.RunWeights) > 0 {
+		for i, q := range r.Run {
+			if q.Name == "" {
+				return fmt.Errorf("run query %d is missing a name (required when run_weights is set)", i)
+			}
+		}
+	}
+
+	// run_weights keys must match actual run query names.
+	if len(r.RunWeights) > 0 {
+		runNames := make(map[string]bool, len(r.Run))
+		for _, q := range r.Run {
+			runNames[q.Name] = true
+		}
+		for name := range r.RunWeights {
+			if !runNames[name] {
+				return fmt.Errorf("run_weights references unknown query %q", name)
+			}
+		}
+	}
+
+	// Check for duplicate query names within each section.
+	for _, group := range []struct {
+		name    string
+		queries []*Query
+	}{
+		{"up", r.Up},
+		{"seed", r.Seed},
+		{"deseed", r.Deseed},
+		{"down", r.Down},
+		{"init", r.Init},
+		{"run", r.Run},
+	} {
+		seen := make(map[string]bool)
+		for i, q := range group.queries {
+			if q.Name == "" {
+				continue
+			}
+			if seen[q.Name] {
+				return fmt.Errorf("duplicate query name %q in %s (query %d)", q.Name, group.name, i)
+			}
+			seen[q.Name] = true
 		}
 	}
 

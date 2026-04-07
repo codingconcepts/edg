@@ -222,7 +222,10 @@ func TestRefEach(t *testing.T) {
 	)
 
 	env := &Env{db: db}
-	got := env.refEach("SELECT id, name FROM items")
+	got, err := env.refEach("SELECT id, name FROM items")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(got) != 3 {
 		t.Fatalf("refEach returned %d rows, want 3", len(got))
@@ -250,8 +253,11 @@ func TestRefEach_QueryError(t *testing.T) {
 	mock.ExpectQuery("SELECT").WillReturnError(fmt.Errorf("connection refused"))
 
 	env := &Env{db: db}
-	got := env.refEach("SELECT 1")
+	got, err := env.refEach("SELECT 1")
 
+	if err == nil {
+		t.Fatal("refEach with query error should return error")
+	}
 	if got != nil {
 		t.Errorf("refEach with query error = %v, want nil", got)
 	}
@@ -269,7 +275,10 @@ func TestRefEach_NoRows(t *testing.T) {
 	)
 
 	env := &Env{db: db}
-	got := env.refEach("SELECT id, name FROM empty_table")
+	got, err := env.refEach("SELECT id, name FROM empty_table")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(got) != 0 {
 		t.Errorf("refEach with no rows = %v, want empty", got)
@@ -281,7 +290,10 @@ func TestNURand_InRange(t *testing.T) {
 	env.nurandC = map[int]int{}
 
 	for range 1000 {
-		v := env.nuRand(1023, 1, 3000)
+		v, err := env.nuRand(1023, 1, 3000)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < 1 || v > 3000 {
 			t.Fatalf("nurand(1023, 1, 3000) = %d, out of range [1, 3000]", v)
 		}
@@ -296,7 +308,10 @@ func TestNURand_NonUniform(t *testing.T) {
 	// distribution. Bucket into 10 bins and verify they aren't all equal.
 	bins := make([]int, 10)
 	for range 10000 {
-		v := env.nuRand(1023, 1, 3000)
+		v, err := env.nuRand(1023, 1, 3000)
+		if err != nil {
+			t.Fatal(err)
+		}
 		bins[(v-1)*10/3000]++
 	}
 
@@ -316,12 +331,15 @@ func TestNURand_ConstantC(t *testing.T) {
 	env := testEnv(nil)
 	env.nurandC = map[int]int{}
 
-	_ = env.nuRand(1023, 1, 3000)
+	_, err := env.nuRand(1023, 1, 3000)
+	if err != nil {
+		t.Fatal(err)
+	}
 	c1 := env.nurandC[1023]
 
 	// Subsequent calls should use the same C.
 	for range 100 {
-		_ = env.nuRand(1023, 1, 3000)
+		_, _ = env.nuRand(1023, 1, 3000)
 	}
 	if env.nurandC[1023] != c1 {
 		t.Errorf("NURand C changed: got %d, want %d", env.nurandC[1023], c1)
@@ -332,7 +350,10 @@ func TestNURandN(t *testing.T) {
 	env := testEnv(nil)
 	env.nurandC = map[int]int{}
 
-	result := env.nuRandN(8191, 1, 100000, 5, 15)
+	result, err := env.nuRandN(8191, 1, 100000, 5, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
 	parts := strings.Split(result, ",")
 
 	if len(parts) < 5 || len(parts) > 15 {
@@ -365,7 +386,10 @@ func TestNormRand_Distribution(t *testing.T) {
 	within3 := 0
 
 	for range n {
-		v := env.normRand(mean, stddev, min, max)
+		v, err := env.normRand(mean, stddev, min, max)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if v < min || v > max {
 			t.Fatalf("normRand value %v outside [%d, %d]", v, min, max)
 		}
@@ -413,7 +437,10 @@ func TestNormRand_Distribution(t *testing.T) {
 func TestNormRandN(t *testing.T) {
 	env := testEnv(nil)
 
-	result := env.normRandN(500, 50, 1, 1000, 5, 15)
+	result, err := env.normRandN(500, 50, 1, 1000, 5, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
 	parts := strings.Split(result, ",")
 
 	if len(parts) < 5 || len(parts) > 15 {
@@ -439,7 +466,10 @@ func TestSeq(t *testing.T) {
 	env := testEnv(nil)
 
 	for i := range 5 {
-		got := env.seq(1, 1)
+		got, err := env.seq(1, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
 		want := int64(1 + i)
 		if got != want {
 			t.Errorf("seq(1, 1) call %d = %d, want %d", i, got, want)
@@ -451,7 +481,10 @@ func TestSeq_StepAndStart(t *testing.T) {
 	env := testEnv(nil)
 
 	for i := range 3 {
-		got := env.seq(100, 10)
+		got, err := env.seq(100, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
 		want := int64(100 + i*10)
 		if got != want {
 			t.Errorf("seq(100, 10) call %d = %d, want %d", i, got, want)
@@ -467,7 +500,10 @@ func TestWeightedSampleN(t *testing.T) {
 	}
 	env := testEnv(map[string][]map[string]any{"items": rows})
 
-	result := env.weightedSampleN("items", "name", "weight", 2, 2)
+	result, err := env.weightedSampleN("items", "name", "weight", 2, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == "" {
 		t.Fatal("weightedSampleN returned empty string")
 	}
@@ -492,7 +528,10 @@ func TestWeightedSampleN_Weighted(t *testing.T) {
 
 	counts := map[string]int{}
 	for range 1000 {
-		result := env.weightedSampleN("items", "name", "weight", 1, 1)
+		result, err := env.weightedSampleN("items", "name", "weight", 1, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
 		counts[result]++
 	}
 
@@ -503,7 +542,11 @@ func TestWeightedSampleN_Weighted(t *testing.T) {
 
 func TestWeightedSampleN_UnknownName(t *testing.T) {
 	env := testEnv(nil)
-	if result := env.weightedSampleN("nonexistent", "id", "weight", 1, 3); result != "" {
+	result, err := env.weightedSampleN("nonexistent", "id", "weight", 1, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "" {
 		t.Errorf("weightedSampleN for unknown name = %v, want empty", result)
 	}
 }
@@ -515,7 +558,11 @@ func TestWeightedSampleN_ZeroWeights(t *testing.T) {
 	}
 	env := testEnv(map[string][]map[string]any{"items": rows})
 
-	if result := env.weightedSampleN("items", "id", "weight", 1, 1); result != "" {
+	result, err := env.weightedSampleN("items", "id", "weight", 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "" {
 		t.Errorf("weightedSampleN with zero weights = %v, want empty", result)
 	}
 }
@@ -660,18 +707,18 @@ func BenchmarkRefDiff(b *testing.B) {
 
 func BenchmarkNurand(b *testing.B) {
 	env := benchEnv(0)
-	env.nuRand(1023, 1, 3000)
+	env.nuRand(1023, 1, 3000) //nolint:errcheck
 
 	b.Run("sequential", func(b *testing.B) {
 		for range b.N {
-			env.nuRand(1023, 1, 3000)
+			env.nuRand(1023, 1, 3000) //nolint:errcheck
 		}
 	})
 
 	b.Run("parallel", func(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				env.nuRand(1023, 1, 3000)
+				env.nuRand(1023, 1, 3000) //nolint:errcheck
 			}
 		})
 	})
@@ -690,7 +737,7 @@ func BenchmarkNurandN(b *testing.B) {
 			env := benchEnv(0)
 			b.ResetTimer()
 			for range b.N {
-				env.nuRandN(8191, 1, 100000, tc.n, tc.n)
+				env.nuRandN(8191, 1, 100000, tc.n, tc.n) //nolint:errcheck
 			}
 		})
 	}
@@ -701,13 +748,13 @@ func BenchmarkNormRand(b *testing.B) {
 
 	b.Run("sequential", func(b *testing.B) {
 		for range b.N {
-			env.normRand(500, 50, 1, 1000)
+			env.normRand(500, 50, 1, 1000) //nolint:errcheck
 		}
 	})
 
 	b.Run("narrow_range", func(b *testing.B) {
 		for range b.N {
-			env.normRand(50, 100, 40, 60)
+			env.normRand(50, 100, 40, 60) //nolint:errcheck
 		}
 	})
 }
@@ -725,7 +772,7 @@ func BenchmarkNormRandN(b *testing.B) {
 			env := benchEnv(0)
 			b.ResetTimer()
 			for range b.N {
-				env.normRandN(500, 50, 1, 1000, tc.n, tc.n)
+				env.normRandN(500, 50, 1, 1000, tc.n, tc.n) //nolint:errcheck
 			}
 		})
 	}

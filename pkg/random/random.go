@@ -3,7 +3,6 @@ package random
 import (
 	"encoding/hex"
 	"fmt"
-	"log/slog"
 	"math"
 	"math/rand/v2"
 	"net"
@@ -13,16 +12,23 @@ import (
 	"github.com/google/uuid"
 )
 
-const earthRadiusKM = 6371.0
+const (
+	earthRadiusKM = 6371.0
+
+	// MaxIter is the maximum number of rejection-sampling iterations for
+	// clamped distribution functions (Norm, Exp, LogNorm) and unique-value
+	// loops. If the [min, max] range is too far from the distribution
+	// center, the function returns an error after this many attempts.
+	MaxIter = 10_000
+)
 
 // UUIDv1 generates a Version 1 UUID (timestamp + node ID).
-func UUIDv1() string {
+func UUIDv1() (string, error) {
 	u, err := uuid.NewUUID()
 	if err != nil {
-		slog.Warn("uuid_v1: failed to generate", "error", err)
-		return ""
+		return "", fmt.Errorf("uuid_v1: %w", err)
 	}
-	return u.String()
+	return u.String(), nil
 }
 
 // UUIDv4 generates a Version 4 UUID (random).
@@ -31,23 +37,21 @@ func UUIDv4() string {
 }
 
 // UUIDv6 generates a Version 6 UUID (reordered timestamp).
-func UUIDv6() string {
+func UUIDv6() (string, error) {
 	u, err := uuid.NewV6()
 	if err != nil {
-		slog.Warn("uuid_v6: failed to generate", "error", err)
-		return ""
+		return "", fmt.Errorf("uuid_v6: %w", err)
 	}
-	return u.String()
+	return u.String(), nil
 }
 
 // UUIDv7 generates a Version 7 UUID (Unix timestamp + random).
-func UUIDv7() string {
+func UUIDv7() (string, error) {
 	u, err := uuid.NewV7()
 	if err != nil {
-		slog.Warn("uuid_v7: failed to generate", "error", err)
-		return ""
+		return "", fmt.Errorf("uuid_v7: %w", err)
 	}
-	return u.String()
+	return u.String(), nil
 }
 
 // Float generates a random float64 in [min, max] rounded to the given
@@ -66,73 +70,67 @@ func Uniform(min, max float64) float64 {
 
 // Zipf generates a Zipfian-distributed random integer in [0, imax].
 // Parameters s (> 1) and v (>= 1) control the distribution shape.
-// Returns 0 if s <= 1 or v < 1.
-func Zipf(s, v float64, imax int) int {
+// Returns an error if s <= 1 or v < 1.
+func Zipf(s, v float64, imax int) (int, error) {
 	src := rand.NewPCG(rand.Uint64(), rand.Uint64())
 	r := rand.New(src)
 	z := rand.NewZipf(r, s, v, uint64(imax))
 	if z == nil {
-		return 0
+		return 0, fmt.Errorf("zipf: invalid parameters s=%g v=%g imax=%d (requires s > 1 and v >= 1)", s, v, imax)
 	}
-	return int(z.Uint64())
+	return int(z.Uint64()), nil
+}
+
+// clampedSample generates values using sampleFn, rounds to the given
+// precision, and returns the first value in [min, max]. Returns an
+// error with errMsg if no value falls in range after MaxIter iterations.
+func clampedSample(min, max float64, precision int, sampleFn func() float64, errMsg string) (float64, error) {
+	shift := math.Pow(10, float64(precision))
+	for range MaxIter {
+		rounded := math.Round(sampleFn()*shift) / shift
+		if rounded >= min && rounded <= max {
+			return rounded, nil
+		}
+	}
+	return 0, fmt.Errorf("%s: no value in range after %d iterations", errMsg, MaxIter)
+}
+
+func optPrecision(precision []int) int {
+	if len(precision) > 0 {
+		return precision[0]
+	}
+	return 0
 }
 
 // Norm generates a normally-distributed random float64 clamped to
 // [min, max]. If precision is provided, the result is rounded to that
 // many decimal places; otherwise it is rounded to 0 (whole number).
-func Norm(mean, stddev, min, max float64, precision ...int) float64 {
-	p := 0
-	if len(precision) > 0 {
-		p = precision[0]
-	}
-	shift := math.Pow(10, float64(p))
-
-	for {
-		v := mean + stddev*rand.NormFloat64()
-		rounded := math.Round(v*shift) / shift
-		if rounded >= min && rounded <= max {
-			return rounded
-		}
-	}
+// Returns an error if no value falls in range after MaxIter iterations.
+func Norm(mean, stddev, min, max float64, precision ...int) (float64, error) {
+	return clampedSample(min, max, optPrecision(precision),
+		func() float64 { return mean + stddev*rand.NormFloat64() },
+		fmt.Sprintf("norm(mean=%g, stddev=%g, min=%g, max=%g)", mean, stddev, min, max))
 }
 
 // Exp generates an exponentially-distributed random float64 with the given
 // rate (lambda). The result is clamped to [min, max] and rounded to the
-// specified number of decimal places (default 0).
-func Exp(rate, min, max float64, precision ...int) float64 {
-	p := 0
-	if len(precision) > 0 {
-		p = precision[0]
-	}
-	shift := math.Pow(10, float64(p))
-
-	for {
-		v := rand.ExpFloat64() / rate
-		rounded := math.Round(v*shift) / shift
-		if rounded >= min && rounded <= max {
-			return rounded
-		}
-	}
+// specified number of decimal places (default 0). Returns an error if no
+// value falls in range after MaxIter iterations.
+func Exp(rate, min, max float64, precision ...int) (float64, error) {
+	return clampedSample(min, max, optPrecision(precision),
+		func() float64 { return rand.ExpFloat64() / rate },
+		fmt.Sprintf("exp(rate=%g, min=%g, max=%g)", rate, min, max))
 }
 
 // LogNorm generates a log-normally-distributed random float64 clamped to
 // [min, max]. mu and sigma are the mean and standard deviation of the
 // underlying normal distribution. The result is rounded to the specified
-// number of decimal places (default 0).
-func LogNorm(mu, sigma, min, max float64, precision ...int) float64 {
-	p := 0
-	if len(precision) > 0 {
-		p = precision[0]
-	}
-	shift := math.Pow(10, float64(p))
-
-	for {
-		v := math.Exp(mu + sigma*rand.NormFloat64())
-		rounded := math.Round(v*shift) / shift
-		if rounded >= min && rounded <= max {
-			return rounded
-		}
-	}
+// number of decimal places (default 0). Returns an error if no value
+// falls in range after MaxIter iterations.
+func LogNorm(mu, sigma, min, max float64, precision ...int) (float64, error) {
+	return clampedSample(min, max, optPrecision(precision),
+		func() float64 { return math.Exp(mu + sigma*rand.NormFloat64()) },
+		fmt.Sprintf("lognorm(mu=%g, sigma=%g, min=%g, max=%g)", mu, sigma, min, max))
 }
 
 // Regex generates a random string matching the given regular expression.

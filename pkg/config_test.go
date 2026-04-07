@@ -426,9 +426,9 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 
 	// Verify ref_same correlation: name and markup should match per row.
 	validPairs := map[string]string{
-		"electronics": "1.5",
-		"clothing":    "1.3",
-		"books":       "1.1",
+		"'electronics'": "1.5",
+		"'clothing'":    "1.3",
+		"'books'":       "1.1",
 	}
 	for _, args := range argSets {
 		names := strings.Split(args[1].(string), ",")
@@ -540,10 +540,18 @@ seed:
 	if q.Type != QueryTypeExecBatch {
 		t.Errorf("type = %q, want %q", q.Type, QueryTypeExecBatch)
 	}
-	if toInt(q.Count) != 100 {
+	gotCount, err := toInt(q.Count)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotCount != 100 {
 		t.Errorf("count = %v, want 100", q.Count)
 	}
-	if toInt(q.Size) != 50 {
+	gotSize, err := toInt(q.Size)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotSize != 50 {
 		t.Errorf("size = %v, want 50", q.Size)
 	}
 }
