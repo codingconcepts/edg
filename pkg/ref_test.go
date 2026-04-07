@@ -707,18 +707,17 @@ func BenchmarkRefDiff(b *testing.B) {
 
 func BenchmarkNurand(b *testing.B) {
 	env := benchEnv(0)
-	env.nuRand(1023, 1, 3000) //nolint:errcheck
-
+	_, _ = env.nuRand(1023, 1, 3000)
 	b.Run("sequential", func(b *testing.B) {
 		for range b.N {
-			env.nuRand(1023, 1, 3000) //nolint:errcheck
+			_, _ = env.nuRand(1023, 1, 3000)
 		}
 	})
 
 	b.Run("parallel", func(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				env.nuRand(1023, 1, 3000) //nolint:errcheck
+				_, _ = env.nuRand(1023, 1, 3000)
 			}
 		})
 	})
@@ -737,7 +736,7 @@ func BenchmarkNurandN(b *testing.B) {
 			env := benchEnv(0)
 			b.ResetTimer()
 			for range b.N {
-				env.nuRandN(8191, 1, 100000, tc.n, tc.n) //nolint:errcheck
+				_, _ = env.nuRandN(8191, 1, 100000, tc.n, tc.n)
 			}
 		})
 	}
@@ -748,13 +747,13 @@ func BenchmarkNormRand(b *testing.B) {
 
 	b.Run("sequential", func(b *testing.B) {
 		for range b.N {
-			env.normRand(500, 50, 1, 1000) //nolint:errcheck
+			_, _ = env.normRand(500, 50, 1, 1000)
 		}
 	})
 
 	b.Run("narrow_range", func(b *testing.B) {
 		for range b.N {
-			env.normRand(50, 100, 40, 60) //nolint:errcheck
+			_, _ = env.normRand(50, 100, 40, 60)
 		}
 	})
 }
@@ -772,8 +771,7 @@ func BenchmarkNormRandN(b *testing.B) {
 			env := benchEnv(0)
 			b.ResetTimer()
 			for range b.N {
-				env.normRandN(500, 50, 1, 1000, tc.n, tc.n) //nolint:errcheck
-			}
+				env.normRandN(500, 50, 1, 1000, tc.n, tc.n)			}
 		})
 	}
 }

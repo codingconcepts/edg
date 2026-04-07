@@ -147,7 +147,7 @@ func BenchmarkToInt(b *testing.B) {
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
 			for range b.N {
-				toInt(tc.input) //nolint:errcheck
+				_, _ = toInt(tc.input)
 			}
 		})
 	}

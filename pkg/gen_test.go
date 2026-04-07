@@ -577,8 +577,7 @@ func BenchmarkGenBatch(b *testing.B) {
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
 			for range b.N {
-				genBatch(tc.total, tc.batch, "number:1,1000") //nolint:errcheck
-			}
+				genBatch(tc.total, tc.batch, "number:1,1000")			}
 		})
 	}
 }
