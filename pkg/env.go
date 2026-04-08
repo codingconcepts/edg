@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
-	"math/rand/v2"
 	"slices"
+
+	"github.com/codingconcepts/edg/pkg/random"
 	"strings"
 	"sync"
 	"time"
@@ -367,7 +368,7 @@ func (e *Env) pickWeighted() *Query {
 		return nil
 	}
 
-	r := rand.IntN(total)
+	r := random.Rng.IntN(total)
 	for _, e := range entries {
 		if r < e.cumulative {
 			return e.query

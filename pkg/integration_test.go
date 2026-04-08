@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codingconcepts/edg/pkg/random"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/sijms/go-ora/v2"
@@ -33,6 +34,7 @@ const runIterations = 5
 
 var (
 	dbTests    *bool
+	rngSeed    *uint64
 	db         *sql.DB
 	driverName string
 
@@ -48,7 +50,18 @@ var (
 
 func TestMain(m *testing.M) {
 	dbTests = flag.Bool("db", false, "run database integration tests")
+	rngSeed = flag.Uint64("rng-seed", 0, "PRNG seed for deterministic output")
 	flag.Parse()
+
+	var rngSeedSet bool
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "rng-seed" {
+			rngSeedSet = true
+		}
+	})
+	if rngSeedSet {
+		random.Seed(*rngSeed)
+	}
 
 	if *dbTests {
 		setupDatabase()

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -33,7 +32,7 @@ func (e *Env) refRand(name string) map[string]any {
 	if !ok || len(data) == 0 {
 		return nil
 	}
-	return data[rand.IntN(len(data))]
+	return data[random.Rng.IntN(len(data))]
 }
 
 // refN picks a random count N in [min, max], selects N unique random
@@ -50,7 +49,7 @@ func (e *Env) refN(name string, field string, lo, hi int) string {
 		return ""
 	}
 
-	n := min(lo+rand.IntN(hi-lo+1), len(data))
+	n := min(lo+random.Rng.IntN(hi-lo+1), len(data))
 
 	var parts []string
 	if n*rejectionSamplingFactor < len(data) {
@@ -69,7 +68,7 @@ func rejection(data []map[string]any, field string, n int) []string {
 	seen := make(map[int]struct{}, n)
 	for i := range n {
 		for {
-			idx := rand.IntN(len(data))
+			idx := random.Rng.IntN(len(data))
 			if _, ok := seen[idx]; !ok {
 				seen[idx] = struct{}{}
 				parts[i] = fmt.Sprint(data[idx][field])
@@ -89,7 +88,7 @@ func fisherYates(data []map[string]any, field string, n int) []string {
 	}
 	parts := make([]string, n)
 	for i := range n {
-		j := i + rand.IntN(len(indices)-i)
+		j := i + random.Rng.IntN(len(indices)-i)
 		indices[i], indices[j] = indices[j], indices[i]
 		parts[i] = fmt.Sprint(data[indices[i]][field])
 	}
@@ -130,7 +129,7 @@ func (e *Env) refCached(name, label string, mu *sync.RWMutex, cache map[string]a
 		return nil
 	}
 
-	result := data[rand.IntN(len(data))]
+	result := data[random.Rng.IntN(len(data))]
 	cache[name] = result
 	return result
 }
@@ -148,7 +147,7 @@ func (e *Env) refDiff(name string) map[string]any {
 	e.uniqIndexMutex.Lock()
 	defer e.uniqIndexMutex.Unlock()
 
-	i := rand.IntN(len(data)-e.uniqIndex) + e.uniqIndex
+	i := random.Rng.IntN(len(data)-e.uniqIndex) + e.uniqIndex
 
 	// Swap in place; data shares its backing array with e.env[name].
 	data[i], data[e.uniqIndex] = data[e.uniqIndex], data[i]
@@ -204,7 +203,7 @@ func (e *Env) getNurandC(A int) int {
 		return c
 	}
 
-	c := rand.IntN(A + 1)
+	c := random.Rng.IntN(A + 1)
 	e.nurandC[A] = c
 	return c
 }
@@ -226,7 +225,7 @@ func (e *Env) nuRand(rawA, rawX, rawY any) (int, error) {
 		return 0, fmt.Errorf("nurand y: %w", err)
 	}
 	C := e.getNurandC(A)
-	return (((rand.IntN(A+1) | (rand.IntN(y-x+1) + x)) + C) % (y - x + 1)) + x, nil
+	return (((random.Rng.IntN(A+1) | (random.Rng.IntN(y-x+1) + x)) + C) % (y - x + 1)) + x, nil
 }
 
 // nuRandN generates N unique NURand values as a comma-separated string,
@@ -253,7 +252,7 @@ func (e *Env) nuRandN(rawA, rawX, rawY, rawMinN, rawMaxN any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("nurand_n maxN: %w", err)
 	}
-	n := minN + rand.IntN(maxN-minN+1)
+	n := minN + random.Rng.IntN(maxN-minN+1)
 
 	seen := make(map[int]bool, n)
 	parts := make([]string, 0, n)
@@ -325,7 +324,7 @@ func (e *Env) normRandN(rawMean, rawStddev, rawMin, rawMax, rawMinN, rawMaxN any
 	if err != nil {
 		return "", fmt.Errorf("norm_n maxN: %w", err)
 	}
-	n := minN + rand.IntN(maxN-minN+1)
+	n := minN + random.Rng.IntN(maxN-minN+1)
 
 	seen := make(map[float64]bool, n)
 	parts := make([]string, 0, n)
@@ -388,7 +387,7 @@ func (e *Env) weightedSampleN(name, field, weightField string, rawMinN, rawMaxN 
 	if err != nil {
 		return "", fmt.Errorf("weighted_sample_n maxN: %w", err)
 	}
-	n := min(lo+rand.IntN(hi-lo+1), len(data))
+	n := min(lo+random.Rng.IntN(hi-lo+1), len(data))
 
 	items := make([]weightedItem, len(data))
 	for i, row := range data {

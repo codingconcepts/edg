@@ -30,6 +30,7 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 | `--url` | | | Database connection URL (or set `URL` env var) |
 | `--config` | | | Path to the workload YAML config file (required for database commands, optional for `repl`) |
 | `--driver` | | `pgx` | database/sql driver name (`pgx`, `oracle`, or `mysql`) |
+| `--rng-seed` | | | PRNG seed for deterministic output (useful for regression testing) |
 | `--duration` | `-d` | `1m` | Benchmark duration (run and all commands) |
 | `--workers` | `-w` | `1` | Number of concurrent workers (run and all commands) |
 | `--print-interval` | | `1s` | Progress reporting interval (run and all commands) |

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/codingconcepts/edg/pkg"
+	"github.com/codingconcepts/edg/pkg/random"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/sijms/go-ora/v2"
@@ -25,9 +26,10 @@ import (
 )
 
 var (
-	flagURL    string
-	configFile string
-	flagDriver string
+	flagURL     string
+	configFile  string
+	flagDriver  string
+	flagRngSeed uint64
 )
 
 func main() {
@@ -67,6 +69,14 @@ func main() {
 	root.PersistentFlags().StringVar(&flagURL, "url", "", "database connection URL (env: URL)")
 	root.PersistentFlags().StringVar(&configFile, "config", "", "workload YAML config file")
 	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql]")
+	root.PersistentFlags().Uint64Var(&flagRngSeed, "rng-seed", 0, "PRNG seed for deterministic output")
+
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if cmd.Flags().Changed("rng-seed") {
+			random.Seed(flagRngSeed)
+		}
+		return nil
+	}
 
 	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd(), allCmd(), replCmd(), validateCmd())
 	root.SilenceUsage = true

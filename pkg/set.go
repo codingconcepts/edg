@@ -3,7 +3,6 @@ package pkg
 import (
 	"errors"
 	"fmt"
-	"math/rand/v2"
 
 	"github.com/codingconcepts/edg/pkg/random"
 )
@@ -29,7 +28,7 @@ func makeWeightedItems(items []weightedItem) weightedItems {
 }
 
 func (wi weightedItems) choose() any {
-	r := rand.IntN(wi.totalWeight) + 1
+	r := random.Rng.IntN(wi.totalWeight) + 1
 	for _, item := range wi.items {
 		r -= item.Weight
 		if r <= 0 {
@@ -58,7 +57,7 @@ func setRand(values []any, weights []any) (any, error) {
 	}
 
 	if len(weights) == 0 {
-		return values[rand.IntN(len(values))], nil
+		return values[random.Rng.IntN(len(values))], nil
 	}
 
 	if len(weights) != len(values) {

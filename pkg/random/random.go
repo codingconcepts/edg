@@ -22,6 +22,40 @@ const (
 	MaxIter = 10_000
 )
 
+var (
+	// Rng is the shared random number generator. By default it uses an
+	// auto-seeded source; call Seed to make output deterministic.
+	Rng *rand.Rand
+
+	// Fake is the shared gofakeit faker instance.
+	Fake *gofakeit.Faker
+)
+
+func init() {
+	Rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	Fake = gofakeit.New(rand.Uint64())
+}
+
+// Seed initializes the random sources with a deterministic seed,
+// making all subsequent random output reproducible.
+func Seed(seed uint64) {
+	Rng = rand.New(rand.NewPCG(seed, seed))
+	Fake = gofakeit.New(seed)
+	uuid.SetRand(&rngReader{Rng})
+}
+
+// rngReader adapts a *rand.Rand into an io.Reader for uuid.SetRand.
+type rngReader struct {
+	r *rand.Rand
+}
+
+func (rr *rngReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = byte(rr.r.IntN(256))
+	}
+	return len(p), nil
+}
+
 // UUIDv1 generates a Version 1 UUID (timestamp + node ID).
 func UUIDv1() (string, error) {
 	u, err := uuid.NewUUID()
@@ -57,7 +91,7 @@ func UUIDv7() (string, error) {
 // Float generates a random float64 in [min, max] rounded to the given
 // number of decimal places.
 func Float(min, max float64, precision int) float64 {
-	v := min + rand.Float64()*(max-min)
+	v := min + Rng.Float64()*(max-min)
 	shift := math.Pow(10, float64(precision))
 
 	return math.Round(v*shift) / shift
@@ -65,14 +99,14 @@ func Float(min, max float64, precision int) float64 {
 
 // Uniform generates a uniform random float64 in [min, max].
 func Uniform(min, max float64) float64 {
-	return min + rand.Float64()*(max-min)
+	return min + Rng.Float64()*(max-min)
 }
 
 // Zipf generates a Zipfian-distributed random integer in [0, imax].
 // Parameters s (> 1) and v (>= 1) control the distribution shape.
 // Returns an error if s <= 1 or v < 1.
 func Zipf(s, v float64, imax int) (int, error) {
-	src := rand.NewPCG(rand.Uint64(), rand.Uint64())
+	src := rand.NewPCG(Rng.Uint64(), Rng.Uint64())
 	r := rand.New(src)
 	z := rand.NewZipf(r, s, v, uint64(imax))
 	if z == nil {
@@ -108,7 +142,7 @@ func optPrecision(precision []int) int {
 // Returns an error if no value falls in range after MaxIter iterations.
 func Norm(mean, stddev, min, max float64, precision ...int) (float64, error) {
 	return clampedSample(min, max, optPrecision(precision),
-		func() float64 { return mean + stddev*rand.NormFloat64() },
+		func() float64 { return mean + stddev*Rng.NormFloat64() },
 		fmt.Sprintf("norm(mean=%g, stddev=%g, min=%g, max=%g)", mean, stddev, min, max))
 }
 
@@ -118,7 +152,7 @@ func Norm(mean, stddev, min, max float64, precision ...int) (float64, error) {
 // value falls in range after MaxIter iterations.
 func Exp(rate, min, max float64, precision ...int) (float64, error) {
 	return clampedSample(min, max, optPrecision(precision),
-		func() float64 { return rand.ExpFloat64() / rate },
+		func() float64 { return Rng.ExpFloat64() / rate },
 		fmt.Sprintf("exp(rate=%g, min=%g, max=%g)", rate, min, max))
 }
 
@@ -129,19 +163,19 @@ func Exp(rate, min, max float64, precision ...int) (float64, error) {
 // falls in range after MaxIter iterations.
 func LogNorm(mu, sigma, min, max float64, precision ...int) (float64, error) {
 	return clampedSample(min, max, optPrecision(precision),
-		func() float64 { return math.Exp(mu + sigma*rand.NormFloat64()) },
+		func() float64 { return math.Exp(mu + sigma*Rng.NormFloat64()) },
 		fmt.Sprintf("lognorm(mu=%g, sigma=%g, min=%g, max=%g)", mu, sigma, min, max))
 }
 
 // Regex generates a random string matching the given regular expression.
 func Regex(pattern string) string {
-	return gofakeit.Regex(pattern)
+	return Fake.Regex(pattern)
 }
 
 // Point generates a random geographic point within radiusKM of (lat, lon).
 func Point(lat, lon, radiusKM float64) (float64, float64) {
-	randomDistance := (rand.Float64() * radiusKM) / earthRadiusKM
-	randomBearing := rand.Float64() * 2 * math.Pi
+	randomDistance := (Rng.Float64() * radiusKM) / earthRadiusKM
+	randomBearing := Rng.Float64() * 2 * math.Pi
 
 	latRad := degreesToRadians(lat)
 	lonRad := degreesToRadians(lon)
@@ -177,7 +211,7 @@ func Timestamp(min, max time.Time) time.Time {
 	maxUnix := max.Unix()
 	delta := maxUnix - minUnix
 
-	randUnix := minUnix + rand.Int64N(delta)
+	randUnix := minUnix + Rng.Int64N(delta)
 	return time.Unix(randUnix, 0)
 }
 
@@ -192,7 +226,7 @@ func Duration(min, max time.Duration) time.Duration {
 	}
 
 	diff := max - min
-	randomDiff := time.Duration(rand.Int64N(int64(diff)))
+	randomDiff := time.Duration(Rng.Int64N(int64(diff)))
 
 	return min + randomDiff
 }
@@ -202,7 +236,7 @@ func Duration(min, max time.Duration) time.Duration {
 func Bytes(n int) string {
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = byte(rand.IntN(256))
+		b[i] = byte(Rng.IntN(256))
 	}
 	return `\x` + hex.EncodeToString(b)
 }
@@ -211,7 +245,7 @@ func Bytes(n int) string {
 func Bit(n int) string {
 	b := make([]byte, n)
 	for i := range n {
-		b[i] = '0' + byte(rand.IntN(2))
+		b[i] = '0' + byte(Rng.IntN(2))
 	}
 	return string(b)
 }
@@ -221,7 +255,7 @@ func VarBit(n int) string {
 	if n <= 0 {
 		return ""
 	}
-	return Bit(1 + rand.IntN(n))
+	return Bit(1 + Rng.IntN(n))
 }
 
 // Inet generates a random IP address within the given CIDR block.
@@ -237,7 +271,7 @@ func Inet(cidr string) (string, error) {
 
 	result := make(net.IP, len(ip))
 	for i := range ip {
-		result[i] = (ip[i] & mask[i]) | (byte(rand.IntN(256)) & ^mask[i])
+		result[i] = (ip[i] & mask[i]) | (byte(Rng.IntN(256)) & ^mask[i])
 	}
 
 	return result.String(), nil
@@ -261,7 +295,7 @@ func TimeOfDay(minStr, maxStr string) (string, error) {
 
 	randSec := minSec
 	if maxSec > minSec {
-		randSec += rand.IntN(maxSec - minSec + 1)
+		randSec += Rng.IntN(maxSec - minSec + 1)
 	}
 
 	h := randSec / 3600

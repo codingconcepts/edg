@@ -568,6 +568,177 @@ func TestTimeOfDay_InvalidInput(t *testing.T) {
 	}
 }
 
+func TestSeed_Deterministic(t *testing.T) {
+	// Same seed must produce the same sequence of values.
+	Seed(12345)
+	first := make([]float64, 10)
+	for i := range first {
+		first[i] = Uniform(0, 1000)
+	}
+
+	Seed(12345)
+	for i := range first {
+		v := Uniform(0, 1000)
+		if v != first[i] {
+			t.Fatalf("Seed determinism: index %d got %v, want %v", i, v, first[i])
+		}
+	}
+}
+
+func TestSeed_DifferentSeeds(t *testing.T) {
+	Seed(1)
+	a := Uniform(0, 1000)
+
+	Seed(2)
+	b := Uniform(0, 1000)
+
+	if a == b {
+		t.Errorf("different seeds produced the same value: %v", a)
+	}
+}
+
+func TestSeed_Float(t *testing.T) {
+	Seed(100)
+	a := Float(1.0, 10.0, 2)
+
+	Seed(100)
+	b := Float(1.0, 10.0, 2)
+
+	if a != b {
+		t.Errorf("Float not deterministic: %v != %v", a, b)
+	}
+}
+
+func TestSeed_Norm(t *testing.T) {
+	Seed(200)
+	a, err := Norm(50, 10, 1, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	Seed(200)
+	b, err := Norm(50, 10, 1, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if a != b {
+		t.Errorf("Norm not deterministic: %v != %v", a, b)
+	}
+}
+
+func TestSeed_Zipf(t *testing.T) {
+	Seed(300)
+	a, err := Zipf(2.0, 1.0, 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	Seed(300)
+	b, err := Zipf(2.0, 1.0, 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if a != b {
+		t.Errorf("Zipf not deterministic: %v != %v", a, b)
+	}
+}
+
+func TestSeed_Timestamp(t *testing.T) {
+	min := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	max := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	Seed(400)
+	a := Timestamp(min, max)
+
+	Seed(400)
+	b := Timestamp(min, max)
+
+	if !a.Equal(b) {
+		t.Errorf("Timestamp not deterministic: %v != %v", a, b)
+	}
+}
+
+func TestSeed_Regex(t *testing.T) {
+	Seed(500)
+	a := Regex("[A-Z]{5}")
+
+	Seed(500)
+	b := Regex("[A-Z]{5}")
+
+	if a != b {
+		t.Errorf("Regex not deterministic: %q != %q", a, b)
+	}
+}
+
+func TestSeed_UUIDv4(t *testing.T) {
+	Seed(600)
+	a := UUIDv4()
+
+	Seed(600)
+	b := UUIDv4()
+
+	if a != b {
+		t.Errorf("UUIDv4 not deterministic: %q != %q", a, b)
+	}
+}
+
+func TestSeed_Bytes(t *testing.T) {
+	Seed(700)
+	a := Bytes(16)
+
+	Seed(700)
+	b := Bytes(16)
+
+	if a != b {
+		t.Errorf("Bytes not deterministic: %q != %q", a, b)
+	}
+}
+
+func TestSeed_Inet(t *testing.T) {
+	Seed(800)
+	a, err := Inet("10.0.0.0/8")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	Seed(800)
+	b, err := Inet("10.0.0.0/8")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if a != b {
+		t.Errorf("Inet not deterministic: %q != %q", a, b)
+	}
+}
+
+func TestRngReader(t *testing.T) {
+	Seed(42)
+	rr := &rngReader{Rng}
+	buf := make([]byte, 32)
+	n, err := rr.Read(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 32 {
+		t.Fatalf("Read returned %d bytes, want 32", n)
+	}
+
+	// Re-seed and verify deterministic reads.
+	Seed(42)
+	rr2 := &rngReader{Rng}
+	buf2 := make([]byte, 32)
+	rr2.Read(buf2)
+
+	for i := range buf {
+		if buf[i] != buf2[i] {
+			t.Fatalf("rngReader not deterministic at byte %d: %d != %d", i, buf[i], buf2[i])
+		}
+	}
+}
+
 // haversineKM computes the great-circle distance between two points in km.
 func haversineKM(lat1, lon1, lat2, lon2 float64) float64 {
 	dLat := degreesToRadians(lat2 - lat1)

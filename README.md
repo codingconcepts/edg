@@ -41,7 +41,6 @@ View the docs [here](https://edg.run/docs).
   * Support DSQL with custom driver
   * SQLite
   * SQL Server
-* `--seed` for PRNG to generate deterministic output and regression testing
 * Ability to separate config parts into separate files
 * Config includes / composition (!include shared/references.yaml) to reuse reference data and expressions across workload files
 * Progress indication

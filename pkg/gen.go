@@ -4,16 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 	"strings"
 	"time"
 
-	"github.com/brianvoe/gofakeit/v7"
 	"github.com/codingconcepts/edg/pkg/random"
 )
 
 func gen(s string) (any, error) {
-	val, err := gofakeit.Generate(wrap(s))
+	val, err := random.Fake.Generate(wrap(s))
 	if err != nil {
 		return nil, fmt.Errorf("gen(%q): %w", s, err)
 	}
@@ -156,7 +154,7 @@ func jsonArr(rawMinN, rawMaxN any, pattern string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("json_arr max: %w", err)
 	}
-	n := lo + rand.IntN(hi-lo+1)
+	n := lo + random.Rng.IntN(hi-lo+1)
 
 	values := make([]any, n)
 	for i := range n {
@@ -385,7 +383,7 @@ func genArray(rawMinN, rawMaxN any, pattern string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("array max: %w", err)
 	}
-	n := lo + rand.IntN(hi-lo+1)
+	n := lo + random.Rng.IntN(hi-lo+1)
 
 	parts := make([]string, n)
 	for i := range n {
