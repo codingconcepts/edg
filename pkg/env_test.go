@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -827,6 +828,100 @@ func TestRunSection_QueryStoresResults(t *testing.T) {
 	}
 	if len(data) != 2 {
 		t.Errorf("stored %d rows, want 2", len(data))
+	}
+}
+
+func TestArg_DependentColumn(t *testing.T) {
+	req := &Request{
+		Run: []*Query{
+			{Args: []string{
+				"gen('firstname')",
+				"gen('lastname')",
+				`arg(0) + " " + arg(1)`,
+			}},
+		},
+	}
+
+	env, err := NewEnv(nil, req)
+	if err != nil {
+		t.Fatalf("NewEnv failed: %v", err)
+	}
+
+	argSets, err := req.Run[0].GenerateArgs(env)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	first := argSets[0][0].(string)
+	last := argSets[0][1].(string)
+	full := argSets[0][2].(string)
+	want := first + " " + last
+	if full != want {
+		t.Errorf("arg(0) + arg(1) = %q, want %q", full, want)
+	}
+}
+
+func TestArg_OutOfRange(t *testing.T) {
+	req := &Request{
+		Run: []*Query{
+			{Args: []string{"arg(0)"}},
+		},
+	}
+
+	env, err := NewEnv(nil, req)
+	if err != nil {
+		t.Fatalf("NewEnv failed: %v", err)
+	}
+
+	_, err = req.Run[0].GenerateArgs(env)
+	if err == nil {
+		t.Fatal("expected error for arg(0) with no prior args, got nil")
+	}
+}
+
+func TestArg_Batch(t *testing.T) {
+	req := &Request{
+		Seed: []*Query{
+			{
+				Name: "seed",
+				Type: QueryTypeExecBatch,
+				Count: 3,
+				Args: []string{
+					"gen('firstname')",
+					"gen('lastname')",
+					`arg(0) + " " + arg(1)`,
+				},
+				Query: "INSERT INTO t VALUES ($1, $2, $3)",
+			},
+		},
+	}
+
+	env, err := NewEnv(nil, req)
+	if err != nil {
+		t.Fatalf("NewEnv failed: %v", err)
+	}
+
+	argSets, err := req.Seed[0].GenerateArgs(env)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	// Single batch of 3 rows, each arg is a CSV string.
+	// sqlFormatValue wraps strings in quotes, so the full name
+	// is computed from raw values then formatted: 'First Last'.
+	firsts := strings.Split(argSets[0][0].(string), ",")
+	lasts := strings.Split(argSets[0][1].(string), ",")
+	fulls := strings.Split(argSets[0][2].(string), ",")
+
+	for i := range 3 {
+		// Strip quotes added by sqlFormatValue.
+		first := strings.Trim(firsts[i], "'")
+		last := strings.Trim(lasts[i], "'")
+		full := strings.Trim(fulls[i], "'")
+		want := first + " " + last
+		if full != want {
+			t.Errorf("row %d: full = %q, want %q", i, full, want)
+		}
 	}
 }
 

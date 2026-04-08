@@ -110,8 +110,8 @@ During the run, progress is printed at the `--print-interval` (default: every se
 
 ```
 5s elapsed
-QUERY       COUNT  ERRORS  AVG LATENCY  QPS
-get_user    4820   0       1.037ms      964.0
+QUERY       COUNT  ERRORS  AVG        p50        p95        p99        QPS
+get_user    4820   0       1.037ms    0.998ms    1.842ms    2.451ms    964.0
 ```
 
 After all workers complete, a final summary is printed:
@@ -121,8 +121,8 @@ summary
 Duration:  1m0.001s
 Workers:   10
 
-QUERY       COUNT   ERRORS  AVG LATENCY  QPS
-get_user    58241   0       1.028ms      970.7
+QUERY       COUNT   ERRORS  AVG        p50        p95        p99        QPS
+get_user    58241   0       1.028ms    0.991ms    1.804ms    2.389ms    970.7
 
 Transactions:  58241
 Errors:        0
@@ -133,6 +133,9 @@ tpm:           3494460.0
 |---|---|
 | COUNT | Total successful query executions |
 | ERRORS | Total failed query executions |
-| AVG LATENCY | Mean execution time per query |
+| AVG | Mean execution time per query |
+| p50 | Median latency (50th percentile) |
+| p95 | 95th percentile latency |
+| p99 | 99th percentile latency |
 | QPS | Queries per second (count / elapsed seconds) |
 | tpm | Transactions per minute across all queries |

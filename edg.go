@@ -295,6 +295,7 @@ type queryStats struct {
 	count        int64
 	errors       int64
 	totalLatency time.Duration
+	latencies    []time.Duration
 }
 
 func printResults(results <-chan pkg.QueryResult, interval time.Duration, start time.Time, numWorkers int) {
@@ -319,6 +320,7 @@ func printResults(results <-chan pkg.QueryResult, interval time.Duration, start 
 			} else {
 				s.count += int64(r.Count)
 				s.totalLatency += r.Latency
+				s.latencies = append(s.latencies, r.Latency)
 			}
 		case <-ticker.C:
 			printProgress(stats, start)
@@ -337,15 +339,21 @@ func printProgress(stats map[string]*queryStats, start time.Time) {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "\n%s elapsed\n", elapsed.Round(time.Second))
-	fmt.Fprintf(w, "QUERY\tCOUNT\tERRORS\tAVG LATENCY\tQPS\n")
+	fmt.Fprintf(w, "QUERY\tCOUNT\tERRORS\tAVG\tp50\tp95\tp99\tQPS\n")
 	for _, name := range names {
 		s := stats[name]
 		var avg time.Duration
 		if s.count > 0 {
 			avg = s.totalLatency / time.Duration(s.count)
 		}
+		p50, p95, p99 := percentiles(s.latencies)
 		qps := float64(s.count) / elapsed.Seconds()
-		fmt.Fprintf(w, "%s\t%d\t%d\t%s\t%.1f\n", name, s.count, s.errors, avg.Round(time.Microsecond), qps)
+		fmt.Fprintf(w, "%s\t%d\t%d\t%s\t%s\t%s\t%s\t%.1f\n", name, s.count, s.errors,
+			avg.Round(time.Microsecond),
+			p50.Round(time.Microsecond),
+			p95.Round(time.Microsecond),
+			p99.Round(time.Microsecond),
+			qps)
 	}
 	w.Flush()
 }
@@ -369,21 +377,52 @@ func printSummary(stats map[string]*queryStats, start time.Time, numWorkers int)
 	fmt.Fprintf(w, "\nsummary\n")
 	fmt.Fprintf(w, "Duration:\t%s\n", elapsed.Round(time.Millisecond))
 	fmt.Fprintf(w, "Workers:\t%d\n", numWorkers)
-	fmt.Fprintf(w, "\nQUERY\tCOUNT\tERRORS\tAVG LATENCY\tQPS\n")
+	fmt.Fprintf(w, "\nQUERY\tCOUNT\tERRORS\tAVG\tp50\tp95\tp99\tQPS\n")
 	for _, name := range names {
 		s := stats[name]
 		var avg time.Duration
 		if s.count > 0 {
 			avg = s.totalLatency / time.Duration(s.count)
 		}
+		p50, p95, p99 := percentiles(s.latencies)
 		qps := float64(s.count) / elapsed.Seconds()
-		fmt.Fprintf(w, "%s\t%d\t%d\t%s\t%.1f\n", name, s.count, s.errors, avg.Round(time.Microsecond), qps)
+		fmt.Fprintf(w, "%s\t%d\t%d\t%s\t%s\t%s\t%s\t%.1f\n", name, s.count, s.errors,
+			avg.Round(time.Microsecond),
+			p50.Round(time.Microsecond),
+			p95.Round(time.Microsecond),
+			p99.Round(time.Microsecond),
+			qps)
 	}
 	tpm := float64(totalCount) / elapsed.Minutes()
 	fmt.Fprintf(w, "\nTransactions:\t%d\n", totalCount)
 	fmt.Fprintf(w, "Errors:\t%d\n", totalErrors)
 	fmt.Fprintf(w, "tpm:\t%.1f\n", tpm)
 	w.Flush()
+}
+
+// percentiles returns p50, p95, and p99 from a slice of latencies.
+// It sorts a copy to avoid mutating the original (which is still
+// being appended to during progress reporting).
+func percentiles(latencies []time.Duration) (p50, p95, p99 time.Duration) {
+	n := len(latencies)
+	if n == 0 {
+		return 0, 0, 0
+	}
+
+	sorted := make([]time.Duration, n)
+	copy(sorted, latencies)
+	slices.Sort(sorted)
+
+	p50 = sorted[n*50/100]
+	p95 = sorted[n*95/100]
+
+	i99 := n * 99 / 100
+	if i99 >= n {
+		i99 = n - 1
+	}
+	p99 = sorted[i99]
+
+	return p50, p95, p99
 }
 
 func allCmd() *cobra.Command {

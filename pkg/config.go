@@ -132,6 +132,7 @@ func (q *Query) GenerateArgs(e *Env) ([][]any, error) {
 		return [][]any{nil}, nil
 	}
 
+	e.computedArgs = e.computedArgs[:0]
 	var completeArgs []any
 	for _, cq := range q.CompiledArgs {
 		compiledArg, err := expr.Run(cq, e.env)
@@ -139,6 +140,7 @@ func (q *Query) GenerateArgs(e *Env) ([][]any, error) {
 			return nil, fmt.Errorf("error running expr: %w", err)
 		}
 		completeArgs = append(completeArgs, compiledArg)
+		e.computedArgs = append(e.computedArgs, compiledArg)
 	}
 
 	// Find a ref_each batch arg ([][]any) and expand it into multiple
@@ -212,12 +214,14 @@ func (q *Query) generateBatchArgs(e *Env) ([][]any, error) {
 
 		for row := range n {
 			e.clearOneCache()
+			e.computedArgs = e.computedArgs[:0]
 			for i, cq := range q.CompiledArgs {
 				v, err := expr.Run(cq, e.env)
 				if err != nil {
 					return nil, fmt.Errorf("error running batch arg %d row %d: %w", i, b*size+row, err)
 				}
 				perArg[i][row] = sqlFormatValue(v)
+				e.computedArgs = append(e.computedArgs, v)
 			}
 		}
 

@@ -37,4 +37,25 @@ View the docs [here](https://edg.run/docs).
 
 ## Todos
 
-* Support DSQL with custom driver
+* Additional driver support
+  * Support DSQL with custom driver
+  * SQLite
+  * SQL Server
+* `--seed` for PRNG to generate deterministic output and regression testing
+* Ability to separate config parts into separate files
+* Config includes / composition (!include shared/references.yaml) to reuse reference data and expressions across workload files
+* Progress indication
+* Ability to provide expectations (e.g. error rate < 1%) which will be good for CI/CD usage
+* Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences
+* Ramp-up for workers
+* Staged workloads (e.g. start with 10 qps for 1 hour...)
+* Global sequencies (`seq_global(name, start, step)`) for all workers to share in a thread safe way
+* Prometheus metrics endpoint
+* Dry run mode
+* Output to file for testing and feeding other tools
+  * CSV
+  * JSON
+  * Parquet
+  * SQL
+* Unique constraint awareness
+* Weighted NULL injection for nullable columns - nullable(expr, probability)

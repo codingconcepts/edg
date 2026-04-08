@@ -13,6 +13,7 @@ Query arguments are written as expressions compiled at startup using [expr-lang/
 
 | Function | Returns | Description |
 |---|---|---|
+| `arg(index)` | `any` | Returns the value of a previously evaluated arg by its zero-based index. Enables dependent columns where later args reference earlier ones. |
 | `const(value)` | `any` | Returns the value as-is. Useful for literal constants. |
 | `expr(expression)` | `any` | Evaluates an arithmetic expression. Alias for `const`, the expr engine handles the arithmetic. |
 | `gen(pattern)` | `string` | Generates a random value using [gofakeit](https://github.com/brianvoe/gofakeit) patterns (e.g. `gen('number:1,100')`). |
@@ -80,6 +81,7 @@ Several functions maintain state. Understanding when that state resets is import
 
 | Function | Scope | Resets |
 |---|---|---|
+| `arg(index)` | Per-query | Returns the value of arg at `index` from the current query execution. Cleared before the next query. In batch queries, resets per row. |
 | `ref_rand(name)` | None | Fresh random row on every call |
 | `ref_same(name)` | Per-query | Picks a row on first call within a query; all subsequent `ref_same` calls for the same dataset within that query return the same row. **Cleared before the next query.** |
 | `ref_perm(name)` | Per-worker | Picks a row on first call and returns that same row for the entire lifetime of the worker. Never resets. |
@@ -485,4 +487,15 @@ args:
 
   # Number of distinct category IDs across all products.
   - distinct('fetch_products', 'category_id')
+
+  # Dependent columns: later args can reference earlier ones by index.
+  # arg(0) is the first arg, arg(1) is the second, etc.
+  - gen('firstname')      # $1 = "Alice"
+  - gen('lastname')       # $2 = "Smith"
+  - arg(0) + " " + arg(1) # $3 = "Alice Smith"
+
+  # Compute a total from previously generated values.
+  - uniform_f(1.00, 99.99, 2) # $1 = price (e.g. 29.99)
+  - gen('number:1,10')        # $2 = quantity (e.g. 3)
+  - arg(0) * float(arg(1))    # $3 = total (e.g. 89.97)
 ```

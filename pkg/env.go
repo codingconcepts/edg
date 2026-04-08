@@ -36,6 +36,8 @@ type Env struct {
 
 	seqCounter int64
 
+	computedArgs []any
+
 	Results chan<- QueryResult
 }
 
@@ -53,6 +55,7 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 	}
 
 	env.env = map[string]any{
+		"arg":               env.arg,             // Reference a previously evaluated arg by index.
 		"const":             constant,            // Use a constant value.
 		"expr":              constant,            // Evaluate an arithmetic expression (e.g. expr(warehouses * 10)).
 		"gen":               gen,                 // Generate a random value using gofakeit.
@@ -385,6 +388,13 @@ func (e *Env) Eval(expression string) (any, error) {
 		return nil, err
 	}
 	return expr.Run(program, envCopy)
+}
+
+func (e *Env) arg(index int) (any, error) {
+	if index < 0 || index >= len(e.computedArgs) {
+		return nil, fmt.Errorf("arg(%d): index out of range (%d args computed so far)", index, len(e.computedArgs))
+	}
+	return e.computedArgs[index], nil
 }
 
 func (e *Env) SetEnv(name string, data []map[string]any) {
