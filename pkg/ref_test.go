@@ -771,7 +771,8 @@ func BenchmarkNormRandN(b *testing.B) {
 			env := benchEnv(0)
 			b.ResetTimer()
 			for range b.N {
-				env.normRandN(500, 50, 1, 1000, tc.n, tc.n)			}
+				_, _ = env.normRandN(500, 50, 1, 1000, tc.n, tc.n)
+			}
 		})
 	}
 }
