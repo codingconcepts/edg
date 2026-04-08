@@ -1,0 +1,14 @@
+- name: create_customer
+  query: |-
+    CREATE TABLE IF NOT EXISTS customer (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email STRING NOT NULL
+    )
+
+- name: create_account
+  query: |-
+    CREATE TABLE IF NOT EXISTS account (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      balance FLOAT NOT NULL,
+      customer_id UUID NOT NULL REFERENCES customer(id)
+    )

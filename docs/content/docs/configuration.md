@@ -255,3 +255,68 @@ run_weights:
 ```
 
 If `run_weights` is omitted, all `run` queries execute sequentially on each iteration.
+
+## Includes
+
+Use the `!include` YAML tag to split workload configs into reusable fragments. This is useful when multiple workloads share the same schema, reference data, or expressions.
+
+```yaml
+globals: !include shared/globals.yaml
+up: !include shared/schema.yaml
+down: !include shared/teardown.yaml
+run: !include shared/run_queries.yaml
+```
+
+Paths are resolved relative to the file containing the `!include` directive.
+
+### Mapping value
+
+Replace a key's value with the content of a file:
+
+```yaml
+globals: !include shared/globals.yaml
+```
+
+Where `shared/globals.yaml` contains:
+
+```yaml
+batch_size: 10000
+customers: 100000
+```
+
+### Sequence value
+
+Replace an entire list:
+
+```yaml
+up: !include shared/schema.yaml
+```
+
+Where `shared/schema.yaml` contains:
+
+```yaml
+- name: create_users
+  query: CREATE TABLE users (id UUID PRIMARY KEY, email STRING NOT NULL)
+- name: create_orders
+  query: CREATE TABLE orders (id UUID PRIMARY KEY, user_id UUID REFERENCES users(id))
+```
+
+### Sequence item
+
+Splice items from an included file into a list alongside local entries:
+
+```yaml
+run:
+  - name: local_query
+    type: query
+    query: SELECT 1
+  - !include shared/extra_queries.yaml
+```
+
+Items from the included file are merged into the parent sequence rather than nested.
+
+### Nested includes
+
+Included files can themselves use `!include`. Circular includes are detected and produce an error.
+
+See [`_examples/includes/`](https://github.com/codingconcepts/edg/tree/main/_examples/includes) for a complete working example.

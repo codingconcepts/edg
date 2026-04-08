@@ -22,7 +22,6 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/sijms/go-ora/v2"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -103,14 +102,9 @@ func connect() (*sql.DB, *pkg.Request, error) {
 		return nil, nil, fmt.Errorf("--url flag or URL env var required")
 	}
 
-	raw, err := os.ReadFile(configFile)
+	req, err := pkg.LoadConfig(configFile)
 	if err != nil {
-		return nil, nil, fmt.Errorf("reading %s: %w", configFile, err)
-	}
-
-	var req pkg.Request
-	if err := yaml.Unmarshal(raw, &req); err != nil {
-		return nil, nil, fmt.Errorf("parsing %s: %w", configFile, err)
+		return nil, nil, err
 	}
 
 	db, err := sql.Open(flagDriver, url)
@@ -123,7 +117,7 @@ func connect() (*sql.DB, *pkg.Request, error) {
 		return nil, nil, fmt.Errorf("connecting to database: %w", err)
 	}
 
-	return db, &req, nil
+	return db, req, nil
 }
 
 func upCmd() *cobra.Command {
@@ -497,17 +491,12 @@ func validateCmd() *cobra.Command {
 				return fmt.Errorf("--config flag required")
 			}
 
-			raw, err := os.ReadFile(configFile)
+			req, err := pkg.LoadConfig(configFile)
 			if err != nil {
-				return fmt.Errorf("reading %s: %w", configFile, err)
+				return err
 			}
 
-			var req pkg.Request
-			if err := yaml.Unmarshal(raw, &req); err != nil {
-				return fmt.Errorf("parsing %s: %w", configFile, err)
-			}
-
-			if _, err := pkg.NewEnv(nil, &req); err != nil {
+			if _, err := pkg.NewEnv(nil, req); err != nil {
 				return err
 			}
 
@@ -524,13 +513,11 @@ func replCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var req pkg.Request
 			if configFile != "" {
-				raw, err := os.ReadFile(configFile)
+				r, err := pkg.LoadConfig(configFile)
 				if err != nil {
-					return fmt.Errorf("reading %s: %w", configFile, err)
+					return err
 				}
-				if err := yaml.Unmarshal(raw, &req); err != nil {
-					return fmt.Errorf("parsing %s: %w", configFile, err)
-				}
+				req = *r
 			}
 
 			env, err := pkg.NewEnv(nil, &req)

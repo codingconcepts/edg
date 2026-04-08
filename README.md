@@ -41,8 +41,6 @@ View the docs [here](https://edg.run/docs).
   * Support DSQL with custom driver
   * SQLite
   * SQL Server
-* Ability to separate config parts into separate files
-* Config includes / composition (!include shared/references.yaml) to reuse reference data and expressions across workload files
 * Progress indication
 * Ability to provide expectations (e.g. error rate < 1%) which will be good for CI/CD usage
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences

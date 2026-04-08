@@ -1,0 +1,49 @@
+globals: !include shared/globals.yaml
+
+up: !include shared/schema.yaml
+
+seed:
+
+  - name: populate_customer
+    args:
+      - gen_batch(customers, batch_size, 'email')
+    query: |-
+      INSERT INTO customer (email)
+      SELECT unnest(string_to_array('$1', ','))
+
+  - name: populate_account
+    args:
+      - batch(customers / batch_size)
+      - initial_balance
+      - batch_size
+    query: |-
+      INSERT INTO account (balance, customer_id)
+      SELECT $2::FLOAT, c.id
+      FROM customer c
+      ORDER BY c.id
+      OFFSET $1::INT * $3::INT
+      LIMIT $3::INT
+
+deseed:
+
+  - name: truncate_account
+    type: exec
+    query: TRUNCATE TABLE account CASCADE
+
+  - name: truncate_customer
+    type: exec
+    query: TRUNCATE TABLE customer CASCADE
+
+down: !include shared/teardown.yaml
+
+init:
+
+  - name: fetch_accounts
+    type: query
+    query: SELECT id FROM account ORDER BY random()
+
+run_weights:
+  check_balance: 50
+  credit_account: 50
+
+run: !include shared/run_queries.yaml
