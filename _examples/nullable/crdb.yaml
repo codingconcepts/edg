@@ -22,7 +22,7 @@ seed:
     size: batch_size
     args:
       - gen('email')
-      - nullable(gen('phonenumber'), 0.3)
+      - nullable(gen('phone'), 0.3)
       - nullable(gen('sentence:5'), 0.5)
       - nullable(uuid_v4(), 0.8)
     query: |-

@@ -451,6 +451,18 @@ func TestGenBit(t *testing.T) {
 	}
 }
 
+func TestGenBool(t *testing.T) {
+	trueCount := 0
+	for range 1000 {
+		if genBool() {
+			trueCount++
+		}
+	}
+	if trueCount == 0 || trueCount == 1000 {
+		t.Fatalf("genBool returned the same value 1000 times (true=%d)", trueCount)
+	}
+}
+
 func TestGenVarBit(t *testing.T) {
 	for range 100 {
 		result, err := genVarBit(16)

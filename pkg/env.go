@@ -8,10 +8,11 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/codingconcepts/edg/pkg/random"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/codingconcepts/edg/pkg/random"
 
 	"github.com/expr-lang/expr"
 )
@@ -57,67 +58,68 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 
 	env.env = map[string]any{
 		"arg":               env.arg,             // Reference a previously evaluated arg by index.
-		"const":             constant,            // Use a constant value.
-		"expr":              constant,            // Evaluate an arithmetic expression (e.g. expr(warehouses * 10)).
-		"gen":               gen,                 // Generate a random value using gofakeit.
-		"gen_batch":         genBatch,            // Generate N values in batches, returns [][]any of comma-separated strings.
+		"array":             genArray,            // CockroachDB/PostgreSQL array literal.
+		"avg":               env.aggAvg,          // Average a numeric field across all rows in a dataset.
 		"batch":             batch,               // Generate sequential batch indices [0, n) for batched execution.
+		"bit":               genBit,              // Random fixed-length bit string.
+		"bool":              genBool,             // Generate either a true or a false value.
+		"bytes":             genBytes,            // Random bytes as hex-encoded string.
+		"coalesce":          coalesce,            // First non-nil value from arguments.
+		"cond":              cond,                // Conditional: if predicate then trueVal else falseVal.
+		"const":             constant,            // Use a constant value.
+		"count":             env.aggCount,        // Number of rows in a dataset.
+		"date_offset":       dateOffset,          // Timestamp offset from now.
+		"date":              dateRand,            // Random date with custom format.
+		"distinct":          env.aggDistinct,     // Number of distinct values for a field in a dataset.
+		"duration":          randDuration,        // Random duration between min and max.
+		"exp_f":             expRandF,            // Exponential-distribution random float with precision.
+		"exp":               expRand,             // Exponential-distribution random float in [min, max].
+		"expr":              constant,            // Evaluate an arithmetic expression (e.g. expr(warehouses * 10)).
+		"gen_batch":         genBatch,            // Generate N values in batches, returns [][]any of comma-separated strings.
+		"gen":               gen,                 // Generate a random value using gofakeit.
 		"global":            env.global,          // Use a value in the global config section.
-		"ref_rand":          env.refRand,         // Use a random row.
-		"ref_same":          env.refSame,         // Use the same random row across multiple arguments.
-		"ref_perm":          env.refPerm,         // Use the same random row for the worker's lifetime.
+		"inet":              genInet,             // Random IP address within a CIDR block.
+		"json_arr":          jsonArr,             // Build a JSON array of N random values.
+		"json_obj":          jsonObj,             // Build a JSON object from key-value pairs.
+		"lognorm_f":         lognormRandF,        // Log-normal-distribution random float with precision.
+		"lognorm":           lognormRand,         // Log-normal-distribution random float in [min, max].
+		"max":               env.aggMax,          // Maximum value of a numeric field in a dataset.
+		"min":               env.aggMin,          // Minimum value of a numeric field in a dataset.
+		"norm_f":            env.normRandF,       // Normal-distribution random float with precision.
+		"norm_n":            env.normRandN,       // N unique normal-distribution random values (comma-separated).
+		"norm":              env.normRand,        // Normal-distribution random integer in [min, max].
+		"nullable":          nullable,            // Return NULL with given probability, otherwise the value.
+		"nurand_n":          env.nuRandN,         // N unique Non-Uniform Random values (comma-separated).
+		"nurand":            env.nuRand,          // Non-Uniform Random per TPC-C spec.
+		"point_wkt":         genPointWKT,         // Random geographic point as WKT string.
+		"point":             genPoint,            // Random geographic point within a radius.
 		"ref_diff":          env.refDiff,         // Use unique rows across multiple arguments.
 		"ref_each":          env.refEach,         // Cycles through each row.
 		"ref_n":             env.refN,            // Pick N unique random field values from a dataset.
-		"nurand":            env.nuRand,          // Non-Uniform Random per TPC-C spec.
-		"nurand_n":          env.nuRandN,         // N unique Non-Uniform Random values (comma-separated).
-		"norm":              env.normRand,        // Normal-distribution random integer in [min, max].
-		"norm_f":            env.normRandF,       // Normal-distribution random float with precision.
-		"norm_n":            env.normRandN,       // N unique normal-distribution random values (comma-separated).
-		"exp":               expRand,             // Exponential-distribution random float in [min, max].
-		"exp_f":             expRandF,            // Exponential-distribution random float with precision.
-		"lognorm":           lognormRand,         // Log-normal-distribution random float in [min, max].
-		"lognorm_f":         lognormRandF,        // Log-normal-distribution random float with precision.
-		"set_rand":          setRand,             // Pick from a set (uniform or weighted random).
-		"set_norm":          setNormal,           // Pick from a set using normal distribution.
+		"ref_perm":          env.refPerm,         // Use the same random row for the worker's lifetime.
+		"ref_rand":          env.refRand,         // Use a random row.
+		"ref_same":          env.refSame,         // Use the same random row across multiple arguments.
+		"regex":             genRegex,            // Generate a string matching a regex pattern.
+		"seq":               env.seq,             // Auto-incrementing sequence (start + counter * step).
 		"set_exp":           setExp,              // Pick from a set using exponential distribution.
 		"set_lognorm":       setLognormal,        // Pick from a set using log-normal distribution.
+		"set_norm":          setNormal,           // Pick from a set using normal distribution.
+		"set_rand":          setRand,             // Pick from a set (uniform or weighted random).
 		"set_zipf":          setZipfian,          // Pick from a set using Zipfian distribution.
+		"sum":               env.aggSum,          // Sum a numeric field across all rows in a dataset.
+		"template":          tmpl,                // Format string interpolation (fmt.Sprintf).
+		"time":              genTime,             // Random time of day (HH:MM:SS).
+		"timestamp":         randTimestamp,       // Random timestamp between min and max (RFC3339).
+		"timez":             genTimez,            // Random time of day with timezone (HH:MM:SS+00:00).
+		"uniform_f":         floatRand,           // Uniform random float in [min, max] with precision.
+		"uniform":           uniformRand,         // Uniform random float in [min, max].
 		"uuid_v1":           genUUIDv1,           // Generate a Version 1 UUID (timestamp + node ID).
 		"uuid_v4":           genUUIDv4,           // Generate a Version 4 UUID (random).
 		"uuid_v6":           genUUIDv6,           // Generate a Version 6 UUID (reordered timestamp).
 		"uuid_v7":           genUUIDv7,           // Generate a Version 7 UUID (Unix timestamp + random).
-		"uniform_f":         floatRand,           // Uniform random float in [min, max] with precision.
-		"uniform":           uniformRand,         // Uniform random float in [min, max].
-		"seq":               env.seq,             // Auto-incrementing sequence (start + counter * step).
-		"zipf":              zipfRand,            // Zipfian-distributed random integer in [0, max].
-		"cond":              cond,                // Conditional: if predicate then trueVal else falseVal.
-		"nullable":          nullable,            // Return NULL with given probability, otherwise the value.
-		"coalesce":          coalesce,            // First non-nil value from arguments.
-		"template":          tmpl,                // Format string interpolation (fmt.Sprintf).
-		"regex":             genRegex,            // Generate a string matching a regex pattern.
-		"json_obj":          jsonObj,             // Build a JSON object from key-value pairs.
-		"json_arr":          jsonArr,             // Build a JSON array of N random values.
-		"point":             genPoint,            // Random geographic point within a radius.
-		"point_wkt":         genPointWKT,         // Random geographic point as WKT string.
-		"timestamp":         randTimestamp,       // Random timestamp between min and max (RFC3339).
-		"duration":          randDuration,        // Random duration between min and max.
-		"date":              dateRand,            // Random date with custom format.
-		"date_offset":       dateOffset,          // Timestamp offset from now.
-		"weighted_sample_n": env.weightedSampleN, // N weighted random field values (comma-separated).
-		"bytes":             genBytes,            // Random bytes as hex-encoded string.
-		"bit":               genBit,              // Random fixed-length bit string.
 		"varbit":            genVarBit,           // Random variable-length bit string.
-		"inet":              genInet,             // Random IP address within a CIDR block.
-		"array":             genArray,            // CockroachDB/PostgreSQL array literal.
-		"time":              genTime,             // Random time of day (HH:MM:SS).
-		"timez":             genTimez,            // Random time of day with timezone (HH:MM:SS+00:00).
-		"sum":               env.aggSum,          // Sum a numeric field across all rows in a dataset.
-		"avg":               env.aggAvg,          // Average a numeric field across all rows in a dataset.
-		"min":               env.aggMin,          // Minimum value of a numeric field in a dataset.
-		"max":               env.aggMax,          // Maximum value of a numeric field in a dataset.
-		"count":             env.aggCount,        // Number of rows in a dataset.
-		"distinct":          env.aggDistinct,     // Number of distinct values for a field in a dataset.
+		"weighted_sample_n": env.weightedSampleN, // N weighted random field values (comma-separated).
+		"zipf":              zipfRand,            // Zipfian-distributed random integer in [0, max].
 	}
 
 	// Check that globals don't shadow built-in functions.

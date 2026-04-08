@@ -55,4 +55,3 @@ View the docs [here](https://edg.run/docs).
   * Parquet
   * SQL
 * Unique constraint awareness
-* Example of table where either col_a or col_b must be provided but not both

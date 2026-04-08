@@ -18,6 +18,7 @@ Query arguments are written as expressions compiled at startup using [expr-lang/
 | `avg(name, field)` | `float64` | Average of a numeric field across all rows in a named dataset. |
 | `batch(n)` | `[][]any` | Returns sequential integers `[0, n)` as batch arg sets, |
 | `bit(n)` | `string` | Random fixed-length bit string of exactly `n` bits. |
+| `bool()` | `bool` | Random `true` or `false`. Useful as a coin flip with `cond()` and `arg()` for mutually exclusive columns. |
 | `bytes(n)` | `string` | Random `n` bytes as a hex-encoded string with `\x` prefix. |
 | `coalesce(v1, v2, ...)` | `any` | Returns the first non-nil value from arguments. |
 | `cond(predicate, trueVal, falseVal)` | `any` | Returns `trueVal` if `predicate` is true, `falseVal` otherwise. |
@@ -396,6 +397,12 @@ args:
 
   # Conditional value based on a random roll.
   - cond(gen('number:1,100') > 95, 'premium', 'standard')
+
+  # Mutually exclusive columns: use bool() as a coin flip and arg() to
+  # ensure exactly one of two columns is populated.
+  - bool()                           # coin flip
+  - cond(arg(0), gen('email'), nil)  # email if true, NULL if false
+  - cond(!arg(0), gen('phone'), nil) # phone if false, NULL if true
 
   # 30% chance of NULL, otherwise a random email. Useful for nullable columns.
   - nullable(gen('email'), 0.3)

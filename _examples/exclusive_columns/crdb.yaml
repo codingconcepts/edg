@@ -1,0 +1,52 @@
+globals:
+  contacts: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_contact
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS contact (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name STRING NOT NULL,
+        email STRING,
+        phone STRING,
+        CHECK (
+          (email IS NOT NULL AND phone IS NULL) OR
+          (email IS NULL AND phone IS NOT NULL)
+        )
+      )
+
+seed:
+
+  - name: populate_contact
+    type: exec_batch
+    count: contacts
+    size: batch_size
+    args:
+      - gen('name')
+      - bool()
+      - cond(arg(1), gen('email'), nil)
+      - cond(!arg(1), gen('phone'), nil)
+    query: |-
+      INSERT INTO contact (name, email, phone)
+      SELECT n, e, p
+      FROM unnest(
+        ARRAY[$1],
+        ARRAY[$2],
+        ARRAY[$3],
+        ARRAY[$4]
+      ) AS t(n, flip, e, p)
+
+deseed:
+
+  - name: truncate_contact
+    type: exec
+    query: TRUNCATE TABLE contact
+
+down:
+
+  - name: drop_contact
+    type: exec
+    query: DROP TABLE IF EXISTS contact

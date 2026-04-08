@@ -349,6 +349,13 @@ func genBit(rawN any) (string, error) {
 	return random.Bit(n), nil
 }
 
+// genBool generates a random true or false value.
+//
+//	bool()
+func genBool() bool {
+	return random.Rng.IntN(2) == 1
+}
+
 // genVarBit generates a random variable-length bit string of 1 to n bits.
 //
 //	varbit(16)

@@ -20,7 +20,7 @@ The example creates a `user` table with several nullable columns, each with a di
 | Column | Expression | NULL % |
 |---|---|---|
 | `email` | `gen('email')` | 0% (NOT NULL) |
-| `phone` | `nullable(gen('phonenumber'), 0.3)` | 30% |
+| `phone` | `nullable(gen('phone'), 0.3)` | 30% |
 | `bio` | `nullable(gen('sentence:5'), 0.5)` | 50% |
 | `referred_by` | `nullable(uuid_v4(), 0.8)` | 80% |
 

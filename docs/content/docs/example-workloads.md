@@ -21,3 +21,4 @@ Complete workload configs you can run directly or use as starting points for you
 | [Aggregation](https://github.com/codingconcepts/edg/tree/main/_examples/aggregation/) | Demonstrates aggregation functions (sum, avg, min, max, count, distinct) |
 | [Reference Data](https://github.com/codingconcepts/edg/tree/main/_examples/reference_data/) | Static reference datasets without database queries |
 | [Expressions](https://github.com/codingconcepts/edg/tree/main/_examples/expression/) | Demonstrates expr-lang built-in features (array, map, string, bitwise, etc.) |
+| [Exclusive Columns](https://github.com/codingconcepts/edg/tree/main/_examples/exclusive_columns/) | Mutually exclusive columns — either col_a or col_b, never both |
