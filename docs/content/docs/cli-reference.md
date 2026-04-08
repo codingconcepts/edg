@@ -17,6 +17,7 @@ weight: 3
 | `down` | Tear down schema (drop tables) |
 | `all` | Run up, seed, run, deseed, and down in sequence |
 | `repl` | Interactive expression evaluator |
+| `validate` | Validate a config file without connecting to a database |
 
 Running `edg` with an expression (no subcommand) evaluates it and prints the result. Bare words are treated as [gofakeit](https://github.com/brianvoe/gofakeit) patterns, so `edg email` is equivalent to `edg "gen('email')"`. For expressions with parentheses or special characters, quote the argument.
 
@@ -74,6 +75,20 @@ edg all \
 -w 100 \
 -d 5m
 ```
+
+## Validating Config
+
+The `validate` command parses a config file and checks it for errors without connecting to a database. It catches YAML syntax errors, invalid expressions, unknown function calls, duplicate query names, shadowed built-ins, and invalid query types.
+
+```sh
+edg validate --config _examples/tpcc/crdb.yaml
+```
+
+```
+config is valid
+```
+
+This is useful for catching mistakes before deploying a workload or as a CI check.
 
 ## Run Behaviour
 

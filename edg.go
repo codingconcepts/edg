@@ -68,7 +68,7 @@ func main() {
 	root.PersistentFlags().StringVar(&configFile, "config", "", "workload YAML config file")
 	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql]")
 
-	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd(), allCmd(), replCmd())
+	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd(), allCmd(), replCmd(), validateCmd())
 	root.SilenceUsage = true
 	root.SilenceErrors = true
 
@@ -437,6 +437,35 @@ func allCmd() *cobra.Command {
 	cmd.Flags().DurationVar(&printInterval, "print-interval", time.Second, "progress reporting interval")
 
 	return cmd
+}
+
+func validateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "validate",
+		Short: "Validate a config file",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if configFile == "" {
+				return fmt.Errorf("--config flag required")
+			}
+
+			raw, err := os.ReadFile(configFile)
+			if err != nil {
+				return fmt.Errorf("reading %s: %w", configFile, err)
+			}
+
+			var req pkg.Request
+			if err := yaml.Unmarshal(raw, &req); err != nil {
+				return fmt.Errorf("parsing %s: %w", configFile, err)
+			}
+
+			if _, err := pkg.NewEnv(nil, &req); err != nil {
+				return err
+			}
+
+			fmt.Println("config is valid")
+			return nil
+		},
+	}
 }
 
 func replCmd() *cobra.Command {
