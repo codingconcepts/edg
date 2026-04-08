@@ -162,6 +162,16 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 		}
 	}
 
+	// Expand row references into args before compilation.
+	allQueries := [][]*Query{r.Up, r.Seed, r.Deseed, r.Down, r.Init, r.Run}
+	for _, queries := range allQueries {
+		for _, query := range queries {
+			if query.Row != "" {
+				query.Args = slices.Clone(r.Rows[query.Row])
+			}
+		}
+	}
+
 	for _, group := range []struct {
 		name    string
 		queries []*Query

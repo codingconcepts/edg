@@ -14,6 +14,9 @@ globals:
 # User-defined expression functions.
 expressions:
 
+# Reusable arg templates for queries.
+rows:
+
 # Static datasets available to ref_* functions without a database query.
 reference:
 
@@ -84,6 +87,45 @@ args:
 ```
 
 This is useful when your lookup data is small and known ahead of time, avoiding the need for a database round-trip.
+
+## Rows
+
+The `rows` section defines reusable arg templates. Each key is a row name, and the value is a list of arg expressions. Queries can reference a row template using the `row` field instead of `args`:
+
+```yaml
+rows:
+  customer:
+    - gen('email')
+    - gen('name')
+    - timestamp('2020-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
+
+seed:
+  - name: seed_customers
+    type: exec_batch
+    count: 50000
+    size: 5000
+    row: customer
+    query: |-
+      INSERT INTO customer (email, name, created_at)
+      SELECT e, n, t
+      FROM unnest(
+        string_to_array('$1', ','),
+        string_to_array('$2', ','),
+        string_to_array('$3', ',')
+      ) AS t(e, n, t)
+
+run:
+  - name: insert_customer
+    type: exec
+    row: customer
+    query: |-
+      INSERT INTO customer (email, name, created_at)
+      VALUES ($1, $2, $3)
+```
+
+The `row` field and `args` field are mutually exclusive, a query must use one or the other, not both. Row names must be defined in the `rows` section; referencing an unknown row name is a validation error.
+
+Row templates support all the same expressions as `args`. They are expanded before compilation, so from the query's perspective there is no difference between `row: customer` and provide arguments via `args`.
 
 ## Sections
 

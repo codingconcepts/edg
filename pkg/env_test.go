@@ -830,6 +830,106 @@ func TestRunSection_QueryStoresResults(t *testing.T) {
 	}
 }
 
+func TestRow_ExpandsIntoArgs(t *testing.T) {
+	req := &Request{
+		Rows: map[string][]string{
+			"customer": {"gen('email')", "gen('name')"},
+		},
+		Run: []*Query{
+			{Name: "insert_customer", Row: "customer", Query: "INSERT INTO customer (email, name) VALUES ($1, $2)"},
+		},
+	}
+
+	env, err := NewEnv(nil, req)
+	if err != nil {
+		t.Fatalf("NewEnv failed: %v", err)
+	}
+
+	argSets, err := req.Run[0].GenerateArgs(env)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	if len(argSets) != 1 {
+		t.Fatalf("expected 1 arg set, got %d", len(argSets))
+	}
+	if len(argSets[0]) != 2 {
+		t.Fatalf("expected 2 args, got %d", len(argSets[0]))
+	}
+
+	email, ok := argSets[0][0].(string)
+	if !ok || email == "" {
+		t.Errorf("arg 0 = %v (%T), want non-empty string", argSets[0][0], argSets[0][0])
+	}
+	name, ok := argSets[0][1].(string)
+	if !ok || name == "" {
+		t.Errorf("arg 1 = %v (%T), want non-empty string", argSets[0][1], argSets[0][1])
+	}
+}
+
+func TestRow_UsedAcrossSections(t *testing.T) {
+	req := &Request{
+		Rows: map[string][]string{
+			"customer": {"gen('email')"},
+		},
+		Seed: []*Query{
+			{Name: "seed_customer", Row: "customer", Query: "INSERT INTO customer (email) VALUES ($1)"},
+		},
+		Run: []*Query{
+			{Name: "insert_customer", Row: "customer", Query: "INSERT INTO customer (email) VALUES ($1)"},
+		},
+	}
+
+	env, err := NewEnv(nil, req)
+	if err != nil {
+		t.Fatalf("NewEnv failed: %v", err)
+	}
+
+	// Both queries should have compiled args from the row.
+	for _, q := range []*Query{req.Seed[0], req.Run[0]} {
+		if len(q.CompiledArgs) != 1 {
+			t.Errorf("query %s: expected 1 compiled arg, got %d", q.Name, len(q.CompiledArgs))
+		}
+
+		argSets, err := q.GenerateArgs(env)
+		if err != nil {
+			t.Fatalf("GenerateArgs for %s failed: %v", q.Name, err)
+		}
+		if len(argSets[0]) != 1 {
+			t.Errorf("query %s: expected 1 arg, got %d", q.Name, len(argSets[0]))
+		}
+	}
+}
+
+func TestRow_UnknownRowName(t *testing.T) {
+	req := &Request{
+		Run: []*Query{
+			{Name: "bad", Row: "nonexistent"},
+		},
+	}
+
+	_, err := NewEnv(nil, req)
+	if err == nil {
+		t.Fatal("expected error for unknown row name, got nil")
+	}
+}
+
+func TestRow_MutuallyExclusiveWithArgs(t *testing.T) {
+	req := &Request{
+		Rows: map[string][]string{
+			"customer": {"gen('email')"},
+		},
+		Run: []*Query{
+			{Name: "bad", Row: "customer", Args: []string{"gen('name')"}},
+		},
+	}
+
+	_, err := NewEnv(nil, req)
+	if err == nil {
+		t.Fatal("expected error when both row and args are set, got nil")
+	}
+}
+
 func BenchmarkPickWeighted(b *testing.B) {
 	cases := []struct {
 		name  string

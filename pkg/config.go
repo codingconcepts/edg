@@ -26,6 +26,7 @@ func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 type Request struct {
 	Globals     map[string]any                `json:"globals" yaml:"globals"`
 	Expressions map[string]string             `json:"expressions" yaml:"expressions"`
+	Rows        map[string][]string           `json:"rows" yaml:"rows"`
 	Reference   map[string][]map[string]any   `json:"reference" yaml:"reference"`
 	Up          []*Query                      `json:"up" yaml:"up"`
 	Seed        []*Query                      `json:"seed" yaml:"seed"`
@@ -68,6 +69,7 @@ type Query struct {
 	Count        any           `json:"count" yaml:"count"`
 	Size         any           `json:"size" yaml:"size"`
 	Query        string        `json:"query" yaml:"query"`
+	Row          string        `json:"row" yaml:"row"`
 	Args         []string      `json:"args" yaml:"args"`
 	CompiledArgs []*vm.Program `json:"-" yaml:"-"`
 
@@ -265,6 +267,31 @@ func (r *Request) Validate() error {
 		for name := range r.RunWeights {
 			if !runNames[name] {
 				return fmt.Errorf("run_weights references unknown query %q", name)
+			}
+		}
+	}
+
+	// Validate row references: row name must exist, and row + args are mutually exclusive.
+	for _, group := range []struct {
+		name    string
+		queries []*Query
+	}{
+		{"up", r.Up},
+		{"seed", r.Seed},
+		{"deseed", r.Deseed},
+		{"down", r.Down},
+		{"init", r.Init},
+		{"run", r.Run},
+	} {
+		for i, q := range group.queries {
+			if q.Row == "" {
+				continue
+			}
+			if len(q.Args) > 0 {
+				return fmt.Errorf("%s query %d (%s): row and args are mutually exclusive", group.name, i, q.Name)
+			}
+			if _, ok := r.Rows[q.Row]; !ok {
+				return fmt.Errorf("%s query %d (%s): references unknown row %q", group.name, i, q.Name, q.Row)
 			}
 		}
 	}
