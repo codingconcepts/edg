@@ -55,4 +55,4 @@ View the docs [here](https://edg.run/docs).
   * Parquet
   * SQL
 * Unique constraint awareness
-* Weighted NULL injection for nullable columns - nullable(expr, probability)
+* Example of table where either col_a or col_b must be provided but not both

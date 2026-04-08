@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/codingconcepts/edg/pkg/random"
 )
 
 func constant(v any) any {
@@ -77,6 +79,20 @@ func cond(predicate, trueVal, falseVal any) any {
 		return trueVal
 	}
 	return falseVal
+}
+
+// nullable returns nil with the given probability, otherwise returns val.
+//
+//	nullable(gen('email'), 0.3)
+func nullable(val, rawProbability any) (any, error) {
+	p, err := toFloat(rawProbability)
+	if err != nil {
+		return nil, fmt.Errorf("nullable probability: %w", err)
+	}
+	if random.Rng.Float64() < p {
+		return nil, nil
+	}
+	return val, nil
 }
 
 // coalesce returns the first non-nil value from arguments.

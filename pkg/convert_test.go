@@ -115,6 +115,39 @@ func TestCond_NonBool(t *testing.T) {
 	}
 }
 
+func TestNullable_AlwaysNull(t *testing.T) {
+	// probability=1.0 should always return nil.
+	for range 100 {
+		got, err := nullable("value", 1.0)
+		if err != nil {
+			t.Fatalf("nullable error: %v", err)
+		}
+		if got != nil {
+			t.Fatalf("nullable(val, 1.0) = %v, want nil", got)
+		}
+	}
+}
+
+func TestNullable_NeverNull(t *testing.T) {
+	// probability=0.0 should always return the value.
+	for range 100 {
+		got, err := nullable("value", 0.0)
+		if err != nil {
+			t.Fatalf("nullable error: %v", err)
+		}
+		if got != "value" {
+			t.Fatalf("nullable(val, 0.0) = %v, want value", got)
+		}
+	}
+}
+
+func TestNullable_InvalidProbability(t *testing.T) {
+	_, err := nullable("value", "not_a_number")
+	if err == nil {
+		t.Fatal("expected error for invalid probability, got nil")
+	}
+}
+
 func TestCoalesce(t *testing.T) {
 	if got := coalesce(nil, nil, "first", "second"); got != "first" {
 		t.Errorf("coalesce = %v, want first", got)

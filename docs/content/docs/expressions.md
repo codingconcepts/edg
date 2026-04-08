@@ -14,66 +14,67 @@ Query arguments are written as expressions compiled at startup using [expr-lang/
 | Function | Returns | Description |
 |---|---|---|
 | `arg(index)` | `any` | Returns the value of a previously evaluated arg by its zero-based index. Enables dependent columns where later args reference earlier ones. |
+| `array(minN, maxN, pattern)` | `string` | PostgreSQL/CockroachDB array literal with a random number of elements. |
+| `avg(name, field)` | `float64` | Average of a numeric field across all rows in a named dataset. |
+| `batch(n)` | `[][]any` | Returns sequential integers `[0, n)` as batch arg sets, |
+| `bit(n)` | `string` | Random fixed-length bit string of exactly `n` bits. |
+| `bytes(n)` | `string` | Random `n` bytes as a hex-encoded string with `\x` prefix. |
+| `coalesce(v1, v2, ...)` | `any` | Returns the first non-nil value from arguments. |
+| `cond(predicate, trueVal, falseVal)` | `any` | Returns `trueVal` if `predicate` is true, `falseVal` otherwise. |
 | `const(value)` | `any` | Returns the value as-is. Useful for literal constants. |
+| `count(name)` | `int` | Number of rows in a named dataset. |
+| `date_offset(duration)` | `string` | Returns the current time offset by `duration`, formatted as RFC3339. |
+| `date(format, min, max)` | `string` | Random timestamp formatted using a Go time format string. |
+| `distinct(name, field)` | `int` | Number of distinct values for a field in a named dataset. |
+| `duration(min, max)` | `string` | Random duration between `min` and `max` (Go duration strings). |
+| `exp_f(rate, min, max, precision)` | `float64` | Exponentially-distributed random number in [min, max], rounded to `precision` decimal places. |
+| `exp(rate, min, max)` | `float64` | Exponentially-distributed random number in [min, max], rounded to 0 decimal places. |
 | `expr(expression)` | `any` | Evaluates an arithmetic expression. Alias for `const`, the expr engine handles the arithmetic. |
+| `gen_batch(total, batchSize, pattern)` | `[][]any` | Generates `total` values using [gofakeit](https://github.com/brianvoe/gofakeit) `pattern`, grouped into batches of `batchSize`. Each batch arg is a comma-separated string of generated values. |
 | `gen(pattern)` | `string` | Generates a random value using [gofakeit](https://github.com/brianvoe/gofakeit) patterns (e.g. `gen('number:1,100')`). |
 | `global(name)` | `any` | Looks up a value from the `globals` section by name. Globals are also available directly as variables, so `global('warehouses')` and `warehouses` are equivalent. |
-| `ref_rand(name)` | `map` | Returns a random row from a named dataset (populated by an `init` query). Access fields with dot notation: `ref_rand('fetch_warehouses').w_id`. |
-| `ref_same(name)` | `map` | Returns a random row, but the same row is reused across all `ref_same` calls within a single query execution. Cleared between iterations. |
-| `ref_perm(name)` | `map` | Returns a random row on first call, then the same row for the entire lifetime of the worker. |
-| `ref_diff(name)` | `map` | Returns unique rows across multiple calls within the same query execution. Uses a swap-based index to avoid repeats. |
-| `batch(n)` | `[][]any` | Returns sequential integers `[0, n)` as batch arg sets, |
-| `gen_batch(total, batchSize, pattern)` | `[][]any` | Generates `total` values using [gofakeit](https://github.com/brianvoe/gofakeit) `pattern`, grouped into batches of `batchSize`. Each batch arg is a comma-separated string of generated values. |
-| `ref_each(query)` | `[][]any` | Executes a SQL query and returns all rows. Each row becomes a separate arg set. |
-| `ref_n(name, field, min, max)` | `string` | Picks N unique random rows (N in [min, max]) from a named dataset, extracts `field` from each, and returns a comma-separated string. |
-| `nurand(A, x, y)` | `int` | TPC-C Non-Uniform Random: `(((random(0,A) \| random(x,y)) + C) / (y-x+1)) + x`. |
-| `nurand_n(A, x, y, min, max)` | `string` | Generates N unique NURand values (N in [min, max]) as a comma-separated string. |
-| `set_rand(values, weights)` | `any` | Picks a random item from a set. If weights are provided, weighted random selection is used; otherwise uniform. |
-| `set_norm(values, mean, stddev)` | `any` | Picks an item from a set using normal distribution. |
-| `set_exp(values, rate)` | `any` | Picks an item from a set using exponential distribution. |
-| `set_lognorm(values, mu, sigma)` | `any` | Picks an item from a set using log-normal distribution. |
-| `set_zipf(values, s, v)` | `any` | Picks an item from a set using Zipfian distribution. |
-| `exp(rate, min, max)` | `float64` | Exponentially-distributed random number in [min, max], rounded to 0 decimal places. |
-| `exp_f(rate, min, max, precision)` | `float64` | Exponentially-distributed random number in [min, max], rounded to `precision` decimal places. |
-| `lognorm(mu, sigma, min, max)` | `float64` | Log-normally-distributed random number in [min, max], rounded to 0 decimal places. |
+| `inet(cidr)` | `string` | Random IP address within the given CIDR block. |
+| `json_arr(minN, maxN, pattern)` | `string` | Builds a JSON array of N random values (N in [minN, maxN]) generated by a gofakeit `pattern`. |
+| `json_obj(k1, v1, k2, v2, ...)` | `string` | Builds a JSON object string from key-value pair arguments. |
 | `lognorm_f(mu, sigma, min, max, precision)` | `float64` | Log-normally-distributed random number in [min, max], rounded to `precision` decimal places. |
-| `norm(mean, stddev, min, max)` | `float64` | Normally-distributed random number in [min, max], rounded to 0 decimal places. |
+| `lognorm(mu, sigma, min, max)` | `float64` | Log-normally-distributed random number in [min, max], rounded to 0 decimal places. |
+| `max(name, field)` | `float64` | Maximum value of a numeric field in a named dataset. |
+| `min(name, field)` | `float64` | Minimum value of a numeric field in a named dataset. |
 | `norm_f(mean, stddev, min, max, precision)` | `float64` | Normally-distributed random number in [min, max], rounded to `precision` decimal places. |
 | `norm_n(mean, stddev, min, max, minN, maxN)` | `string` | N unique normally-distributed values (N in [minN, maxN]) as a comma-separated string. |
+| `norm(mean, stddev, min, max)` | `float64` | Normally-distributed random number in [min, max], rounded to 0 decimal places. |
+| `nullable(expr, probability)` | `any` | Returns NULL with `probability` (0.0–1.0), otherwise returns the expression result. |
+| `nurand_n(A, x, y, min, max)` | `string` | Generates N unique NURand values (N in [min, max]) as a comma-separated string. |
+| `nurand(A, x, y)` | `int` | TPC-C Non-Uniform Random: `(((random(0,A) \| random(x,y)) + C) / (y-x+1)) + x`. |
+| `point_wkt(lat, lon, radiusKM)` | `string` | Generates a random geographic point as a WKT string: `POINT(lon lat)`. |
+| `point(lat, lon, radiusKM)` | `map` | Generates a random geographic point within `radiusKM` of (`lat`, `lon`). Access fields with `.lat` and `.lon`. |
+| `ref_diff(name)` | `map` | Returns unique rows across multiple calls within the same query execution. Uses a swap-based index to avoid repeats. |
+| `ref_each(query)` | `[][]any` | Executes a SQL query and returns all rows. Each row becomes a separate arg set. |
+| `ref_n(name, field, min, max)` | `string` | Picks N unique random rows (N in [min, max]) from a named dataset, extracts `field` from each, and returns a comma-separated string. |
+| `ref_perm(name)` | `map` | Returns a random row on first call, then the same row for the entire lifetime of the worker. |
+| `ref_rand(name)` | `map` | Returns a random row from a named dataset (populated by an `init` query). Access fields with dot notation: `ref_rand('fetch_warehouses').w_id`. |
+| `ref_same(name)` | `map` | Returns a random row, but the same row is reused across all `ref_same` calls within a single query execution. Cleared between iterations. |
+| `regex(pattern)` | `string` | Generates a random string matching the given regular expression. |
+| `seq(start, step)` | `int` | Auto-incrementing sequence per worker. Returns `start + counter * step`. |
+| `set_exp(values, rate)` | `any` | Picks an item from a set using exponential distribution. |
+| `set_lognorm(values, mu, sigma)` | `any` | Picks an item from a set using log-normal distribution. |
+| `set_norm(values, mean, stddev)` | `any` | Picks an item from a set using normal distribution. |
+| `set_rand(values, weights)` | `any` | Picks a random item from a set. If weights are provided, weighted random selection is used; otherwise uniform. |
+| `set_zipf(values, s, v)` | `any` | Picks an item from a set using Zipfian distribution. |
+| `sum(name, field)` | `float64` | Sum of a numeric field across all rows in a named dataset. |
+| `template(format, args...)` | `string` | Formats a string using Go's `fmt.Sprintf` syntax. |
+| `time(min, max)` | `string` | Random time of day between `min` and `max` (HH:MM:SS format). |
+| `timestamp(min, max)` | `string` | Random timestamp between `min` and `max` (RFC3339). |
+| `timez(min, max)` | `string` | Random time of day with `+00:00` timezone suffix. |
+| `uniform_f(min, max, precision)` | `float64` | Uniform random float in [min, max] rounded to `precision` decimal places. |
+| `uniform(min, max)` | `float64` | Uniform random float in [min, max]. |
 | `uuid_v1()` | `string` | Generates a Version 1 UUID (timestamp + node ID). |
 | `uuid_v4()` | `string` | Generates a Version 4 UUID (random). |
 | `uuid_v6()` | `string` | Generates a Version 6 UUID (reordered timestamp). |
 | `uuid_v7()` | `string` | Generates a Version 7 UUID (Unix timestamp + random, sortable). |
-| `uniform_f(min, max, precision)` | `float64` | Uniform random float in [min, max] rounded to `precision` decimal places. |
-| `uniform(min, max)` | `float64` | Uniform random float in [min, max]. |
-| `seq(start, step)` | `int` | Auto-incrementing sequence per worker. Returns `start + counter * step`. |
-| `zipf(s, v, max)` | `int` | Zipfian-distributed random integer in [0, max]. |
-| `cond(predicate, trueVal, falseVal)` | `any` | Returns `trueVal` if `predicate` is true, `falseVal` otherwise. |
-| `coalesce(v1, v2, ...)` | `any` | Returns the first non-nil value from arguments. |
-| `template(format, args...)` | `string` | Formats a string using Go's `fmt.Sprintf` syntax. |
-| `regex(pattern)` | `string` | Generates a random string matching the given regular expression. |
-| `json_obj(k1, v1, k2, v2, ...)` | `string` | Builds a JSON object string from key-value pair arguments. |
-| `json_arr(minN, maxN, pattern)` | `string` | Builds a JSON array of N random values (N in [minN, maxN]) generated by a gofakeit `pattern`. |
-| `bytes(n)` | `string` | Random `n` bytes as a hex-encoded string with `\x` prefix. |
-| `bit(n)` | `string` | Random fixed-length bit string of exactly `n` bits. |
 | `varbit(n)` | `string` | Random variable-length bit string of 1 to `n` bits. |
-| `inet(cidr)` | `string` | Random IP address within the given CIDR block. |
-| `array(minN, maxN, pattern)` | `string` | PostgreSQL/CockroachDB array literal with a random number of elements. |
-| `time(min, max)` | `string` | Random time of day between `min` and `max` (HH:MM:SS format). |
-| `timez(min, max)` | `string` | Random time of day with `+00:00` timezone suffix. |
-| `point(lat, lon, radiusKM)` | `map` | Generates a random geographic point within `radiusKM` of (`lat`, `lon`). Access fields with `.lat` and `.lon`. |
-| `point_wkt(lat, lon, radiusKM)` | `string` | Generates a random geographic point as a WKT string: `POINT(lon lat)`. |
-| `timestamp(min, max)` | `string` | Random timestamp between `min` and `max` (RFC3339). |
-| `duration(min, max)` | `string` | Random duration between `min` and `max` (Go duration strings). |
-| `date(format, min, max)` | `string` | Random timestamp formatted using a Go time format string. |
-| `date_offset(duration)` | `string` | Returns the current time offset by `duration`, formatted as RFC3339. |
 | `weighted_sample_n(name, field, weightField, minN, maxN)` | `string` | Picks N unique rows using weighted selection, returns a comma-separated string. |
-| `sum(name, field)` | `float64` | Sum of a numeric field across all rows in a named dataset. |
-| `avg(name, field)` | `float64` | Average of a numeric field across all rows in a named dataset. |
-| `min(name, field)` | `float64` | Minimum value of a numeric field in a named dataset. |
-| `max(name, field)` | `float64` | Maximum value of a numeric field in a named dataset. |
-| `count(name)` | `int` | Number of rows in a named dataset. |
-| `distinct(name, field)` | `int` | Number of distinct values for a field in a named dataset. |
+| `zipf(s, v, max)` | `int` | Zipfian-distributed random integer in [0, max]. |
 
 ## Function Lifecycle
 
@@ -82,12 +83,12 @@ Several functions maintain state. Understanding when that state resets is import
 | Function | Scope | Resets |
 |---|---|---|
 | `arg(index)` | Per-query | Returns the value of arg at `index` from the current query execution. Cleared before the next query. In batch queries, resets per row. |
+| `nurand(A, x, y)` | Per-worker | The TPC-C constant C is generated once per worker per A value and stays fixed for the worker's lifetime. |
+| `ref_diff(name)` | Per-query | Returns a unique row on each call within a query (no repeats). Index resets before the next query. |
+| `ref_perm(name)` | Per-worker | Picks a row on first call and returns that same row for the entire lifetime of the worker. Never resets. |
 | `ref_rand(name)` | None | Fresh random row on every call |
 | `ref_same(name)` | Per-query | Picks a row on first call within a query; all subsequent `ref_same` calls for the same dataset within that query return the same row. **Cleared before the next query.** |
-| `ref_perm(name)` | Per-worker | Picks a row on first call and returns that same row for the entire lifetime of the worker. Never resets. |
-| `ref_diff(name)` | Per-query | Returns a unique row on each call within a query (no repeats). Index resets before the next query. |
 | `seq(start, step)` | Per-worker | Counter starts at 0 for each worker and increments on every call. Two workers both calling `seq(1, 1)` will produce the same sequence independently -- values are **not globally unique**. |
-| `nurand(A, x, y)` | Per-worker | The TPC-C constant C is generated once per worker per A value and stays fixed for the worker's lifetime. |
 
 ## User-Defined Expressions
 
@@ -157,17 +158,17 @@ Expressions support the full expr-lang feature set, including:
 | Category | Examples |
 |---|---|
 | Arithmetic | `+`, `-`, `*`, `/`, `%`, `**` |
+| Array functions | `filter()`, `map()`, `reduce()`, `sort()`, `sortBy()`, `reverse()`, `first()`, `last()`, `take()`, `flatten()`, `uniq()`, `concat()`, `join()`, `find()`, `findIndex()`, `findLast()`, `findLastIndex()`, `all()`, `any()`, `one()`, `none()`, `groupBy()` |
+| Bitwise | `bitand()`, `bitor()`, `bitxor()`, `bitnand()`, `bitnot()`, `bitshl()`, `bitshr()`, `bitushr()` |
 | Comparison & logic | `==`, `!=`, `<`, `>`, `and`, `or`, `not` |
 | Conditionals | `args[0] > 10 ? 'yes' : 'no'`, `args[0] ?? 0` (nil coalescing), `if`/`else` |
+| Language | `let` bindings, `#` predicates (current element in closures), `len()`, `get()` |
+| Map functions | `keys()`, `values()` |
 | Math functions | `abs()`, `ceil()`, `floor()`, `round()`, `mean()`, `median()` |
+| Operators | `\|` (pipe), `in` (membership), `..` (range), `[:]` (slice), `?.` (optional chaining) |
 | String functions | `upper()`, `lower()`, `trim()`, `trimPrefix()`, `trimSuffix()`, `split()`, `splitAfter()`, `replace()`, `repeat()`, `indexOf()`, `lastIndexOf()`, `hasPrefix()`, `hasSuffix()` |
 | String operators | `contains`, `startsWith`, `endsWith`, `matches` (regex) |
-| Array functions | `filter()`, `map()`, `reduce()`, `sort()`, `sortBy()`, `reverse()`, `first()`, `last()`, `take()`, `flatten()`, `uniq()`, `concat()`, `join()`, `find()`, `findIndex()`, `findLast()`, `findLastIndex()`, `all()`, `any()`, `one()`, `none()`, `groupBy()` |
-| Map functions | `keys()`, `values()` |
 | Type conversion | `int()`, `float()`, `string()`, `type()`, `toJSON()`, `fromJSON()`, `toBase64()`, `fromBase64()`, `toPairs()`, `fromPairs()` |
-| Bitwise | `bitand()`, `bitor()`, `bitxor()`, `bitnand()`, `bitnot()`, `bitshl()`, `bitshr()`, `bitushr()` |
-| Operators | `\|` (pipe), `in` (membership), `..` (range), `[:]` (slice), `?.` (optional chaining) |
-| Language | `let` bindings, `#` predicates (current element in closures), `len()`, `get()` |
 
 ## expr examples
 
@@ -191,85 +192,85 @@ reference:
 
 | Category | Expression | Example output |
 |---|---|---|
-| Arithmetic | `3 + 4 * 2`<br><br>`ref_rand('products').price + ref_rand('products').stock * 2` | `11`<br><br>`329.99` |
 | Arithmetic | `10 % 3`<br><br>`ref_rand('products').stock % 7` | `1`<br><br>`3` |
 | Arithmetic | `2 ** 8`<br><br>`len(ref_same('regions').cities) ** 3` | `256`<br><br>`27` |
-| Comparison & logic | `ref_rand('products').stock > 0 and ref_rand('products').active` | `true` |
-| Comparison & logic | `not (ref_rand('products').category == 'stationery')` | `true` |
-| Conditionals | `ref_rand('products').stock > 0 ? 'in_stock' : 'sold_out'` | `in_stock` |
-| Conditionals | `nil ?? 'unknown'`<br><br>`ref_rand('products')?.description ?? 'none'` | `unknown`<br><br>`none` |
-| Math functions | `abs(-7)`<br><br>`abs(ref_rand('products').stock - 200)` | `7`<br><br>`50` |
-| Math functions | `ceil(3.2)`<br><br>`ceil(ref_rand('products').price)` | `4`<br><br>`30` |
-| Math functions | `floor(ref_rand('products').price)` | `29` |
-| Math functions | `round(ref_rand('products').price)` | `30` |
-| Math functions | `mean([29.99, 49.99, 4.99, 1.99, 9.99])`<br><br>`mean(map(ref_same('regions').cities, {len(#)}))` | `19.39`<br><br>`6.33` |
-| Math functions | `median([1.99, 4.99, 9.99, 29.99, 49.99])`<br><br>`median(map(ref_same('regions').cities, {len(#)}))` | `9.99`<br><br>`6` |
-| String functions | `upper(ref_rand('products').name)` | `WIDGET` |
-| String functions | `lower(ref_rand('products').category)` | `electronics` |
-| String functions | `trim('  gadget  ')`<br><br>`trim(ref_rand('products').name)` | `gadget`<br><br>`Widget` |
-| String functions | `trimPrefix(ref_same('regions').code, ref_same('regions').zone + '-')` | `east` |
-| String functions | `trimSuffix(ref_same('regions').code, '-' + trimPrefix(ref_same('regions').code, ref_same('regions').zone + '-'))` | `us` |
-| String functions | `split('new_york,boston,miami', ',')`<br><br>`split(ref_same('regions').code, '-')` | `[new_york, boston, miami]`<br><br>`[us, east]` |
-| String functions | `splitAfter('us,eu,ap', ',')`<br><br>`splitAfter(ref_same('regions').code, '-')` | `[us,, eu,, ap]`<br><br>`[us-, east]` |
-| String functions | `replace(ref_same('regions').code, '-', '_')` | `us_east` |
-| String functions | `repeat('*', 5)`<br><br>`repeat(ref_same('regions').zone, 3)` | `*****`<br><br>`ususus` |
-| String functions | `indexOf('london', 'on')`<br><br>`indexOf(ref_rand('products').category, 'c')` | `1`<br><br>`3` |
-| String functions | `lastIndexOf('london', 'on')`<br><br>`lastIndexOf(ref_rand('products').category, 'c')` | `4`<br><br>`9` |
-| String functions | `hasPrefix(ref_same('regions').code, 'us')` | `true` |
-| String functions | `hasSuffix(ref_same('regions').code, 'east')` | `true` |
-| String operators | `ref_rand('products').category contains 'electron'` | `true` |
-| String operators | `ref_same('regions').code startsWith 'us'` | `true` |
-| String operators | `ref_same('regions').code endsWith 'east'` | `true` |
-| String operators | `ref_same('regions').code matches '[a-z]+-[a-z]+'` | `true` |
-| Array functions | `filter(ref_same('regions').cities, {# startsWith 'b'})` | `[boston]` |
-| Array functions | `map(ref_same('regions').cities, {upper(#)})` | `[NEW_YORK, BOSTON, MIAMI]` |
-| Array functions | `reduce([29.99, 49.99, 4.99, 1.99, 9.99], {#acc + #}, 0)`<br><br>`reduce(ref_same('regions').cities, {#acc + len(#)}, 0)` | `96.95`<br><br>`19` |
-| Array functions | `sort(ref_same('regions').cities)` | `[boston, miami, new_york]` |
-| Array functions | `sortBy(['Pen', 'Widget', 'Cable'], {len(#)})`<br><br>`sortBy(ref_same('regions').cities, {len(#)})` | `[Pen, Cable, Widget]`<br><br>`[miami, boston, new_york]` |
-| Array functions | `reverse(ref_same('regions').cities)` | `[miami, boston, new_york]` |
-| Array functions | `first(ref_same('regions').cities)` | `new_york` |
-| Array functions | `last(ref_same('regions').cities)` | `miami` |
-| Array functions | `take(ref_same('regions').cities, 2)` | `[new_york, boston]` |
-| Array functions | `flatten([['new_york', 'boston'], ['london', 'paris']])`<br><br>`flatten([ref_same('regions').cities, ['sydney', 'tokyo']])` | `[new_york, boston, london, paris]`<br><br>`[new_york, boston, miami, sydney, tokyo]` |
-| Array functions | `uniq(['electronics', 'stationery', 'electronics'])`<br><br>`uniq(concat(ref_same('regions').cities, ref_same('regions').cities))` | `[electronics, stationery]`<br><br>`[new_york, boston, miami]` |
+| Arithmetic | `3 + 4 * 2`<br><br>`ref_rand('products').price + ref_rand('products').stock * 2` | `11`<br><br>`329.99` |
+| Array functions | `all(ref_same('regions').cities, {len(#) > 3})` | `true` |
+| Array functions | `any(ref_same('regions').cities, {# == 'miami'})` | `true` |
 | Array functions | `concat(ref_same('regions').cities, ['london', 'paris'])` | `[new_york, boston, miami, london, paris]` |
-| Array functions | `join(ref_same('regions').cities, ', ')` | `new_york, boston, miami` |
+| Array functions | `filter(ref_same('regions').cities, {# startsWith 'b'})` | `[boston]` |
 | Array functions | `find(ref_same('regions').cities, {# startsWith 'b'})` | `boston` |
 | Array functions | `findIndex(ref_same('regions').cities, {# startsWith 'b'})` | `1` |
 | Array functions | `findLast(ref_same('regions').cities, {# endsWith 'i'})` | `miami` |
 | Array functions | `findLastIndex(ref_same('regions').cities, {# endsWith 'i'})` | `2` |
-| Array functions | `all(ref_same('regions').cities, {len(#) > 3})` | `true` |
-| Array functions | `any(ref_same('regions').cities, {# == 'miami'})` | `true` |
-| Array functions | `one(ref_same('regions').cities, {# == 'miami'})` | `true` |
-| Array functions | `none(ref_same('regions').cities, {# == 'tokyo'})` | `true` |
+| Array functions | `first(ref_same('regions').cities)` | `new_york` |
+| Array functions | `flatten([['new_york', 'boston'], ['london', 'paris']])`<br><br>`flatten([ref_same('regions').cities, ['sydney', 'tokyo']])` | `[new_york, boston, london, paris]`<br><br>`[new_york, boston, miami, sydney, tokyo]` |
 | Array functions | `groupBy(ref_same('regions').cities, {len(#) > 5})` | `{false: [miami, boston], true: [new_york]}` |
-| Map functions | `keys(ref_rand('products'))` | `[name, category, price, stock, active]` |
-| Map functions | `values(ref_rand('products'))` | `[Widget, electronics, 29.99, 150, true]` |
-| Type conversion | `int('42')`<br><br>`int(ref_rand('products').price)` | `42`<br><br>`29` |
-| Type conversion | `float(ref_rand('products').stock)` | `150.0` |
-| Type conversion | `string(ref_rand('products').price)` | `29.99` |
-| Type conversion | `type(ref_rand('products').price)` | `float` |
-| Type conversion | `toJSON(ref_rand('products'))` | `{"active":true,"category":"electronics","name":"Widget","price":29.99,"stock":150}` |
-| Type conversion | `fromJSON('{"code":"us-east","zone":"us"}')`<br><br>`fromJSON('{"id":' + string(ref_rand('products').stock) + '}')` | `{code: us-east, zone: us}`<br><br>`{id: 150}` |
-| Type conversion | `toBase64(ref_rand('products').name)` | `V2lkZ2V0` |
-| Type conversion | `fromBase64('V2lkZ2V0')`<br><br>`fromBase64(toBase64(ref_rand('products').name))` | `Widget`<br><br>`Widget` |
-| Type conversion | `toPairs({name: 'Widget', price: 29.99})`<br><br>`toPairs(ref_rand('products'))` | `[[name, Widget], [price, 29.99]]`<br><br>`[[active, true], [category, electronics], [name, Widget], [price, 29.99], [stock, 150]]` |
-| Type conversion | `fromPairs([['name', 'Widget'], ['price', 29.99]])`<br><br>`fromPairs([['product', ref_rand('products').name], ['zone', ref_same('regions').zone]])` | `{name: Widget, price: 29.99}`<br><br>`{product: Widget, zone: us}` |
+| Array functions | `join(ref_same('regions').cities, ', ')` | `new_york, boston, miami` |
+| Array functions | `last(ref_same('regions').cities)` | `miami` |
+| Array functions | `map(ref_same('regions').cities, {upper(#)})` | `[NEW_YORK, BOSTON, MIAMI]` |
+| Array functions | `none(ref_same('regions').cities, {# == 'tokyo'})` | `true` |
+| Array functions | `one(ref_same('regions').cities, {# == 'miami'})` | `true` |
+| Array functions | `reduce([29.99, 49.99, 4.99, 1.99, 9.99], {#acc + #}, 0)`<br><br>`reduce(ref_same('regions').cities, {#acc + len(#)}, 0)` | `96.95`<br><br>`19` |
+| Array functions | `reverse(ref_same('regions').cities)` | `[miami, boston, new_york]` |
+| Array functions | `sort(ref_same('regions').cities)` | `[boston, miami, new_york]` |
+| Array functions | `sortBy(['Pen', 'Widget', 'Cable'], {len(#)})`<br><br>`sortBy(ref_same('regions').cities, {len(#)})` | `[Pen, Cable, Widget]`<br><br>`[miami, boston, new_york]` |
+| Array functions | `take(ref_same('regions').cities, 2)` | `[new_york, boston]` |
+| Array functions | `uniq(['electronics', 'stationery', 'electronics'])`<br><br>`uniq(concat(ref_same('regions').cities, ref_same('regions').cities))` | `[electronics, stationery]`<br><br>`[new_york, boston, miami]` |
 | Bitwise | `bitand(0b1100, 0b1010)`<br><br>`bitand(ref_rand('products').stock, 0xFF)` | `8`<br><br>`150` |
-| Bitwise | `bitor(0b1100, 0b1010)`<br><br>`bitor(ref_rand('products').stock, 1)` | `14`<br><br>`151` |
-| Bitwise | `bitxor(0b1100, 0b1010)`<br><br>`bitxor(ref_rand('products').stock, 0xFF)` | `6`<br><br>`105` |
 | Bitwise | `bitnot(0b1100)`<br><br>`bitnot(ref_rand('products').stock)` | `-13`<br><br>`-151` |
+| Bitwise | `bitor(0b1100, 0b1010)`<br><br>`bitor(ref_rand('products').stock, 1)` | `14`<br><br>`151` |
 | Bitwise | `bitshl(1, 4)`<br><br>`bitshl(1, len(ref_same('regions').cities))` | `16`<br><br>`8` |
 | Bitwise | `bitshr(16, 4)`<br><br>`bitshr(ref_rand('products').stock, 1)` | `1`<br><br>`75` |
-| Operators | `ref_rand('products').price \| int` | `29` |
-| Operators | `ref_same('regions').zone in ['us', 'eu', 'ap']` | `true` |
-| Operators | `1..5`<br><br>`1..len(ref_same('regions').cities) + 1` | `[1, 2, 3, 4]`<br><br>`[1, 2, 3]` |
-| Operators | `ref_same('regions').cities[0:2]` | `[new_york, boston]` |
-| Operators | `ref_rand('products')?.name` | `Widget` |
-| Language | `let p = ref_rand('products'); p.price + 10` | `39.99` |
+| Bitwise | `bitxor(0b1100, 0b1010)`<br><br>`bitxor(ref_rand('products').stock, 0xFF)` | `6`<br><br>`105` |
+| Comparison & logic | `not (ref_rand('products').category == 'stationery')` | `true` |
+| Comparison & logic | `ref_rand('products').stock > 0 and ref_rand('products').active` | `true` |
+| Conditionals | `nil ?? 'unknown'`<br><br>`ref_rand('products')?.description ?? 'none'` | `unknown`<br><br>`none` |
+| Conditionals | `ref_rand('products').stock > 0 ? 'in_stock' : 'sold_out'` | `in_stock` |
 | Language | `all(ref_same('regions').cities, {len(#) > 0})` | `true` |
-| Language | `len(ref_same('regions').cities)` | `3` |
 | Language | `get(ref_rand('products'), 'name')` | `Widget` |
+| Language | `len(ref_same('regions').cities)` | `3` |
+| Language | `let p = ref_rand('products'); p.price + 10` | `39.99` |
+| Map functions | `keys(ref_rand('products'))` | `[name, category, price, stock, active]` |
+| Map functions | `values(ref_rand('products'))` | `[Widget, electronics, 29.99, 150, true]` |
+| Math functions | `abs(-7)`<br><br>`abs(ref_rand('products').stock - 200)` | `7`<br><br>`50` |
+| Math functions | `ceil(3.2)`<br><br>`ceil(ref_rand('products').price)` | `4`<br><br>`30` |
+| Math functions | `floor(ref_rand('products').price)` | `29` |
+| Math functions | `mean([29.99, 49.99, 4.99, 1.99, 9.99])`<br><br>`mean(map(ref_same('regions').cities, {len(#)}))` | `19.39`<br><br>`6.33` |
+| Math functions | `median([1.99, 4.99, 9.99, 29.99, 49.99])`<br><br>`median(map(ref_same('regions').cities, {len(#)}))` | `9.99`<br><br>`6` |
+| Math functions | `round(ref_rand('products').price)` | `30` |
+| Operators | `1..5`<br><br>`1..len(ref_same('regions').cities) + 1` | `[1, 2, 3, 4]`<br><br>`[1, 2, 3]` |
+| Operators | `ref_rand('products')?.name` | `Widget` |
+| Operators | `ref_rand('products').price \| int` | `29` |
+| Operators | `ref_same('regions').cities[0:2]` | `[new_york, boston]` |
+| Operators | `ref_same('regions').zone in ['us', 'eu', 'ap']` | `true` |
+| String functions | `hasPrefix(ref_same('regions').code, 'us')` | `true` |
+| String functions | `hasSuffix(ref_same('regions').code, 'east')` | `true` |
+| String functions | `indexOf('london', 'on')`<br><br>`indexOf(ref_rand('products').category, 'c')` | `1`<br><br>`3` |
+| String functions | `lastIndexOf('london', 'on')`<br><br>`lastIndexOf(ref_rand('products').category, 'c')` | `4`<br><br>`9` |
+| String functions | `lower(ref_rand('products').category)` | `electronics` |
+| String functions | `repeat('*', 5)`<br><br>`repeat(ref_same('regions').zone, 3)` | `*****`<br><br>`ususus` |
+| String functions | `replace(ref_same('regions').code, '-', '_')` | `us_east` |
+| String functions | `split('new_york,boston,miami', ',')`<br><br>`split(ref_same('regions').code, '-')` | `[new_york, boston, miami]`<br><br>`[us, east]` |
+| String functions | `splitAfter('us,eu,ap', ',')`<br><br>`splitAfter(ref_same('regions').code, '-')` | `[us,, eu,, ap]`<br><br>`[us-, east]` |
+| String functions | `trim('  gadget  ')`<br><br>`trim(ref_rand('products').name)` | `gadget`<br><br>`Widget` |
+| String functions | `trimPrefix(ref_same('regions').code, ref_same('regions').zone + '-')` | `east` |
+| String functions | `trimSuffix(ref_same('regions').code, '-' + trimPrefix(ref_same('regions').code, ref_same('regions').zone + '-'))` | `us` |
+| String functions | `upper(ref_rand('products').name)` | `WIDGET` |
+| String operators | `ref_rand('products').category contains 'electron'` | `true` |
+| String operators | `ref_same('regions').code endsWith 'east'` | `true` |
+| String operators | `ref_same('regions').code matches '[a-z]+-[a-z]+'` | `true` |
+| String operators | `ref_same('regions').code startsWith 'us'` | `true` |
+| Type conversion | `float(ref_rand('products').stock)` | `150.0` |
+| Type conversion | `fromBase64('V2lkZ2V0')`<br><br>`fromBase64(toBase64(ref_rand('products').name))` | `Widget`<br><br>`Widget` |
+| Type conversion | `fromJSON('{"code":"us-east","zone":"us"}')`<br><br>`fromJSON('{"id":' + string(ref_rand('products').stock) + '}')` | `{code: us-east, zone: us}`<br><br>`{id: 150}` |
+| Type conversion | `fromPairs([['name', 'Widget'], ['price', 29.99]])`<br><br>`fromPairs([['product', ref_rand('products').name], ['zone', ref_same('regions').zone]])` | `{name: Widget, price: 29.99}`<br><br>`{product: Widget, zone: us}` |
+| Type conversion | `int('42')`<br><br>`int(ref_rand('products').price)` | `42`<br><br>`29` |
+| Type conversion | `string(ref_rand('products').price)` | `29.99` |
+| Type conversion | `toBase64(ref_rand('products').name)` | `V2lkZ2V0` |
+| Type conversion | `toJSON(ref_rand('products'))` | `{"active":true,"category":"electronics","name":"Widget","price":29.99,"stock":150}` |
+| Type conversion | `toPairs({name: 'Widget', price: 29.99})`<br><br>`toPairs(ref_rand('products'))` | `[[name, Widget], [price, 29.99]]`<br><br>`[[active, true], [category, electronics], [name, Widget], [price, 29.99], [stock, 150]]` |
+| Type conversion | `type(ref_rand('products').price)` | `float` |
 
 ### Advanced expr expressions
 
@@ -277,16 +278,16 @@ These examples combine multiple functions and reference lookups to show more adv
 
 | Description | Expression | Example output |
 |---|---|---|
+| Chained array ops | `join(take(sort(map(ref_same('regions').cities, {upper(#)})), 2), ', ')` | `BOSTON, MIAMI` |
 | Conditional formatting | `let p = ref_rand('products'); p.stock > 100 ? upper(p.name) : lower(p.name)` | `WIDGET` |
-| Discount pricing | `let p = ref_rand('products'); p.active ? round(p.price * 0.9) : 0` | `27` |
-| Multi-condition classification | `let p = ref_rand('products'); p.price > 10 and p.stock > 0 ? 'premium' : (p.active ? 'basic' : 'discontinued')` | `premium` |
+| Conditional string ops | `let r = ref_same('regions'); hasPrefix(r.code, 'us') ? upper(first(r.cities)) : lower(last(r.cities))` | `NEW_YORK` |
 | Derived metric | `let p = ref_rand('products'); int(ceil(p.price * float(p.stock) / 100))` | `45` |
 | Derived slug | `let p = ref_rand('products'); replace(lower(p.name + '_' + p.category), ' ', '_')` | `widget_electronics` |
-| Conditional string ops | `let r = ref_same('regions'); hasPrefix(r.code, 'us') ? upper(first(r.cities)) : lower(last(r.cities))` | `NEW_YORK` |
-| Chained array ops | `join(take(sort(map(ref_same('regions').cities, {upper(#)})), 2), ', ')` | `BOSTON, MIAMI` |
-| Reduce mapped values | `reduce(map(ref_same('regions').cities, {len(#)}), {#acc + #}, 0)` | `19` |
+| Discount pricing | `let p = ref_rand('products'); p.active ? round(p.price * 0.9) : 0` | `27` |
 | Filtered count | `len(filter(ref_same('regions').cities, {len(#) > 5}))` | `2` |
 | JSON from refs | `toJSON(fromPairs([['product', ref_rand('products').name], ['zone', ref_same('regions').zone]]))` | `{"product":"Widget","zone":"us"}` |
+| Multi-condition classification | `let p = ref_rand('products'); p.price > 10 and p.stock > 0 ? 'premium' : (p.active ? 'basic' : 'discontinued')` | `premium` |
+| Reduce mapped values | `reduce(map(ref_same('regions').cities, {len(#)}), {#acc + #}, 0)` | `19` |
 
 ## Distributions
 
@@ -296,11 +297,11 @@ Several functions generate values using statistical distributions, giving you co
 
 | Function | Signature | Description |
 |---|---|---|
-| `uniform` | `uniform(min, max)` | Flat distribution, every value equally likely |
-| `zipf` | `zipf(s, v, max)` | Power-law skew, low values dominate |
-| `norm_f` | `norm_f(mean, stddev, min, max, precision)` | Bell curve centered on mean |
 | `exp_f` | `exp_f(rate, min, max, precision)` | Exponential decay from min |
 | `lognorm_f` | `lognorm_f(mu, sigma, min, max, precision)` | Right-skewed with a long tail |
+| `norm_f` | `norm_f(mean, stddev, min, max, precision)` | Bell curve centered on mean |
+| `uniform` | `uniform(min, max)` | Flat distribution, every value equally likely |
+| `zipf` | `zipf(s, v, max)` | Power-law skew, low values dominate |
 
 ### Set Distributions
 
@@ -308,10 +309,10 @@ Pick from a predefined set of values using a distribution to control which items
 
 | Function | Signature | Description |
 |---|---|---|
-| `set_rand` | `set_rand(values, weights)` | Uniform or weighted random selection from a set |
-| `set_norm` | `set_norm(values, mean, stddev)` | Normal distribution over indices; `mean` index picked most often |
 | `set_exp` | `set_exp(values, rate)` | Exponential distribution over indices; lower indices picked most often |
 | `set_lognorm` | `set_lognorm(values, mu, sigma)` | Log-normal distribution over indices; right-skewed selection |
+| `set_norm` | `set_norm(values, mean, stddev)` | Normal distribution over indices; `mean` index picked most often |
+| `set_rand` | `set_rand(values, weights)` | Uniform or weighted random selection from a set |
 | `set_zipf` | `set_zipf(values, s, v)` | Zipfian distribution over indices; strong power-law skew toward first items |
 
 ## Argument Expression Examples
@@ -395,6 +396,9 @@ args:
 
   # Conditional value based on a random roll.
   - cond(gen('number:1,100') > 95, 'premium', 'standard')
+
+  # 30% chance of NULL, otherwise a random email. Useful for nullable columns.
+  - nullable(gen('email'), 0.3)
 
   # First non-nil fallback value.
   - coalesce(ref_rand('optional_data').value, 'default')

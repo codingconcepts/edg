@@ -92,6 +92,7 @@ func NewEnv(db *sql.DB, r *Request) (*Env, error) {
 		"seq":               env.seq,             // Auto-incrementing sequence (start + counter * step).
 		"zipf":              zipfRand,            // Zipfian-distributed random integer in [0, max].
 		"cond":              cond,                // Conditional: if predicate then trueVal else falseVal.
+		"nullable":          nullable,            // Return NULL with given probability, otherwise the value.
 		"coalesce":          coalesce,            // First non-nil value from arguments.
 		"template":          tmpl,                // Format string interpolation (fmt.Sprintf).
 		"regex":             genRegex,            // Generate a string matching a regex pattern.

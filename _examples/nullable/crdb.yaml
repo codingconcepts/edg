@@ -1,0 +1,48 @@
+globals:
+  users: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_user
+    query: |-
+      CREATE TABLE IF NOT EXISTS "user" (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email STRING NOT NULL,
+        phone STRING,
+        bio STRING,
+        referred_by UUID
+      )
+
+seed:
+
+  - name: populate_user
+    type: exec_batch
+    count: users
+    size: batch_size
+    args:
+      - gen('email')
+      - nullable(gen('phonenumber'), 0.3)
+      - nullable(gen('sentence:5'), 0.5)
+      - nullable(uuid_v4(), 0.8)
+    query: |-
+      INSERT INTO "user" (email, phone, bio, referred_by)
+      SELECT e, p, b, r::UUID
+      FROM unnest(
+        ARRAY[$1],
+        ARRAY[$2],
+        ARRAY[$3],
+        ARRAY[$4]
+      ) AS t(e, p, b, r)
+
+deseed:
+
+  - name: truncate_user
+    type: exec
+    query: TRUNCATE TABLE "user"
+
+down:
+
+  - name: drop_user
+    type: exec
+    query: DROP TABLE IF EXISTS "user"
