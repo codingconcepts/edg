@@ -219,7 +219,7 @@ The database never sees `$1`, it receives a fully formed query with the values b
 - **`query_batch` / `exec_batch`** types (always inlined).
 - **Batch-expanded queries** using `gen_batch`, `batch`, or `ref_each` (in any section).
 
-Inlining lets you use `$N` as a universal placeholder syntax across all drivers (pgx, MySQL, Oracle) without worrying about driver-specific bind param formats. It also avoids a pgx-stdlib issue where numeric values are sent as DECIMAL, which CockroachDB can't mix with INT in arithmetic.
+Inlining lets you use `$N` as a universal placeholder syntax across all drivers (pgx, MySQL, Oracle, SQL Server) without worrying about driver-specific bind param formats. It also avoids a pgx-stdlib issue where numeric values are sent as DECIMAL, which CockroachDB can't mix with INT in arithmetic.
 
 Because the value is embedded in the SQL text, quoted placeholders like `'$1'` are common in batch patterns, the quotes become part of the final SQL string (e.g. `string_to_array('alice@x.com,...', ',')`).
 
@@ -234,6 +234,7 @@ Each driver has its own placeholder format:
 | `pgx` (PostgreSQL / CockroachDB) | `$1`, `$2`, `$3` |
 | `mysql` | `?` (positional) |
 | `oracle` | `:1`, `:2`, `:3` |
+| `sqlserver` | `@p1`, `@p2`, `@p3` |
 
 Since `run` queries always use bind params, their SQL must use the correct format for the target driver.
 

@@ -31,17 +31,17 @@ includes/
 
 An `!include` can appear anywhere a YAML value is expected:
 
-- **Mapping value** — replace a key's value with the content of a file:
+- **Mapping value** - replace a key's value with the content of a file:
   ```yaml
   globals: !include shared/globals.yaml
   ```
 
-- **Sequence value** — replace an entire list:
+- **Sequence value** - replace an entire list:
   ```yaml
   up: !include shared/schema.yaml
   ```
 
-- **Sequence item** — splice items from an included file into a list:
+- **Sequence item** - splice items from an included file into a list:
   ```yaml
   run:
     - name: local_query

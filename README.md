@@ -15,6 +15,7 @@ Query arguments are written as expressions compiled at startup, giving you acces
 | CockroachDB / PostgreSQL | `pgx` | `postgres://root@localhost:26257/db?sslmode=disable` |
 | Oracle | `oracle` | `oracle://system:password@localhost:1521/db` |
 | MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
+| SQL Server | `sqlserver` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
 
 ## Quick Start
 
@@ -40,7 +41,6 @@ View the docs [here](https://edg.run/docs).
 * Additional driver support
   * Support DSQL with custom driver
   * SQLite
-  * SQL Server
 * Progress indication
 * Ability to provide expectations (e.g. error rate < 1%) which will be good for CI/CD usage
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences

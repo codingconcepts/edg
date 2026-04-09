@@ -14,7 +14,7 @@ args:
   - cond(!arg(1), gen('phone'), nil) # phone if false, NULL if true
 ```
 
-The coin flip arg is not bound to the query — only the name, email, and phone args are used as `$1`, `$2`, `$3`.
+The coin flip arg is not bound to the query, only the name, email, and phone args are used as `$1`, `$2`, `$3`.
 
 ## Schema
 

@@ -17,6 +17,7 @@ import (
 	"github.com/codingconcepts/edg/pkg/random"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/microsoft/go-mssqldb"
 	_ "github.com/sijms/go-ora/v2"
 	"gopkg.in/yaml.v3"
 )
@@ -29,6 +30,9 @@ var mysqlConfig []byte
 
 //go:embed testdata/oracle.yaml
 var oracleConfig []byte
+
+//go:embed testdata/sqlserver.yaml
+var sqlserverConfig []byte
 
 const runIterations = 5
 
@@ -226,6 +230,34 @@ func TestIntegration_Oracle(t *testing.T) {
 	}
 
 	runIntegrationTests(t, oracleConfig, queries)
+}
+
+func TestIntegration_SQLServer(t *testing.T) {
+	skipIfNoDB(t)
+	if driverName != "sqlserver" {
+		t.Skip("skipping SQL Server test (DRIVER != sqlserver)")
+	}
+
+	queries := map[string]string{
+		"table_exists":  "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = @p1",
+		"scalars":       "SELECT const_val, global_val, expr_val, gen_val, regex_val, tmpl_val, cond_val, coal_val, expr_fn_val FROM test_scalars",
+		"uuids":         "SELECT v1, v4, v6, v7 FROM test_uuids",
+		"numbers":       "SELECT float_val, uniform_val, norm_val, norm_f_val, zipf_val FROM test_numbers",
+		"sets":          "SELECT rand_val, weighted_val, normal_val, exp_val, lognorm_val, zipfian_val FROM test_sets",
+		"json":          "SELECT obj, arr FROM test_json",
+		"geo":           "SELECT lat, lon, wkt FROM test_geo",
+		"time":          "SELECT ts, dur, date_str, offset_ts, time_val, timez_val FROM test_time",
+		"distributions": "SELECT nu_val, nu_vals, norm_vals, exp_val, lognorm_val, exp_int_val, lognorm_int_val FROM test_distributions",
+		"refs":          "SELECT rand_id, same_id, same_name, ref_n_ids, weighted_ids FROM test_refs",
+		"ref_diff":      "SELECT id1, id2 FROM test_ref_diff",
+		"ref_perm":      "SELECT COUNT(DISTINCT perm_id) FROM test_ref_perm",
+		"binary":        "SELECT bytes_val, bit_val, varbit_val, inet_val FROM test_binary",
+		"arrays":        "SELECT arr_val FROM test_arrays",
+		"batch_vals":    "SELECT val FROM test_batch ORDER BY val",
+		"agg":           "SELECT sum_val, avg_val, min_val, max_val, count_val, distinct_val FROM test_agg",
+	}
+
+	runIntegrationTests(t, sqlserverConfig, queries)
 }
 
 func runIntegrationTests(t *testing.T, config []byte, queries map[string]string) {

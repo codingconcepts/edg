@@ -18,6 +18,7 @@ Query arguments are written as expressions compiled at startup, giving you acces
 | CockroachDB / PostgreSQL | `pgx` | `postgres://root@localhost:26257/db?sslmode=disable` |
 | Oracle | `oracle` | `oracle://system:password@localhost:1521/db` |
 | MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
+| SQL Server | `sqlserver` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
 
 ## Quick Start
 
