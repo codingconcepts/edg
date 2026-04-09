@@ -44,7 +44,6 @@ View the docs [here](https://edg.run/docs).
 * Progress indication
 * Ability to provide expectations (e.g. error rate < 1%) which will be good for CI/CD usage
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences
-* Ramp-up for workers
 * Global sequencies (`seq_global(name, start, step)`) for all workers to share in a thread safe way
 * Prometheus metrics endpoint
 * Dry run mode
