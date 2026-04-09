@@ -97,6 +97,17 @@ This is useful for catching mistakes before deploying a workload or as a CI chec
 
 Each worker gets its own isolated environment. The `init` section runs once, and its results are cloned to each worker so that functions like `ref_rand` and `ref_diff` don't interfere across workers. Per-worker state includes sequence counters (`seq`), permanent row picks (`ref_perm`), and NURand constants.
 
+### Stages
+
+When a config file includes a `stages` section, the `-w` and `-d` flags are ignored. Instead, each stage defines its own worker count and duration, and stages run sequentially. See [Configuration > Stages](/docs/configuration/#stages) for details.
+
+```sh
+edg run \
+--driver pgx \
+--config _examples/stages/crdb.yaml \
+--url "postgres://root@localhost:26257?sslmode=disable"
+```
+
 ### Error Handling
 
 Query errors during `run` are **non-fatal**. The worker logs the error and increments an error counter but continues to the next iteration. This lets you observe error rates without aborting the benchmark. Errors in other sections (`up`, `seed`, `deseed`, `down`, `init`) are fatal and stop execution immediately.

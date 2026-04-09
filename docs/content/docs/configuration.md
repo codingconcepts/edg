@@ -20,6 +20,9 @@ rows:
 # Static datasets available to ref_* functions without a database query.
 reference:
 
+# Staged workload execution (overrides -w and -d flags).
+stages:
+
 # Schema creation queries.
 up:
 
@@ -87,6 +90,35 @@ args:
 ```
 
 This is useful when your lookup data is small and known ahead of time, avoiding the need for a database round-trip.
+
+## Stages
+
+The `stages` section defines a sequence of workload phases, each with its own worker count and duration. When stages are present, the `-w` and `-d` CLI flags are ignored.
+
+```yaml
+stages:
+  - name: ramp
+    workers: 1
+    duration: 10s
+  - name: steady
+    workers: 10
+    duration: 30s
+  - name: cooldown
+    workers: 2
+    duration: 10s
+```
+
+Each stage runs sequentially. When a stage completes (its duration expires), the next stage starts immediately with a new set of workers. The `init` section runs once before the first stage, and its results are shared across all stages.
+
+| Field | Description |
+|---|---|
+| `name` | Stage identifier, logged when the stage starts. |
+| `workers` | Number of concurrent workers for this stage. Defaults to 1 if omitted. |
+| `duration` | How long this stage runs (e.g. `10s`, `5m`, `1h`). |
+
+This is useful for simulating ramp-up patterns, sustained load tests, or multi-phase benchmarks without running separate commands.
+
+See [`_examples/stages/`](https://github.com/codingconcepts/edg/tree/main/_examples/stages) for a complete working example.
 
 ## Rows
 

@@ -206,6 +206,60 @@ func downCmd() *cobra.Command {
 }
 
 func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *pkg.Request, duration time.Duration, workers int, printInterval time.Duration) error {
+	if len(req.Stages) > 0 {
+		return runStages(ctx, cancel, db, req, printInterval)
+	}
+
+	return runStage(ctx, cancel, db, req, duration, workers, printInterval)
+}
+
+func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *pkg.Request, printInterval time.Duration) error {
+	initEnv, err := pkg.NewEnv(db, req)
+	if err != nil {
+		return err
+	}
+	if err := initEnv.Init(ctx); err != nil {
+		return err
+	}
+
+	results := make(chan pkg.QueryResult, 1000)
+	start := time.Now()
+
+	go func() {
+		defer close(results)
+
+		for _, stage := range req.Stages {
+			if ctx.Err() != nil {
+				return
+			}
+
+			dur := time.Duration(stage.Duration)
+			workers := stage.Workers
+			if workers <= 0 {
+				workers = 1
+			}
+
+			slog.Info("stage", "name", stage.Name, "workers", workers, "duration", dur)
+
+			stageCtx, stageCancel := context.WithTimeout(ctx, dur)
+			wg := startWorkers(stageCtx, workers, db, req, initEnv, results)
+			wg.Wait()
+			stageCancel()
+		}
+	}()
+
+	totalWorkers := 0
+	for _, s := range req.Stages {
+		if s.Workers > totalWorkers {
+			totalWorkers = s.Workers
+		}
+	}
+	printResults(results, printInterval, start, totalWorkers)
+
+	return nil
+}
+
+func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *pkg.Request, duration time.Duration, workers int, printInterval time.Duration) error {
 	initEnv, err := pkg.NewEnv(db, req)
 	if err != nil {
 		return err

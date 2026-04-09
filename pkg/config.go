@@ -23,11 +23,18 @@ func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
+type Stage struct {
+	Name     string   `json:"name" yaml:"name"`
+	Workers  int      `json:"workers" yaml:"workers"`
+	Duration Duration `json:"duration" yaml:"duration"`
+}
+
 type Request struct {
 	Globals     map[string]any                `json:"globals" yaml:"globals"`
 	Expressions map[string]string             `json:"expressions" yaml:"expressions"`
 	Rows        map[string][]string           `json:"rows" yaml:"rows"`
 	Reference   map[string][]map[string]any   `json:"reference" yaml:"reference"`
+	Stages      []Stage                       `json:"stages" yaml:"stages"`
 	Up          []*Query                      `json:"up" yaml:"up"`
 	Seed        []*Query                      `json:"seed" yaml:"seed"`
 	Deseed      []*Query                      `json:"deseed" yaml:"deseed"`
