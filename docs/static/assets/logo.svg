@@ -62,7 +62,7 @@
     </path>
   </g>
 
-  <!-- "edg" letterforms: backwards e, d, g — overlapping slightly -->
+  <!-- "edg" letterforms: backwards e, d, g (overlapping slightly) -->
   <!-- backwards e (mirrored horizontally around its center) -->
   <text class="edg-letter" text-anchor="middle"
         transform="translate(168, 230) scale(-1, 1)"

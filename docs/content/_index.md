@@ -13,8 +13,23 @@ Query arguments are written as expressions compiled at startup, giving you acces
 
 ## Supported Databases
 
-| Database | Driver | URL scheme |
+| Database | Driver | URL (example) |
 |---|---|---|
-| CockroachDB / PostgreSQL | `pgx` | `postgres://...` |
-| Oracle | `oracle` | `oracle://...` |
-| MySQL | `mysql` | `user:password@tcp(host:port)/database?parseTime=true` |
+| CockroachDB / PostgreSQL | `pgx` | `postgres://root@localhost:26257/db?sslmode=disable` |
+| Oracle | `oracle` | `oracle://system:password@localhost:1521/db` |
+| MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
+
+## Quick Start
+
+```sh
+go install github.com/codingconcepts/edg@latest
+```
+
+```sh
+edg all \
+--driver pgx \
+--config _examples/tpcc/crdb.yaml \
+--url "postgres://root@localhost:26257?sslmode=disable" \
+-w 100 \
+-d 5m
+```
