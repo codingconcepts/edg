@@ -25,17 +25,17 @@
 
   <defs>
     <linearGradient id="edg-grad" x1="0.1" y1="0" x2="0.9" y2="1">
-      <stop offset="0%" stop-color="#5CE1C8">
-        <animate attributeName="stop-color" dur="16s" repeatCount="indefinite"
-          values="#5CE1C8;#667EEA;#FF6B6B;#00C9FF;#5CE1C8" />
+      <stop offset="0%" stop-color="#F5D88A">
+        <animate attributeName="stop-color" dur="10s" repeatCount="indefinite"
+          values="#F5D88A;#F4A683;#F291B4;#C4A8E0;#A3C7F0;#F5D88A" />
       </stop>
-      <stop offset="50%" stop-color="#A8E06C">
-        <animate attributeName="stop-color" dur="16s" repeatCount="indefinite"
-          values="#A8E06C;#9B6FD4;#FF8E53;#44D492;#A8E06C" />
+      <stop offset="50%" stop-color="#F4A683">
+        <animate attributeName="stop-color" dur="10s" repeatCount="indefinite"
+          values="#F4A683;#F291B4;#C4A8E0;#A3C7F0;#F5D88A;#F4A683" />
       </stop>
-      <stop offset="100%" stop-color="#F5C842">
-        <animate attributeName="stop-color" dur="16s" repeatCount="indefinite"
-          values="#F5C842;#F093FB;#FED330;#92FE9D;#F5C842" />
+      <stop offset="100%" stop-color="#F291B4">
+        <animate attributeName="stop-color" dur="10s" repeatCount="indefinite"
+          values="#F291B4;#C4A8E0;#A3C7F0;#F5D88A;#F4A683;#F291B4" />
       </stop>
     </linearGradient>
   </defs>
@@ -65,13 +65,13 @@
   <!-- "edg" letterforms: backwards e, d, g — overlapping slightly -->
   <!-- backwards e (mirrored horizontally around its center) -->
   <text class="edg-letter" text-anchor="middle"
-        transform="translate(161, 225) scale(-1, 1)"
+        transform="translate(168, 230) scale(-1, 1)"
         x="0" y="0">e</text>
   <!-- d -->
   <text class="edg-letter" text-anchor="middle"
-        x="225" y="225">d</text>
+        x="232" y="230">d</text>
   <!-- g -->
   <text class="edg-letter" text-anchor="middle"
-        x="223" y="225">g</text>
+        x="230" y="230">g</text>
 
 </svg>
