@@ -25,17 +25,13 @@
 
   <defs>
     <linearGradient id="edg-grad" x1="0.1" y1="0" x2="0.9" y2="1">
-      <stop offset="0%" stop-color="#9b5de5">
-        <animate attributeName="stop-color" dur="10s" repeatCount="indefinite"
-          values="#9b5de5;#f15bb5;#fee440;#00bbf9;#00f5d4;#9b5de5" />
-      </stop>
-      <stop offset="50%" stop-color="#f15bb5">
-        <animate attributeName="stop-color" dur="10s" repeatCount="indefinite"
-          values="#f15bb5;#fee440;#00bbf9;#00f5d4;#9b5de5;#f15bb5" />
+      <stop offset="0%" stop-color="#f15bb5">
+        <animate attributeName="stop-color" dur="20s" repeatCount="indefinite"
+          values="#f15bb5;#9b5de5;#fee440;#00bbf9;#f15bb5" />
       </stop>
       <stop offset="100%" stop-color="#fee440">
-        <animate attributeName="stop-color" dur="10s" repeatCount="indefinite"
-          values="#fee440;#00bbf9;#00f5d4;#9b5de5;#f15bb5;#fee440" />
+        <animate attributeName="stop-color" dur="20s" repeatCount="indefinite"
+          values="#fee440;#00bbf9;#9b5de5;#f15bb5;#fee440" />
       </stop>
     </linearGradient>
   </defs>

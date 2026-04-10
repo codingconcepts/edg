@@ -520,24 +520,35 @@ func allCmd() *cobra.Command {
 				return err
 			}
 
-			if err := env.Up(ctx); err != nil {
-				return err
+			if len(req.Up) > 0 {
+				if err := env.Up(ctx); err != nil {
+					return err
+				}
 			}
-			if err := env.Seed(ctx); err != nil {
-				return err
+			if len(req.Seed) > 0 {
+				if err := env.Seed(ctx); err != nil {
+					return err
+				}
 			}
 
-			// Create a child context for run's duration timeout so the
-			// parent context remains live for teardown.
-			runCtx, runCancel := context.WithCancel(ctx)
-			runErr := run(runCtx, runCancel, db, req, duration, workers, printInterval)
+			var runErr error
+			if len(req.Run) > 0 || len(req.Stages) > 0 {
+				// Create a child context for run's duration timeout so the
+				// parent context remains live for teardown.
+				runCtx, runCancel := context.WithCancel(ctx)
+				runErr = run(runCtx, runCancel, db, req, duration, workers, printInterval)
+			}
 
 			// Always run teardown, even if the workload or expectations failed.
-			if err := env.Deseed(ctx); err != nil {
-				return err
+			if len(req.Deseed) > 0 {
+				if err := env.Deseed(ctx); err != nil {
+					return err
+				}
 			}
-			if err := env.Down(ctx); err != nil {
-				return err
+			if len(req.Down) > 0 {
+				if err := env.Down(ctx); err != nil {
+					return err
+				}
 			}
 			return runErr
 		},

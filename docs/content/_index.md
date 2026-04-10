@@ -23,9 +23,13 @@ Query arguments are written as expressions compiled at startup, giving you acces
 
 ## Quick Start
 
+Install with the Go toolchain.
+
 ```sh
 go install github.com/codingconcepts/edg@latest
 ```
+
+Run all of the configured config steps.
 
 ```sh
 edg all \

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="drawing" width="350"/>
+  <img src="docs/static/assets/logo.png" alt="drawing" width="350"/>
 </p>
 
 # edg
