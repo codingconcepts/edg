@@ -41,7 +41,8 @@ type Request struct {
 	Down        []*Query                      `json:"down" yaml:"down"`
 	Init        []*Query                      `json:"init" yaml:"init"`
 	RunWeights  map[string]int                `json:"run_weights" yaml:"run_weights"`
-	Run         []*Query                      `json:"run" yaml:"run"`
+	Run          []*Query                      `json:"run" yaml:"run"`
+	Expectations []string                      `json:"expectations" yaml:"expectations"`
 }
 
 type QueryType string

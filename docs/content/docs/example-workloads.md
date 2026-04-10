@@ -9,16 +9,23 @@ Complete workload configs you can run directly or use as starting points for you
 
 | Workload | Description |
 |---|---|
-| [TPC-C](https://github.com/codingconcepts/edg/tree/main/_examples/tpcc/) | Full TPC-C benchmark with all 5 transaction profiles |
+| [Aggregation](https://github.com/codingconcepts/edg/tree/main/_examples/aggregation/) | Demonstrates aggregation functions (sum, avg, min, max, count, distinct) |
 | [Bank](https://github.com/codingconcepts/edg/tree/main/_examples/bank/) | Bank account operations for contention and correctness testing |
+| [Batch](https://github.com/codingconcepts/edg/tree/main/_examples/batch/) | Demonstrates `query_batch` and `exec_batch` query types for batch inserts and updates |
+| [Distributions](https://github.com/codingconcepts/edg/tree/main/_examples/distributions/) | All five distribution functions (uniform, zipf, norm_f, exp_f, lognorm_f) |
 | [E-Commerce](https://github.com/codingconcepts/edg/tree/main/_examples/ecommerce/) | E-commerce with categories, products, customers, and orders |
+| [Exclusive Columns](https://github.com/codingconcepts/edg/tree/main/_examples/exclusive_columns/) | Mutually exclusive columns - either col_a or col_b, never both |
+| [Expectations](https://github.com/codingconcepts/edg/tree/main/_examples/expectations/) | Post-run assertions for CI/CD gating on error rate, latency, and throughput |
+| [Expressions](https://github.com/codingconcepts/edg/tree/main/_examples/expression/) | Demonstrates expr-lang built-in features (array, map, string, bitwise, etc.) |
+| [Includes](https://github.com/codingconcepts/edg/tree/main/_examples/includes/) | Splitting and reusing config fragments with the `!include` directive |
 | [IoT](https://github.com/codingconcepts/edg/tree/main/_examples/iot/) | IoT devices, sensors, and time-series readings |
 | [Normal](https://github.com/codingconcepts/edg/tree/main/_examples/normal/) | Product reviews with normal distribution ratings |
+| [Nullable](https://github.com/codingconcepts/edg/tree/main/_examples/nullable/) | Demonstrates `nullable(expr, probability)` for injecting NULLs with controlled frequency |
 | [Pipeline](https://github.com/codingconcepts/edg/tree/main/_examples/pipeline/) | Multi-table sequential reads and writes |
-| [SaaS](https://github.com/codingconcepts/edg/tree/main/_examples/saas/) | Multi-tenant SaaS with tenants, users, projects, and tasks |
 | [Populate](https://github.com/codingconcepts/edg/tree/main/_examples/populate/) | Billion-row data population benchmark |
-| [Social](https://github.com/codingconcepts/edg/tree/main/_examples/social/) | Social network with users, posts, follows, and tags |
-| [Aggregation](https://github.com/codingconcepts/edg/tree/main/_examples/aggregation/) | Demonstrates aggregation functions (sum, avg, min, max, count, distinct) |
 | [Reference Data](https://github.com/codingconcepts/edg/tree/main/_examples/reference_data/) | Static reference datasets without database queries |
-| [Expressions](https://github.com/codingconcepts/edg/tree/main/_examples/expression/) | Demonstrates expr-lang built-in features (array, map, string, bitwise, etc.) |
-| [Exclusive Columns](https://github.com/codingconcepts/edg/tree/main/_examples/exclusive_columns/) | Mutually exclusive columns - either col_a or col_b, never both |
+| [SaaS](https://github.com/codingconcepts/edg/tree/main/_examples/saas/) | Multi-tenant SaaS with tenants, users, projects, and tasks |
+| [Social](https://github.com/codingconcepts/edg/tree/main/_examples/social/) | Social network with users, posts, follows, and tags |
+| [Stages](https://github.com/codingconcepts/edg/tree/main/_examples/stages/) | Staged execution with different worker counts and durations per phase |
+| [TPC-C](https://github.com/codingconcepts/edg/tree/main/_examples/tpcc/) | Full TPC-C benchmark with all 5 transaction profiles |
+| [YCSB](https://github.com/codingconcepts/edg/tree/main/_examples/ycsb/) | Yahoo! Cloud Serving Benchmark with a single usertable and configurable workload profiles |

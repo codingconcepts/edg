@@ -168,3 +168,20 @@ tpm:           3494460.0
 | p99 | 99th percentile latency |
 | QPS | Queries per second (count / elapsed seconds) |
 | tpm | Transactions per minute across all queries |
+
+### Expectations
+
+When the config file includes an `expectations` section, results are printed after the summary and the exit code reflects whether all expectations passed:
+
+```
+expectations
+  PASS  error_rate < 1
+  PASS  check_balance.p99 < 100
+  FAIL  tpm > 5000
+
+1 expectation(s) failed
+```
+
+If any expectation fails, edg exits with status code 1. When using `all`, teardown (`deseed` and `down`) still runs before the non-zero exit.
+
+See [Configuration > Expectations]({{< relref "configuration" >}}#expectations) for the full list of available metrics and expression syntax.

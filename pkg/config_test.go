@@ -556,6 +556,31 @@ seed:
 	}
 }
 
+func TestRequestParsesExpectations(t *testing.T) {
+	input := `
+run:
+  - name: check_balance
+    query: SELECT 1
+expectations:
+  - error_rate < 1
+  - check_balance.p99 < 100
+`
+	var req Request
+	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if len(req.Expectations) != 2 {
+		t.Fatalf("expected 2 expectations, got %d", len(req.Expectations))
+	}
+	if req.Expectations[0] != "error_rate < 1" {
+		t.Errorf("expectation[0] = %q, want %q", req.Expectations[0], "error_rate < 1")
+	}
+	if req.Expectations[1] != "check_balance.p99 < 100" {
+		t.Errorf("expectation[1] = %q, want %q", req.Expectations[1], "check_balance.p99 < 100")
+	}
+}
+
 func TestDurationUnmarshalYAML(t *testing.T) {
 	tests := []struct {
 		name    string

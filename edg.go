@@ -18,6 +18,7 @@ import (
 
 	"github.com/codingconcepts/edg/pkg"
 	"github.com/codingconcepts/edg/pkg/random"
+	"github.com/expr-lang/expr"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/microsoft/go-mssqldb"
@@ -207,20 +208,29 @@ func downCmd() *cobra.Command {
 }
 
 func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *pkg.Request, duration time.Duration, workers int, printInterval time.Duration) error {
+	var stats map[string]*queryStats
+	var elapsed time.Duration
+	var err error
+
 	if len(req.Stages) > 0 {
-		return runStages(ctx, cancel, db, req, printInterval)
+		stats, elapsed, err = runStages(ctx, cancel, db, req, printInterval)
+	} else {
+		stats, elapsed, err = runStage(ctx, cancel, db, req, duration, workers, printInterval)
 	}
-
-	return runStage(ctx, cancel, db, req, duration, workers, printInterval)
-}
-
-func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *pkg.Request, printInterval time.Duration) error {
-	initEnv, err := pkg.NewEnv(db, req)
 	if err != nil {
 		return err
 	}
+
+	return checkExpectations(req.Expectations, stats, elapsed)
+}
+
+func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *pkg.Request, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
+	initEnv, err := pkg.NewEnv(db, req)
+	if err != nil {
+		return nil, 0, err
+	}
 	if err := initEnv.Init(ctx); err != nil {
-		return err
+		return nil, 0, err
 	}
 
 	results := make(chan pkg.QueryResult, 1000)
@@ -255,18 +265,18 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *pkg.R
 			totalWorkers = s.Workers
 		}
 	}
-	printResults(results, printInterval, start, totalWorkers)
+	stats := printResults(results, printInterval, start, totalWorkers)
 
-	return nil
+	return stats, time.Since(start), nil
 }
 
-func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *pkg.Request, duration time.Duration, workers int, printInterval time.Duration) error {
+func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *pkg.Request, duration time.Duration, workers int, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
 	initEnv, err := pkg.NewEnv(db, req)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
 	if err := initEnv.Init(ctx); err != nil {
-		return err
+		return nil, 0, err
 	}
 
 	results := make(chan pkg.QueryResult, workers*100)
@@ -288,9 +298,9 @@ func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *p
 	}()
 
 	slog.Info("running", "workers", workers, "duration", duration)
-	printResults(results, printInterval, start, workers)
+	stats := printResults(results, printInterval, start, workers)
 
-	return nil
+	return stats, time.Since(start), nil
 }
 
 func runCmd() *cobra.Command {
@@ -358,7 +368,7 @@ type queryStats struct {
 	latencies    []time.Duration
 }
 
-func printResults(results <-chan pkg.QueryResult, interval time.Duration, start time.Time, numWorkers int) {
+func printResults(results <-chan pkg.QueryResult, interval time.Duration, start time.Time, numWorkers int) map[string]*queryStats {
 	stats := map[string]*queryStats{}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -368,7 +378,7 @@ func printResults(results <-chan pkg.QueryResult, interval time.Duration, start 
 		case r, ok := <-results:
 			if !ok {
 				printSummary(stats, start, numWorkers)
-				return
+				return stats
 			}
 			s := stats[r.Name]
 			if s == nil {
@@ -520,14 +530,16 @@ func allCmd() *cobra.Command {
 			// Create a child context for run's duration timeout so the
 			// parent context remains live for teardown.
 			runCtx, runCancel := context.WithCancel(ctx)
-			if err := run(runCtx, runCancel, db, req, duration, workers, printInterval); err != nil {
-				return err
-			}
+			runErr := run(runCtx, runCancel, db, req, duration, workers, printInterval)
 
+			// Always run teardown, even if the workload or expectations failed.
 			if err := env.Deseed(ctx); err != nil {
 				return err
 			}
-			return env.Down(ctx)
+			if err := env.Down(ctx); err != nil {
+				return err
+			}
+			return runErr
 		},
 	}
 
@@ -560,6 +572,92 @@ func validateCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func checkExpectations(expectations []string, stats map[string]*queryStats, elapsed time.Duration) error {
+	if len(expectations) == 0 {
+		return nil
+	}
+
+	// Build the expression environment from collected stats.
+	env := map[string]any{}
+
+	var totalCount int64
+	var totalErrors int64
+	var totalOps int
+
+	for name, s := range stats {
+		totalCount += s.count
+		totalErrors += s.errors
+		totalOps += len(s.latencies)
+
+		var avg float64
+		if s.count > 0 {
+			avg = float64(s.totalLatency) / float64(s.count) / float64(time.Millisecond)
+		}
+		p50, p95, p99 := percentiles(s.latencies)
+		qps := float64(s.count) / elapsed.Seconds()
+
+		env[name] = map[string]any{
+			"success_count": s.count,
+			"error_count":   s.errors,
+			"error_rate":    errorRate(s.errors, len(s.latencies)),
+			"avg":           avg,
+			"p50":           float64(p50) / float64(time.Millisecond),
+			"p95":           float64(p95) / float64(time.Millisecond),
+			"p99":           float64(p99) / float64(time.Millisecond),
+			"qps":           qps,
+		}
+	}
+
+	env["success_count"] = totalCount
+	env["total_errors"] = totalErrors
+	env["error_rate"] = errorRate(totalErrors, totalOps)
+	env["tpm"] = float64(totalCount) / elapsed.Minutes()
+
+	var failures int
+	fmt.Println("\nexpectations")
+	for _, check := range expectations {
+		program, err := expr.Compile(check, expr.Env(env), expr.AsBool())
+		if err != nil {
+			fmt.Printf("  FAIL %s - compile error: %v\n", check, err)
+			failures++
+			continue
+		}
+
+		result, err := expr.Run(program, env)
+		if err != nil {
+			fmt.Printf("  FAIL %s - eval error: %v\n", check, err)
+			failures++
+			continue
+		}
+
+		passed, ok := result.(bool)
+		if !ok {
+			fmt.Printf("  non-bool result: %v", result)
+			continue
+		}
+
+		if passed {
+			fmt.Printf("  PASS %s\n", check)
+		} else {
+			fmt.Printf("  FAIL %s\n", check)
+			failures++
+		}
+	}
+
+	if failures > 0 {
+		return fmt.Errorf("%d expectation(s) failed", failures)
+	}
+	return nil
+}
+
+func errorRate(errors int64, successfulOps int) float64 {
+	total := int64(successfulOps) + errors
+	if total == 0 {
+		return 0
+	}
+	return float64(errors) / float64(total) * 100
 }
 
 func replCmd() *cobra.Command {
