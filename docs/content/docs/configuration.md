@@ -264,6 +264,7 @@ Each driver has its own placeholder format:
 | Driver | Placeholder format |
 |---|---|
 | `pgx` (PostgreSQL / CockroachDB) | `$1`, `$2`, `$3` |
+| `dsql` (Aurora DSQL) | `$1`, `$2`, `$3` |
 | `mysql` | `?` (positional) |
 | `oracle` | `:1`, `:2`, `:3` |
 | `sqlserver` | `@p1`, `@p2`, `@p3` |

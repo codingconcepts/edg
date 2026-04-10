@@ -52,14 +52,9 @@ func main() {
 				return err
 			}
 
-			// Try the expression as-is first; if it fails, wrap it as
-			// a gen() call so bare words like "email" just work.
 			result, err := env.Eval(input)
 			if err != nil {
-				result, err = env.Eval(fmt.Sprintf("gen('%s')", input))
-				if err != nil {
-					return fmt.Errorf("invalid expression: %s", input)
-				}
+				return fmt.Errorf("invalid expression: %s", input)
 			}
 			fmt.Println(result)
 			return nil
@@ -68,7 +63,7 @@ func main() {
 
 	root.PersistentFlags().StringVar(&flagURL, "url", "", "database connection URL (env: URL)")
 	root.PersistentFlags().StringVar(&configFile, "config", "", "workload YAML config file")
-	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql, sqlserver]")
+	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql, sqlserver, dsql]")
 	root.PersistentFlags().Uint64Var(&flagRngSeed, "rng-seed", 0, "PRNG seed for deterministic output")
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
@@ -108,7 +103,13 @@ func connect() (*sql.DB, *pkg.Request, error) {
 		return nil, nil, err
 	}
 
-	db, err := sql.Open(flagDriver, url)
+	var db *sql.DB
+	switch flagDriver {
+	case "dsql":
+		db, err = connectDSQL(context.Background(), url)
+	default:
+		db, err = sql.Open(flagDriver, url)
+	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening database: %w", err)
 	}

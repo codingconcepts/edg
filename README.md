@@ -13,6 +13,7 @@ Query arguments are written as expressions compiled at startup, giving you acces
 | Database | Driver | URL (example) |
 |---|---|---|
 | CockroachDB / PostgreSQL | `pgx` | `postgres://root@localhost:26257/db?sslmode=disable` |
+| Aurora DSQL | `dsql` | `clusterid.dsql.us-east-1.on.aws` |
 | Oracle | `oracle` | `oracle://system:password@localhost:1521/db` |
 | MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
 | SQL Server | `sqlserver` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
@@ -39,7 +40,6 @@ View the docs [here](https://edg.run/docs).
 ## Todos
 
 * Additional driver support
-  * Support DSQL with custom driver
   * SQLite
 * Progress indication
 * Ability to provide expectations (e.g. error rate < 1%) which will be good for CI/CD usage

@@ -29,7 +29,7 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 |---|---|---|---|
 | `--url` | | | Database connection URL (or set `URL` env var) |
 | `--config` | | | Path to the workload YAML config file (required for database commands, optional for `repl`) |
-| `--driver` | | `pgx` | database/sql driver name (`pgx`, `oracle`, `mysql`, or `sqlserver`) |
+| `--driver` | | `pgx` | database/sql driver name (`pgx`, `dsql`, `oracle`, `mysql`, or `sqlserver`) |
 | `--rng-seed` | | | PRNG seed for deterministic output (useful for regression testing) |
 | `--duration` | `-d` | `1m` | Benchmark duration (run and all commands) |
 | `--workers` | `-w` | `1` | Number of concurrent workers (run and all commands) |
@@ -76,6 +76,23 @@ edg all \
 -w 100 \
 -d 5m
 ```
+
+### Aurora DSQL
+
+The `dsql` driver uses AWS IAM authentication instead of a username and password. Pass the cluster endpoint as the `--url` value:
+
+```sh
+edg all \
+--driver dsql \
+--config workload.yaml \
+--url "clusterid.dsql.us-east-1.on.aws" \
+-w 10 \
+-d 5m
+```
+
+AWS credentials are resolved from the standard chain (environment variables, `~/.aws/credentials`, IAM role, etc.). The region is parsed from the cluster endpoint automatically. Auth tokens are refreshed on every new connection, so long-running workloads work without interruption.
+
+DSQL uses PostgreSQL-compatible SQL, so use `$1`, `$2` placeholders in your queries.
 
 ## Validating Config
 
