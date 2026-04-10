@@ -34,12 +34,12 @@ docker exec -it node1 cockroach sql --insecure
 ### Run
 
 ```sh
-edg up \
+go run ./cmd/edg up \
 --driver pgx \
 --config _examples/expression/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 
-edg run \
+go run ./cmd/edg run \
 --driver pgx \
 --config _examples/expression/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable" \
@@ -83,12 +83,12 @@ SELECT label, result FROM expr_demo ORDER BY label;
 ### Teardown
 
 ```sh
-edg deseed \
+go run ./cmd/edg deseed \
 --driver pgx \
 --config _examples/expression/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 
-edg down \
+go run ./cmd/edg down \
 --driver pgx \
 --config _examples/expression/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"

@@ -30,7 +30,7 @@ CHECK (
 ## Running
 
 ```sh
-go run . all \
+go run ./cmd/edg all \
 --driver pgx \
 --config _examples/exclusive_columns/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable" 1

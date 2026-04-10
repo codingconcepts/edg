@@ -27,7 +27,7 @@ The example creates a `user` table with several nullable columns, each with a di
 ## Running
 
 ```sh
-go run . all \
+go run ./cmd/edg all \
 --driver pgx \
 --config _examples/nullable/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"

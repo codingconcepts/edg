@@ -29,7 +29,7 @@ docker exec -it node1 cockroach sql --insecure
 ### Run
 
 ```sh
-go run . all \
+go run ./cmd/edg all \
 --driver pgx \
 --config _examples/stages/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"

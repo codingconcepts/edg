@@ -9,18 +9,20 @@ This example defines a **categories** reference dataset with names and markup mu
 ### Setup
 
 ```sh
-cockroach demo --insecure --no-example-database
+docker compose -f _examples/compose_crdb.yml up -d
+docker exec -it node1 cockroach init --insecure
+docker exec -it node1 cockroach sql --insecure
 ```
 
 ### Run
 
 ```sh
-go run . up \
+go run ./cmd/edg up \
 --driver pgx \
 --config _examples/reference_data/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 
-go run . seed \
+go run ./cmd/edg seed \
 --driver pgx \
 --config _examples/reference_data/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
@@ -53,12 +55,12 @@ ORDER BY c.region;
 Teardown
 
 ```sh
-go run . deseed \
+go run ./cmd/edg deseed \
 --driver pgx \
 --config _examples/reference_data/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 
-go run . down \
+go run ./cmd/edg down \
 --driver pgx \
 --config _examples/reference_data/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"

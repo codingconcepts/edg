@@ -1,6 +1,15 @@
-# Social
+# YCSB
 
-A social network workload with users, posts, follows, and tags.
+A Yahoo! Cloud Serving Benchmark implementation with all 6 workload profiles (A-F) using Zipfian key distribution. Switch between profiles by changing `run_weights` in the config.
+
+Workload profiles:
+
+- **A** - Update heavy: 50% read, 50% update
+- **B** - Read mostly: 95% read, 5% update
+- **C** - Read only: 100% read
+- **D** - Read latest: 95% read, 5% insert
+- **E** - Short ranges: 95% scan, 5% insert
+- **F** - Read-modify-write: 50% read, 50% read-modify-write
 
 ## CockroachDB
 
@@ -17,28 +26,28 @@ docker exec -it node1 cockroach sql --insecure
 ```sh
 go run ./cmd/edg up \
 --driver pgx \
---config _examples/social/crdb.yaml \
+--config _examples/ycsb/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 
 go run ./cmd/edg seed \
 --driver pgx \
---config _examples/social/crdb.yaml \
+--config _examples/ycsb/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 
 go run ./cmd/edg run \
 --driver pgx \
---config _examples/social/crdb.yaml \
+--config _examples/ycsb/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable" \
 -w 100 \
 -d 1m
 
 go run ./cmd/edg deseed \
 --driver pgx \
---config _examples/social/crdb.yaml \
+--config _examples/ycsb/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 
 go run ./cmd/edg down \
 --driver pgx \
---config _examples/social/crdb.yaml \
+--config _examples/ycsb/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 ```
