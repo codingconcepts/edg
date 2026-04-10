@@ -1,0 +1,54 @@
+# Reference data workload for SQL Server
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals:
+  customers: 100
+
+reference:
+  regions:
+    - {name: us, cities: [a, b, c]}
+    - {name: eu, cities: [d, e, f]}
+    - {name: ap, cities: [g, h, i]}
+
+up:
+
+  - name: create_customer
+    type: exec
+    query: |-
+      CREATE TABLE customer (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        email NVARCHAR(255) NOT NULL,
+        region NVARCHAR(50) NOT NULL,
+        city NVARCHAR(50) NOT NULL
+      )
+
+seed:
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    size: 10
+    args:
+      - gen('email')
+      - ref_same('regions').name
+      - set_rand(ref_same('regions').cities, [])
+    query: |-
+      INSERT INTO customer (email, region, city)
+      SELECT j1.value, j2.value, j3.value
+      FROM OPENJSON('["' + REPLACE('$1', ',', '","') + '"]') j1
+      JOIN OPENJSON('["' + REPLACE('$2', ',', '","') + '"]') j2 ON j1.[key] = j2.[key]
+      JOIN OPENJSON('["' + REPLACE('$3', ',', '","') + '"]') j3 ON j1.[key] = j3.[key]
+
+deseed:
+
+  - name: delete_customer
+    type: exec
+    query: DELETE FROM customer
+
+down:
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer

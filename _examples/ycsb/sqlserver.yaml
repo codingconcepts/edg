@@ -1,0 +1,154 @@
+# YCSB Benchmark Workload for SQL Server
+# =======================================
+# Yahoo! Cloud Serving Benchmark adapted for edg.
+#
+# Single table (usertable) with a primary key and 10 fields of
+# 100 bytes each. Keys follow the format user{0000000000}.
+#
+# Workload profiles: change run_weights to switch:
+#
+#   A - Update heavy:       read: 50,  update: 50
+#   B - Read mostly:        read: 95,  update: 5
+#   C - Read only:          read: 100
+#   D - Read latest:        read: 95,  insert: 5
+#   E - Short ranges:       scan: 95,  insert: 5
+#   F - Read-modify-write:  read: 50,  read_modify_write: 50
+#
+# Key access uses Zipfian distribution.
+#
+# Known limitations:
+#   - Workload F: SQL Server does not support UPDATE...RETURNING, so
+#     read_modify_write is an UPDATE only. Pair with a read for
+#     the full RMW pattern.
+#   - Updates modify field0 only.
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals:
+  records: 10000
+  batch_size: 1000
+  zipf_s: 1.2
+
+up:
+
+  - name: create_usertable
+    query: |-
+      CREATE TABLE usertable (
+        ycsb_key VARCHAR(255) PRIMARY KEY,
+        field0 VARCHAR(100) NOT NULL,
+        field1 VARCHAR(100) NOT NULL,
+        field2 VARCHAR(100) NOT NULL,
+        field3 VARCHAR(100) NOT NULL,
+        field4 VARCHAR(100) NOT NULL,
+        field5 VARCHAR(100) NOT NULL,
+        field6 VARCHAR(100) NOT NULL,
+        field7 VARCHAR(100) NOT NULL,
+        field8 VARCHAR(100) NOT NULL,
+        field9 VARCHAR(100) NOT NULL
+      )
+
+seed:
+
+  - name: populate_usertable
+    args:
+      - batch(records / batch_size)
+      - batch_size
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $2
+      )
+      INSERT INTO usertable (ycsb_key, field0, field1, field2, field3,
+        field4, field5, field6, field7, field8, field9)
+      SELECT
+        CONCAT('user', RIGHT(REPLICATE('0', 10) + CAST($1 * $2 + s - 1 AS NVARCHAR), 10)),
+        LEFT(REPLICATE(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 4), 100),
+        LEFT(REPLICATE(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 4), 100),
+        LEFT(REPLICATE(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 4), 100),
+        LEFT(REPLICATE(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 4), 100),
+        LEFT(REPLICATE(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 4), 100),
+        LEFT(REPLICATE(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 4), 100),
+        LEFT(REPLICATE(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 4), 100),
+        LEFT(REPLICATE(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 4), 100),
+        LEFT(REPLICATE(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 4), 100),
+        LEFT(REPLICATE(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 4), 100)
+      FROM seq
+      OPTION (MAXRECURSION 10000)
+
+deseed:
+
+  - name: delete_usertable
+    type: exec
+    query: DELETE FROM usertable
+
+down:
+
+  - name: drop_usertable
+    type: exec
+    query: DROP TABLE IF EXISTS usertable
+
+# Workload A - Update heavy (default)
+run_weights:
+  read: 50
+  update: 50
+
+run:
+
+  - name: read
+    type: query
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+    query: |-
+      SELECT * FROM usertable WHERE ycsb_key = @p1
+
+  - name: update
+    type: exec
+    args:
+      - regex('[a-zA-Z0-9]{100}')
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+    query: |-
+      UPDATE usertable SET field0 = @p1
+      WHERE ycsb_key = @p2
+
+  - name: insert
+    type: exec
+    args:
+      - uuid_v7()
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+    query: |-
+      INSERT INTO usertable (ycsb_key, field0, field1, field2, field3,
+        field4, field5, field6, field7, field8, field9)
+      VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11)
+
+  - name: scan
+    type: query
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+      - gen('number:1,100')
+    query: |-
+      SELECT * FROM usertable
+      WHERE ycsb_key >= @p1
+      ORDER BY ycsb_key
+      OFFSET 0 ROWS FETCH NEXT @p2 ROWS ONLY
+
+  # SQL Server does not support UPDATE...RETURNING, so read_modify_write
+  # performs only the update. Pair with a read for the full RMW pattern.
+  - name: read_modify_write
+    type: exec
+    args:
+      - regex('[a-zA-Z0-9]{100}')
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+    query: |-
+      UPDATE usertable SET field0 = @p1
+      WHERE ycsb_key = @p2

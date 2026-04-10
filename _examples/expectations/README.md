@@ -74,3 +74,20 @@ go run ./cmd/edg all \
 --config _examples/expectations/oracle.yaml \
 --url "oracle://system:password@localhost:1521/defaultdb"
 ```
+
+## SQL Server
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_sqlserver.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg all \
+--driver sqlserver \
+--config _examples/expectations/sqlserver.yaml \
+--url "sqlserver://sa:P4ssw0rd@localhost:1433?database=expectations&encrypt=disable"
+```

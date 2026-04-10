@@ -1,0 +1,96 @@
+# Aggregation workload for SQL Server
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals:
+  products: 500
+  batch_size: 100
+
+up:
+
+  - name: create_product
+    query: |-
+      CREATE TABLE product (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        category NVARCHAR(50) NOT NULL,
+        price DECIMAL(10,2) NOT NULL,
+        stock_qty INT NOT NULL
+      )
+
+  - name: create_agg_snapshot
+    query: |-
+      CREATE TABLE agg_snapshot (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        total_products INT NOT NULL,
+        total_value DECIMAL(12,2) NOT NULL,
+        avg_price DECIMAL(10,2) NOT NULL,
+        min_price DECIMAL(10,2) NOT NULL,
+        max_price DECIMAL(10,2) NOT NULL,
+        distinct_categories INT NOT NULL,
+        created_at DATETIME2 NOT NULL DEFAULT GETDATE()
+      )
+
+seed:
+
+  - name: populate_product
+    args:
+      - products
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
+      INSERT INTO product (category, price, stock_qty)
+      SELECT
+        CHOOSE(ABS(CHECKSUM(NEWID())) % 5 + 1, 'electronics', 'clothing', 'books', 'food', 'toys'),
+        CAST(RAND(CHECKSUM(NEWID())) * 499 + 1 AS DECIMAL(10,2)),
+        ABS(CHECKSUM(NEWID())) % 200 + 1
+      FROM seq
+      OPTION (MAXRECURSION 0)
+
+deseed:
+
+  - name: delete_agg_snapshot
+    type: exec
+    query: DELETE FROM agg_snapshot
+
+  - name: delete_product
+    type: exec
+    query: DELETE FROM product
+
+down:
+
+  - name: drop_agg_snapshot
+    type: exec
+    query: DROP TABLE IF EXISTS agg_snapshot
+
+  - name: drop_product
+    type: exec
+    query: DROP TABLE IF EXISTS product
+
+run:
+
+  - name: fetch_products
+    type: query
+    args:
+      - gen('number:1,10')
+    query: |-
+      SELECT id, category, price, stock_qty
+      FROM product
+      ORDER BY NEWID()
+      OFFSET 0 ROWS FETCH NEXT @p1 ROWS ONLY
+
+  - name: record_snapshot
+    type: exec
+    args:
+      - count('fetch_products')
+      - sum('fetch_products', 'price')
+      - avg('fetch_products', 'price')
+      - min('fetch_products', 'price')
+      - max('fetch_products', 'price')
+      - distinct('fetch_products', 'category')
+    query: |-
+      INSERT INTO agg_snapshot (total_products, total_value, avg_price, min_price, max_price, distinct_categories)
+      VALUES (@p1, @p2, @p3, @p4, @p5, @p6)

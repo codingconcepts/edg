@@ -1,0 +1,131 @@
+# Pipeline workload for SQL Server
+#
+# A simple three-table pipeline where each iteration finds
+# a row in a, follows the relationship to b, then updates c.
+# No run_weights: all queries run sequentially every iteration.
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals:
+  a_rows: 1000
+  b_rows: 5000
+  c_rows: 20000
+  batch_size: 5000
+
+up:
+
+  - name: create_a
+    query: |-
+      CREATE TABLE a (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        name NVARCHAR(255) NOT NULL
+      )
+
+  - name: create_b
+    query: |-
+      CREATE TABLE b (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        a_id UNIQUEIDENTIFIER NOT NULL,
+        value INT NOT NULL,
+        FOREIGN KEY (a_id) REFERENCES a(id)
+      )
+
+  - name: create_c
+    query: |-
+      CREATE TABLE c (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        b_id UNIQUEIDENTIFIER NOT NULL,
+        status NVARCHAR(20) NOT NULL DEFAULT 'new',
+        FOREIGN KEY (b_id) REFERENCES b(id)
+      )
+
+seed:
+
+  - name: populate_a
+    args:
+      - gen_batch(a_rows, batch_size, 'word')
+    query: |-
+      INSERT INTO a (name)
+      SELECT value FROM STRING_SPLIT('$1', ',')
+
+  - name: populate_b
+    args:
+      - batch(b_rows / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO b (a_id, value)
+      SELECT TOP $2 a.id, ABS(CHECKSUM(NEWID())) % 100
+      FROM a
+      ORDER BY NEWID()
+
+  - name: populate_c
+    args:
+      - batch(c_rows / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO c (b_id)
+      SELECT TOP $2 b.id
+      FROM b
+      ORDER BY NEWID()
+
+deseed:
+
+  - name: delete_c
+    type: exec
+    query: DELETE FROM c
+
+  - name: delete_b
+    type: exec
+    query: DELETE FROM b
+
+  - name: delete_a
+    type: exec
+    query: DELETE FROM a
+
+down:
+
+  - name: drop_c
+    type: exec
+    query: DROP TABLE IF EXISTS c
+
+  - name: drop_b
+    type: exec
+    query: DROP TABLE IF EXISTS b
+
+  - name: drop_a
+    type: exec
+    query: DROP TABLE IF EXISTS a
+
+# No run_weights: all three queries run sequentially every iteration,
+# so each step can reference data returned by the previous one.
+
+run:
+
+  # Finds a random row from a.
+  - name: find_a
+    type: query
+    query: |-
+      SELECT TOP 1 id AS a_id, name
+      FROM a
+      ORDER BY NEWID()
+
+  # Finds a row from b related to the random row in a.
+  - name: find_b
+    type: query
+    args:
+      - ref_rand('find_a').a_id
+    query: |-
+      SELECT TOP 1 id AS b_id, value
+      FROM b
+      WHERE a_id = @p1
+
+  # Updates a row in c related to the row found in b.
+  - name: update_c
+    type: exec
+    args:
+      - ref_rand('find_b').b_id
+    query: |-
+      UPDATE TOP (1) c SET status = 'processed'
+      WHERE b_id = @p1
+        AND status = 'new'

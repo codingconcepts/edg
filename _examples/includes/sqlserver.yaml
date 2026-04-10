@@ -1,0 +1,57 @@
+# Config Includes workload for SQL Server
+#
+# Demonstrates the !include directive with SQL Server-specific SQL.
+# Globals are shared across all databases; schema, teardown,
+# and run queries use database-specific include files.
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals: !include shared/globals.yaml
+
+up: !include shared/schema_sqlserver.yaml
+
+seed:
+
+  - name: populate_customer
+    args:
+      - gen_batch(customers, batch_size, 'email')
+    query: |-
+      INSERT INTO customer (email)
+      SELECT value FROM STRING_SPLIT('$1', ',')
+
+  - name: populate_account
+    args:
+      - batch(customers / batch_size)
+      - initial_balance
+      - batch_size
+    query: |-
+      INSERT INTO account (balance, customer_id)
+      SELECT $2, c.id
+      FROM customer c
+      ORDER BY c.id
+      OFFSET $1 * $3 ROWS FETCH NEXT $3 ROWS ONLY
+
+deseed:
+
+  - name: delete_account
+    type: exec
+    query: DELETE FROM account
+
+  - name: delete_customer
+    type: exec
+    query: DELETE FROM customer
+
+down: !include shared/teardown_sqlserver.yaml
+
+init:
+
+  - name: fetch_accounts
+    type: query
+    query: SELECT id FROM account ORDER BY NEWID()
+
+run_weights:
+  check_balance: 50
+  credit_account: 50
+
+run: !include shared/run_queries_sqlserver.yaml

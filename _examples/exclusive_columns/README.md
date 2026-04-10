@@ -79,3 +79,20 @@ go run ./cmd/edg all \
 --config _examples/exclusive_columns/oracle.yaml \
 --url "oracle://system:password@localhost:1521/defaultdb"
 ```
+
+## SQL Server
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_sqlserver.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg all \
+--driver sqlserver \
+--config _examples/exclusive_columns/sqlserver.yaml \
+--url "sqlserver://sa:P4ssw0rd@localhost:1433?database=exclusive_columns&encrypt=disable"
+```

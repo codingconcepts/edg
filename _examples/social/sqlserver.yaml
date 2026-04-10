@@ -1,0 +1,366 @@
+# Social network workload for SQL Server
+#
+# SQL Server does not support writable CTEs (DML inside WITH clauses).
+# create_post and like_post are simplified to single operations.
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals:
+  users: 10000
+  posts_per_user: 5
+  follows_per_user: 10
+  tags: 50
+
+up:
+
+  - name: create_user_profile
+    query: |-
+      CREATE TABLE user_profile (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        username NVARCHAR(255) NOT NULL,
+        display_name NVARCHAR(255) NOT NULL,
+        bio NVARCHAR(500) NOT NULL DEFAULT '',
+        created_at DATETIME2 NOT NULL DEFAULT GETDATE()
+      )
+
+  - name: create_post
+    query: |-
+      CREATE TABLE post (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        author_id UNIQUEIDENTIFIER NOT NULL,
+        body NVARCHAR(MAX) NOT NULL,
+        like_count INT NOT NULL DEFAULT 0,
+        created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        FOREIGN KEY (author_id) REFERENCES user_profile(id)
+      )
+
+  - name: create_follow
+    query: |-
+      CREATE TABLE follow (
+        follower_id UNIQUEIDENTIFIER NOT NULL,
+        following_id UNIQUEIDENTIFIER NOT NULL,
+        created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        PRIMARY KEY (follower_id, following_id),
+        FOREIGN KEY (follower_id) REFERENCES user_profile(id),
+        FOREIGN KEY (following_id) REFERENCES user_profile(id),
+        CHECK (follower_id != following_id)
+      )
+
+  - name: create_post_like
+    query: |-
+      CREATE TABLE post_like (
+        post_id UNIQUEIDENTIFIER NOT NULL,
+        user_id UNIQUEIDENTIFIER NOT NULL,
+        created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        PRIMARY KEY (post_id, user_id),
+        FOREIGN KEY (post_id) REFERENCES post(id),
+        FOREIGN KEY (user_id) REFERENCES user_profile(id)
+      )
+
+  - name: create_comment
+    query: |-
+      CREATE TABLE comment (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        post_id UNIQUEIDENTIFIER NOT NULL,
+        author_id UNIQUEIDENTIFIER NOT NULL,
+        body NVARCHAR(MAX) NOT NULL,
+        created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        FOREIGN KEY (post_id) REFERENCES post(id),
+        FOREIGN KEY (author_id) REFERENCES user_profile(id)
+      )
+
+  - name: create_tag
+    query: |-
+      CREATE TABLE tag (
+        id INT PRIMARY KEY,
+        name NVARCHAR(255) NOT NULL UNIQUE
+      )
+
+  - name: create_post_tag
+    query: |-
+      CREATE TABLE post_tag (
+        post_id UNIQUEIDENTIFIER NOT NULL,
+        tag_id INT NOT NULL,
+        PRIMARY KEY (post_id, tag_id),
+        FOREIGN KEY (post_id) REFERENCES post(id),
+        FOREIGN KEY (tag_id) REFERENCES tag(id)
+      )
+
+  - name: create_idx_post_author
+    query: |-
+      CREATE INDEX idx_post_author
+      ON post (author_id, created_at DESC)
+
+  - name: create_idx_follow_follower
+    query: |-
+      CREATE INDEX idx_follow_follower
+      ON follow (follower_id)
+
+  - name: create_idx_comment_post
+    query: |-
+      CREATE INDEX idx_comment_post
+      ON comment (post_id, created_at DESC)
+
+seed:
+
+  - name: populate_user_profile
+    args:
+      - users
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
+      INSERT INTO user_profile (username, display_name, bio)
+      SELECT
+        CONCAT('user_', s),
+        SUBSTRING(CONVERT(NVARCHAR(255), NEWID()), 1, 12),
+        SUBSTRING(CONCAT(CONVERT(NVARCHAR(255), NEWID()), CONVERT(NVARCHAR(255), NEWID())), 1, 60)
+      FROM seq
+      OPTION (MAXRECURSION 0)
+
+  - name: populate_tag
+    args:
+      - tags
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
+      INSERT INTO tag (id, name)
+      SELECT s, CONCAT('tag-', s)
+      FROM seq
+      OPTION (MAXRECURSION 0)
+
+  - name: populate_post
+    args:
+      - posts_per_user
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
+      INSERT INTO post (author_id, body, like_count)
+      SELECT
+        u.id,
+        SUBSTRING(CONCAT(CONVERT(NVARCHAR(255), NEWID()), CONVERT(NVARCHAR(255), NEWID())), 1, 100),
+        ABS(CHECKSUM(NEWID())) % 100
+      FROM user_profile u
+      CROSS JOIN seq
+
+  - name: populate_post_tag
+    args:
+      - tags
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < 3
+      )
+      MERGE INTO post_tag pt
+      USING (
+        SELECT p.id AS post_id, ABS(CHECKSUM(NEWID())) % $1 + 1 AS tag_id
+        FROM post p
+        CROSS JOIN seq
+      ) src ON (pt.post_id = src.post_id AND pt.tag_id = src.tag_id)
+      WHEN NOT MATCHED THEN
+        INSERT (post_id, tag_id) VALUES (src.post_id, src.tag_id);
+
+  - name: populate_follow
+    args:
+      - follows_per_user
+    query: |-
+      MERGE INTO follow f
+      USING (
+        SELECT u.id AS follower_id, t.id AS following_id
+        FROM user_profile u
+        CROSS APPLY (
+          SELECT TOP ($1) id FROM user_profile
+          WHERE id != u.id
+          ORDER BY NEWID()
+        ) t
+      ) src ON (f.follower_id = src.follower_id AND f.following_id = src.following_id)
+      WHEN NOT MATCHED THEN
+        INSERT (follower_id, following_id) VALUES (src.follower_id, src.following_id);
+
+deseed:
+
+  - name: delete_post_tag
+    type: exec
+    query: DELETE FROM post_tag
+
+  - name: delete_comment
+    type: exec
+    query: DELETE FROM comment
+
+  - name: delete_post_like
+    type: exec
+    query: DELETE FROM post_like
+
+  - name: delete_follow
+    type: exec
+    query: DELETE FROM follow
+
+  - name: delete_post
+    type: exec
+    query: DELETE FROM post
+
+  - name: delete_tag
+    type: exec
+    query: DELETE FROM tag
+
+  - name: delete_user_profile
+    type: exec
+    query: DELETE FROM user_profile
+
+down:
+
+  - name: drop_post_tag
+    type: exec
+    query: DROP TABLE IF EXISTS post_tag
+
+  - name: drop_comment
+    type: exec
+    query: DROP TABLE IF EXISTS comment
+
+  - name: drop_post_like
+    type: exec
+    query: DROP TABLE IF EXISTS post_like
+
+  - name: drop_follow
+    type: exec
+    query: DROP TABLE IF EXISTS follow
+
+  - name: drop_post
+    type: exec
+    query: DROP TABLE IF EXISTS post
+
+  - name: drop_tag
+    type: exec
+    query: DROP TABLE IF EXISTS tag
+
+  - name: drop_user_profile
+    type: exec
+    query: DROP TABLE IF EXISTS user_profile
+
+init:
+
+  - name: fetch_users
+    type: query
+    query: SELECT id, username, display_name FROM user_profile ORDER BY NEWID()
+
+  - name: fetch_posts
+    type: query
+    query: SELECT id FROM post ORDER BY NEWID()
+
+  - name: fetch_tags
+    type: query
+    query: SELECT id, name FROM tag
+
+run_weights:
+  fetch_feed: 30
+  create_post: 10
+  like_post: 25
+  add_comment: 10
+  follow_user: 5
+  trending: 10
+  mutual_friends: 10
+
+run:
+
+  # Fetch posts from users this user follows.
+  # Pattern: fan-out read via multi-JOIN across follow relationships
+  - name: fetch_feed
+    type: query
+    args:
+      - ref_rand('fetch_users').id
+    query: |-
+      SELECT TOP 20 p.id, p.body, p.like_count, p.created_at,
+        u.username, u.display_name
+      FROM post p
+      JOIN follow f ON f.following_id = p.author_id
+      JOIN user_profile u ON u.id = p.author_id
+      WHERE f.follower_id = @p1
+      ORDER BY p.created_at DESC
+
+  # Create a post (without tags; writable CTEs not supported).
+  # Pattern: simple INSERT
+  - name: create_post
+    type: exec
+    args:
+      - ref_rand('fetch_users').id
+      - gen('sentence:10')
+    query: |-
+      INSERT INTO post (author_id, body)
+      VALUES (@p1, @p2)
+
+  # Like a post (idempotent).
+  # Note: SQL Server does not support writable CTEs, so the like_count
+  # increment is omitted. Use a trigger for counter updates.
+  - name: like_post
+    type: exec
+    args:
+      - ref_rand('fetch_posts').id
+      - ref_rand('fetch_users').id
+    query: |-
+      MERGE INTO post_like pl
+      USING (SELECT @p1 AS post_id, @p2 AS user_id) src
+      ON (pl.post_id = src.post_id AND pl.user_id = src.user_id)
+      WHEN NOT MATCHED THEN
+        INSERT (post_id, user_id) VALUES (src.post_id, src.user_id);
+
+  # Comment on a post.
+  # Pattern: ref_same for consistent multi-field access
+  - name: add_comment
+    type: exec
+    args:
+      - ref_rand('fetch_posts').id
+      - ref_same('fetch_users').id
+      - ref_same('fetch_users').display_name
+      - gen('sentence:8')
+    query: |-
+      INSERT INTO comment (post_id, author_id, body)
+      VALUES (@p1, @p2, CONCAT(@p3, ': ', @p4))
+
+  # Follow another user (idempotent).
+  # Pattern: MERGE for ON CONFLICT DO NOTHING
+  - name: follow_user
+    type: exec
+    args:
+      - ref_diff('fetch_users').id
+      - ref_diff('fetch_users').id
+    query: |-
+      MERGE INTO follow f
+      USING (SELECT @p1 AS follower_id, @p2 AS following_id) src
+      ON (f.follower_id = src.follower_id AND f.following_id = src.following_id)
+      WHEN NOT MATCHED THEN
+        INSERT (follower_id, following_id) VALUES (src.follower_id, src.following_id);
+
+  # Find trending posts by like count.
+  # Pattern: global aggregate with ORDER BY + TOP
+  - name: trending
+    type: query
+    query: |-
+      SELECT TOP 10 p.id, p.body, p.like_count, u.username
+      FROM post p
+      JOIN user_profile u ON u.id = p.author_id
+      ORDER BY p.like_count DESC
+
+  # Find mutual follows between two users.
+  # Pattern: ref_diff for two distinct users, self-join on follow table
+  - name: mutual_friends
+    type: query
+    args:
+      - ref_diff('fetch_users').id
+      - ref_diff('fetch_users').id
+    query: |-
+      SELECT TOP 20 u.id, u.username, u.display_name
+      FROM follow f1
+      JOIN follow f2 ON f1.following_id = f2.following_id
+      JOIN user_profile u ON u.id = f1.following_id
+      WHERE f1.follower_id = @p1
+        AND f2.follower_id = @p2

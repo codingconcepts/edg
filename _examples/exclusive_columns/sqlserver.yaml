@@ -1,0 +1,54 @@
+# Exclusive columns workload for SQL Server
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals:
+  contacts: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_contact
+    type: exec
+    query: |-
+      CREATE TABLE contact (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        name NVARCHAR(255) NOT NULL,
+        email NVARCHAR(255),
+        phone NVARCHAR(50),
+        CHECK (
+          (email IS NOT NULL AND phone IS NULL) OR
+          (email IS NULL AND phone IS NOT NULL)
+        )
+      )
+
+seed:
+
+  - name: populate_contact
+    type: exec_batch
+    count: contacts
+    size: batch_size
+    args:
+      - gen('name')
+      - bool()
+      - cond(arg(1), gen('email'), nil)
+      - cond(!arg(1), gen('phone'), nil)
+    query: |-
+      INSERT INTO contact (name, email, phone)
+      SELECT n.value, e.value, p.value
+      FROM OPENJSON('["' + REPLACE('$1', ',', '","') + '"]') n
+      JOIN OPENJSON('["' + REPLACE('$3', ',', '","') + '"]') e ON n.[key] = e.[key]
+      JOIN OPENJSON('["' + REPLACE('$4', ',', '","') + '"]') p ON n.[key] = p.[key]
+
+deseed:
+
+  - name: delete_contact
+    type: exec
+    query: DELETE FROM contact
+
+down:
+
+  - name: drop_contact
+    type: exec
+    query: DROP TABLE IF EXISTS contact

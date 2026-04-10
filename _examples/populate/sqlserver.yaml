@@ -1,0 +1,72 @@
+# Populate workload for SQL Server
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#
+# Example:
+#   edg up --driver sqlserver --config _examples/populate/sqlserver.yaml \
+#     --url "sqlserver://sa:Password123!@localhost:1433?database=populate&encrypt=disable"
+
+globals:
+  customers: 1000000000 # 1 billion
+  initial_balance: 10000
+  batch_size: 10000 # 10K rows per batch insert
+
+up:
+
+  - name: create_customer
+    query: |-
+      CREATE TABLE customer (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        email NVARCHAR(255) NOT NULL
+      )
+
+  - name: create_account
+    query: |-
+      CREATE TABLE account (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        balance FLOAT NOT NULL,
+        customer_id UNIQUEIDENTIFIER NOT NULL,
+        FOREIGN KEY (customer_id) REFERENCES customer(id)
+      )
+
+seed:
+
+  - name: populate_customer
+    args:
+      - gen_batch(customers, batch_size, 'email')
+    query: |-
+      INSERT INTO customer (email)
+      SELECT value FROM STRING_SPLIT('$1', ',')
+
+  - name: populate_account
+    args:
+      - batch(customers / batch_size)
+      - initial_balance
+      - batch_size
+    query: |-
+      INSERT INTO account (balance, customer_id)
+      SELECT $2, c.id
+      FROM customer c
+      ORDER BY c.id
+      OFFSET $1 * $3 ROWS FETCH NEXT $3 ROWS ONLY
+
+deseed:
+
+  - name: delete_account
+    type: exec
+    query: DELETE FROM account
+
+  - name: delete_customer
+    type: exec
+    query: DELETE FROM customer
+
+down:
+
+  - name: drop_account
+    type: exec
+    query: DROP TABLE IF EXISTS account
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer

@@ -1,0 +1,384 @@
+# Multi-tenant SaaS workload for SQL Server
+#
+# SQL Server does not support writable CTEs (DML inside WITH clauses).
+# The add_comment transaction is simplified to a single INSERT.
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals:
+  tenants: 10
+  users_per_tenant: 100
+  projects_per_tenant: 5
+  tasks_per_project: 100
+
+up:
+
+  - name: create_tenant
+    query: |-
+      CREATE TABLE tenant (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        name NVARCHAR(255) NOT NULL,
+        plan NVARCHAR(20) NOT NULL DEFAULT 'free',
+        created_at DATETIME2 NOT NULL DEFAULT GETDATE()
+      )
+
+  - name: create_app_user
+    query: |-
+      CREATE TABLE app_user (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        tenant_id UNIQUEIDENTIFIER NOT NULL,
+        email NVARCHAR(255) NOT NULL,
+        role NVARCHAR(20) NOT NULL DEFAULT 'member',
+        created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        FOREIGN KEY (tenant_id) REFERENCES tenant(id)
+      )
+
+  - name: create_project
+    query: |-
+      CREATE TABLE project (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        tenant_id UNIQUEIDENTIFIER NOT NULL,
+        name NVARCHAR(255) NOT NULL,
+        created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        FOREIGN KEY (tenant_id) REFERENCES tenant(id)
+      )
+
+  - name: create_task
+    query: |-
+      CREATE TABLE task (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        project_id UNIQUEIDENTIFIER NOT NULL,
+        tenant_id UNIQUEIDENTIFIER NOT NULL,
+        title NVARCHAR(255) NOT NULL,
+        status NVARCHAR(20) NOT NULL DEFAULT 'open',
+        assignee_id UNIQUEIDENTIFIER,
+        deleted_at DATETIME2 NULL,
+        created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        updated_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        FOREIGN KEY (project_id) REFERENCES project(id),
+        FOREIGN KEY (tenant_id) REFERENCES tenant(id),
+        FOREIGN KEY (assignee_id) REFERENCES app_user(id)
+      )
+
+  - name: create_task_comment
+    query: |-
+      CREATE TABLE task_comment (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        task_id UNIQUEIDENTIFIER NOT NULL,
+        tenant_id UNIQUEIDENTIFIER NOT NULL,
+        author_id UNIQUEIDENTIFIER NOT NULL,
+        body NVARCHAR(MAX) NOT NULL,
+        created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        FOREIGN KEY (task_id) REFERENCES task(id),
+        FOREIGN KEY (tenant_id) REFERENCES tenant(id),
+        FOREIGN KEY (author_id) REFERENCES app_user(id)
+      )
+
+  - name: create_billing_usage
+    query: |-
+      CREATE TABLE billing_usage (
+        tenant_id UNIQUEIDENTIFIER PRIMARY KEY,
+        api_calls INT NOT NULL DEFAULT 0,
+        storage_bytes BIGINT NOT NULL DEFAULT 0,
+        updated_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+        FOREIGN KEY (tenant_id) REFERENCES tenant(id)
+      )
+
+  - name: create_idx_task_tenant_status
+    query: |-
+      CREATE INDEX idx_task_tenant_status
+      ON task (tenant_id, status, deleted_at)
+
+  - name: create_idx_task_project
+    query: |-
+      CREATE INDEX idx_task_project
+      ON task (project_id, status, deleted_at)
+
+  - name: create_idx_app_user_tenant
+    query: |-
+      CREATE INDEX idx_app_user_tenant
+      ON app_user (tenant_id)
+
+  - name: create_idx_task_comment_task
+    query: |-
+      CREATE INDEX idx_task_comment_task
+      ON task_comment (task_id, created_at DESC)
+
+seed:
+
+  - name: populate_tenant
+    args:
+      - tenants
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
+      INSERT INTO tenant (name, plan)
+      SELECT
+        CONCAT('tenant-', s),
+        CHOOSE(ABS(CHECKSUM(NEWID())) % 4 + 1, 'free','starter','pro','enterprise')
+      FROM seq
+      OPTION (MAXRECURSION 0)
+
+  - name: populate_billing_usage
+    query: |-
+      INSERT INTO billing_usage (tenant_id, api_calls, storage_bytes)
+      SELECT id, 0, 0
+      FROM tenant
+
+  - name: populate_app_user
+    args:
+      - ref_each('SELECT id FROM tenant')
+      - users_per_tenant
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $2
+      )
+      INSERT INTO app_user (tenant_id, email, role)
+      SELECT
+        '$1',
+        CONCAT('user_', s, '_', SUBSTRING('$1', 1, 8), '@example.com'),
+        CASE WHEN s = 1 THEN 'admin'
+             WHEN s <= 5 THEN 'manager'
+             ELSE 'member'
+        END
+      FROM seq
+      OPTION (MAXRECURSION 0)
+
+  - name: populate_project
+    args:
+      - ref_each('SELECT id FROM tenant')
+      - projects_per_tenant
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $2
+      )
+      INSERT INTO project (tenant_id, name)
+      SELECT
+        '$1',
+        CONCAT('project-', s, '-', SUBSTRING('$1', 1, 8))
+      FROM seq
+      OPTION (MAXRECURSION 0)
+
+  - name: populate_task
+    args:
+      - ref_each('SELECT p.id AS project_id, p.tenant_id FROM project p')
+      - tasks_per_project
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $3
+      )
+      INSERT INTO task (project_id, tenant_id, title, status, assignee_id)
+      SELECT
+        '$1',
+        '$2',
+        CONCAT('task-', s, '-', SUBSTRING('$1', 1, 8)),
+        CHOOSE(ABS(CHECKSUM(NEWID())) % 4 + 1, 'open','in_progress','review','done'),
+        (SELECT TOP 1 id FROM app_user WHERE tenant_id = '$2' ORDER BY NEWID())
+      FROM seq
+      OPTION (MAXRECURSION 0)
+
+deseed:
+
+  - name: delete_task_comment
+    type: exec
+    query: DELETE FROM task_comment
+
+  - name: delete_task
+    type: exec
+    query: DELETE FROM task
+
+  - name: delete_project
+    type: exec
+    query: DELETE FROM project
+
+  - name: delete_billing_usage
+    type: exec
+    query: DELETE FROM billing_usage
+
+  - name: delete_app_user
+    type: exec
+    query: DELETE FROM app_user
+
+  - name: delete_tenant
+    type: exec
+    query: DELETE FROM tenant
+
+down:
+
+  - name: drop_task_comment
+    type: exec
+    query: DROP TABLE IF EXISTS task_comment
+
+  - name: drop_task
+    type: exec
+    query: DROP TABLE IF EXISTS task
+
+  - name: drop_project
+    type: exec
+    query: DROP TABLE IF EXISTS project
+
+  - name: drop_billing_usage
+    type: exec
+    query: DROP TABLE IF EXISTS billing_usage
+
+  - name: drop_app_user
+    type: exec
+    query: DROP TABLE IF EXISTS app_user
+
+  - name: drop_tenant
+    type: exec
+    query: DROP TABLE IF EXISTS tenant
+
+init:
+
+  - name: fetch_tenants
+    type: query
+    query: SELECT id FROM tenant
+
+  - name: fetch_users
+    type: query
+    query: SELECT id, tenant_id FROM app_user ORDER BY NEWID()
+
+  - name: fetch_projects
+    type: query
+    query: SELECT id, tenant_id FROM project ORDER BY NEWID()
+
+  - name: fetch_tasks
+    type: query
+    query: SELECT id, tenant_id, project_id FROM task WHERE deleted_at IS NULL ORDER BY NEWID()
+
+run_weights:
+  list_tasks: 30
+  create_task: 15
+  update_task: 15
+  add_comment: 10
+  soft_delete: 5
+  tenant_dashboard: 15
+  admin_overview: 10
+
+run:
+
+  # List active tasks for the worker's tenant, filtered by status.
+  # Pattern: ref_perm for tenant pinning, filtered read
+  - name: list_tasks
+    type: query
+    args:
+      - ref_perm('fetch_tenants').id
+      - gen('number:1,4')
+    query: |-
+      SELECT TOP 20 t.id, t.title, t.status, t.created_at,
+        u.email AS assignee_email
+      FROM task t
+      LEFT JOIN app_user u ON u.id = t.assignee_id
+      WHERE t.tenant_id = @p1
+        AND t.deleted_at IS NULL
+        AND t.status = CHOOSE(@p2, 'open','in_progress','review','done')
+      ORDER BY t.updated_at DESC
+
+  # Create a task in a random project.
+  # Pattern: ref_perm for tenant, ref_rand for project/assignee
+  - name: create_task
+    type: exec
+    args:
+      - ref_same('fetch_projects').id
+      - ref_perm('fetch_tenants').id
+      - gen('sentence:5')
+      - ref_rand('fetch_users').id
+      - ref_same('fetch_projects').id
+      - ref_perm('fetch_tenants').id
+    query: |-
+      INSERT INTO task (project_id, tenant_id, title, status, assignee_id)
+      SELECT @p1, @p2, @p3, 'open', @p4
+      WHERE EXISTS (
+        SELECT 1 FROM project WHERE id = @p5 AND tenant_id = @p6
+      )
+
+  # Advance a task's status through the state machine.
+  # Pattern: CASE-based state transitions (open -> in_progress -> review -> done)
+  - name: update_task
+    type: exec
+    args:
+      - ref_rand('fetch_tasks').id
+    query: |-
+      UPDATE task SET
+        status = CASE status
+          WHEN 'open' THEN 'in_progress'
+          WHEN 'in_progress' THEN 'review'
+          WHEN 'review' THEN 'done'
+          ELSE status
+        END,
+        updated_at = GETDATE()
+      WHERE id = @p1 AND deleted_at IS NULL
+
+  # Add a comment to a task.
+  # Note: SQL Server does not support writable CTEs, so the billing
+  # counter increment is omitted. Use a trigger or application
+  # logic for billing updates.
+  - name: add_comment
+    type: exec
+    args:
+      - ref_rand('fetch_tasks').id
+      - ref_same('fetch_users').tenant_id
+      - ref_same('fetch_users').id
+      - gen('sentence:6')
+    query: |-
+      INSERT INTO task_comment (task_id, tenant_id, author_id, body)
+      VALUES (@p1, @p2, @p3, @p4)
+
+  # Soft-delete a task.
+  # Pattern: UPDATE deleted_at instead of DELETE
+  - name: soft_delete
+    type: exec
+    args:
+      - ref_rand('fetch_tasks').id
+    query: |-
+      UPDATE task
+      SET deleted_at = GETDATE(), updated_at = GETDATE()
+      WHERE id = @p1 AND deleted_at IS NULL
+
+  # Per-tenant dashboard showing task counts by status per project.
+  # Pattern: conditional aggregation with SUM(CASE...)
+  - name: tenant_dashboard
+    type: query
+    args:
+      - ref_perm('fetch_tenants').id
+    query: |-
+      SELECT
+        p.name AS project_name,
+        SUM(CASE WHEN t.status = 'open' THEN 1 ELSE 0 END) AS open_count,
+        SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress_count,
+        SUM(CASE WHEN t.status = 'review' THEN 1 ELSE 0 END) AS review_count,
+        SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) AS done_count,
+        COUNT(*) AS total
+      FROM task t
+      JOIN project p ON p.id = t.project_id
+      WHERE t.tenant_id = @p1 AND t.deleted_at IS NULL
+      GROUP BY p.name
+
+  # Cross-tenant admin overview of usage and task counts.
+  # Pattern: cross-tenant aggregate, no tenant filter, multi-JOIN
+  - name: admin_overview
+    type: query
+    query: |-
+      SELECT TOP 20
+        tn.name AS tenant_name,
+        tn.plan,
+        bu.api_calls,
+        COUNT(DISTINCT t.id) AS task_count,
+        COUNT(DISTINCT u.id) AS user_count
+      FROM tenant tn
+      LEFT JOIN billing_usage bu ON bu.tenant_id = tn.id
+      LEFT JOIN task t ON t.tenant_id = tn.id AND t.deleted_at IS NULL
+      LEFT JOIN app_user u ON u.tenant_id = tn.id
+      GROUP BY tn.id, tn.name, tn.plan, bu.api_calls
+      ORDER BY bu.api_calls DESC

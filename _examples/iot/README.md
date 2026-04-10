@@ -120,3 +120,42 @@ go run ./cmd/edg down \
 --config _examples/iot/oracle.yaml \
 --url "oracle://system:password@localhost:1521/defaultdb"
 ```
+
+## SQL Server
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_sqlserver.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg up \
+--driver sqlserver \
+--config _examples/iot/sqlserver.yaml \
+--url "sqlserver://sa:P4ssw0rd@localhost:1433?database=iot&encrypt=disable"
+
+go run ./cmd/edg seed \
+--driver sqlserver \
+--config _examples/iot/sqlserver.yaml \
+--url "sqlserver://sa:P4ssw0rd@localhost:1433?database=iot&encrypt=disable"
+
+go run ./cmd/edg run \
+--driver sqlserver \
+--config _examples/iot/sqlserver.yaml \
+--url "sqlserver://sa:P4ssw0rd@localhost:1433?database=iot&encrypt=disable" \
+-w 100 \
+-d 1m
+
+go run ./cmd/edg deseed \
+--driver sqlserver \
+--config _examples/iot/sqlserver.yaml \
+--url "sqlserver://sa:P4ssw0rd@localhost:1433?database=iot&encrypt=disable"
+
+go run ./cmd/edg down \
+--driver sqlserver \
+--config _examples/iot/sqlserver.yaml \
+--url "sqlserver://sa:P4ssw0rd@localhost:1433?database=iot&encrypt=disable"
+```

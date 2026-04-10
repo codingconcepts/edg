@@ -1,0 +1,51 @@
+# Nullable columns workload for SQL Server
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals:
+  users: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_user
+    query: |-
+      CREATE TABLE [user] (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        email NVARCHAR(255) NOT NULL,
+        phone NVARCHAR(50),
+        bio NVARCHAR(MAX),
+        referred_by UNIQUEIDENTIFIER
+      )
+
+seed:
+
+  - name: populate_user
+    type: exec_batch
+    count: users
+    size: batch_size
+    args:
+      - gen('email')
+      - nullable(gen('phone'), 0.3)
+      - nullable(gen('sentence:5'), 0.5)
+      - nullable(uuid_v4(), 0.8)
+    query: |-
+      INSERT INTO [user] (email, phone, bio, referred_by)
+      SELECT j1.value, j2.value, j3.value, CAST(NULLIF(j4.value, '') AS UNIQUEIDENTIFIER)
+      FROM OPENJSON('["' + REPLACE('$1', ',', '","') + '"]') j1
+      JOIN OPENJSON('["' + REPLACE('$2', ',', '","') + '"]') j2 ON j1.[key] = j2.[key]
+      JOIN OPENJSON('["' + REPLACE('$3', ',', '","') + '"]') j3 ON j1.[key] = j3.[key]
+      JOIN OPENJSON('["' + REPLACE('$4', ',', '","') + '"]') j4 ON j1.[key] = j4.[key]
+
+deseed:
+
+  - name: delete_user
+    type: exec
+    query: DELETE FROM [user]
+
+down:
+
+  - name: drop_user
+    type: exec
+    query: DROP TABLE IF EXISTS [user]

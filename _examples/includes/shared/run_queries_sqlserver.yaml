@@ -1,0 +1,15 @@
+- name: check_balance
+  type: query
+  args:
+    - ref_rand('fetch_accounts').id
+  query: |-
+    SELECT balance FROM account WHERE id = @p1
+
+- name: credit_account
+  type: exec
+  args:
+    - gen('number:1,1000')
+    - ref_rand('fetch_accounts').id
+  query: |-
+    UPDATE account SET balance = balance + CAST(@p1 AS FLOAT)
+    WHERE id = @p2
