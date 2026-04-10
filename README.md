@@ -39,8 +39,6 @@ View the docs [here](https://edg.run/docs).
 
 ## Todos
 
-* Additional driver support
-  * SQLite
 * Progress indication
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences
 * Global sequencies (`seq_global(name, start, step)`) for all workers to share in a thread safe way

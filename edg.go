@@ -80,11 +80,11 @@ func main() {
 
 	if err := root.Execute(); err != nil {
 		if ctx := root.Context(); ctx != nil && ctx.Err() != nil {
-			fmt.Fprintln(os.Stderr, "cancelled")
+			slog.Info("cancelled")
 		} else if errors.Is(err, context.Canceled) {
-			fmt.Fprintln(os.Stderr, "cancelled")
+			slog.Info("cancelled")
 		} else {
-			fmt.Fprintln(os.Stderr, err)
+			slog.Error("fatal", "error", err)
 		}
 		os.Exit(1)
 	}
@@ -265,7 +265,12 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *pkg.R
 			totalWorkers = s.Workers
 		}
 	}
-	stats := printResults(results, printInterval, start, totalWorkers)
+	var totalDuration time.Duration
+	for _, s := range req.Stages {
+		totalDuration += time.Duration(s.Duration)
+	}
+
+	stats := printResults(results, printInterval, start, totalWorkers, totalDuration)
 
 	return stats, time.Since(start), nil
 }
@@ -298,7 +303,7 @@ func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *p
 	}()
 
 	slog.Info("running", "workers", workers, "duration", duration)
-	stats := printResults(results, printInterval, start, workers)
+	stats := printResults(results, printInterval, start, workers, duration)
 
 	return stats, time.Since(start), nil
 }
@@ -368,7 +373,7 @@ type queryStats struct {
 	latencies    []time.Duration
 }
 
-func printResults(results <-chan pkg.QueryResult, interval time.Duration, start time.Time, numWorkers int) map[string]*queryStats {
+func printResults(results <-chan pkg.QueryResult, interval time.Duration, start time.Time, numWorkers int, totalDuration time.Duration) map[string]*queryStats {
 	stats := map[string]*queryStats{}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -393,12 +398,12 @@ func printResults(results <-chan pkg.QueryResult, interval time.Duration, start 
 				s.latencies = append(s.latencies, r.Latency)
 			}
 		case <-ticker.C:
-			printProgress(stats, start)
+			printProgress(stats, start, totalDuration)
 		}
 	}
 }
 
-func printProgress(stats map[string]*queryStats, start time.Time) {
+func printProgress(stats map[string]*queryStats, start time.Time, totalDuration time.Duration) {
 	elapsed := time.Since(start)
 
 	names := make([]string, 0, len(stats))
@@ -408,7 +413,7 @@ func printProgress(stats map[string]*queryStats, start time.Time) {
 	slices.Sort(names)
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "\n%s elapsed\n", elapsed.Round(time.Second))
+	fmt.Fprintf(w, "\n%s / %s\n", elapsed.Round(time.Second), totalDuration.Round(time.Second))
 	fmt.Fprintf(w, "QUERY\tCOUNT\tERRORS\tAVG\tp50\tp95\tp99\tQPS\n")
 	for _, name := range names {
 		s := stats[name]
@@ -579,7 +584,7 @@ func validateCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Println("config is valid")
+			slog.Info("config is valid")
 			return nil
 		},
 	}
@@ -627,32 +632,32 @@ func checkExpectations(expectations []string, stats map[string]*queryStats, elap
 	env["tpm"] = float64(totalCount) / elapsed.Minutes()
 
 	var failures int
-	fmt.Println("\nexpectations")
+	slog.Info("expectations")
 	for _, check := range expectations {
 		program, err := expr.Compile(check, expr.Env(env), expr.AsBool())
 		if err != nil {
-			fmt.Printf("  FAIL %s - compile error: %v\n", check, err)
+			slog.Error("expectation failed", "check", check, "error", err)
 			failures++
 			continue
 		}
 
 		result, err := expr.Run(program, env)
 		if err != nil {
-			fmt.Printf("  FAIL %s - eval error: %v\n", check, err)
+			slog.Error("expectation failed", "check", check, "error", err)
 			failures++
 			continue
 		}
 
 		passed, ok := result.(bool)
 		if !ok {
-			fmt.Printf("  non-bool result: %v", result)
+			slog.Warn("non-bool result", "check", check, "result", result)
 			continue
 		}
 
 		if passed {
-			fmt.Printf("  PASS %s\n", check)
+			slog.Info("expectation passed", "check", check)
 		} else {
-			fmt.Printf("  FAIL %s\n", check)
+			slog.Error("expectation failed", "check", check)
 			failures++
 		}
 	}
@@ -690,7 +695,7 @@ func replCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Println("edg repl - type expressions to evaluate")
+			slog.Info("edg repl - type expressions to evaluate")
 
 			scanner := bufio.NewScanner(os.Stdin)
 			for {
@@ -706,7 +711,7 @@ func replCmd() *cobra.Command {
 
 				result, err := env.Eval(line)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "error: %v\n", err)
+					slog.Error("eval error", "error", err)
 					continue
 				}
 				fmt.Println(result)

@@ -15,29 +15,35 @@ docker exec -it node1 cockroach sql --insecure
 ### Run
 
 ```sh
-edg up \
+go run . all \
 --driver pgx \
 --config _examples/bank/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 
-edg seed \
+# Or separately.
+go run . up \
 --driver pgx \
 --config _examples/bank/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 
-edg run \
+go run . seed \
+--driver pgx \
+--config _examples/bank/crdb.yaml \
+--url "postgres://root@localhost:26257?sslmode=disable"
+
+go run . run \
 --driver pgx \
 --config _examples/bank/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable" \
 -w 100 \
 -d 1m
 
-edg deseed \
+go run . deseed \
 --driver pgx \
 --config _examples/bank/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 
-edg down \
+go run . down \
 --driver pgx \
 --config _examples/bank/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
@@ -61,29 +67,29 @@ container-registry.oracle.com/database/enterprise:19.19.0.0
 ### Run
 
 ```sh
-edg up \
+go run . up \
 --driver oracle \
 --config _examples/bank/oracle.yaml \
 --url "oracle://system:password@localhost:1521/defaultdb"
 
-edg seed \
+go run . seed \
 --driver oracle \
 --config _examples/bank/oracle.yaml \
 --url "oracle://system:password@localhost:1521/defaultdb"
 
-edg run \
+go run . run \
 --driver oracle \
 --config _examples/bank/oracle.yaml \
 --url "oracle://system:password@localhost:1521/defaultdb" \
 -w 100 \
 -d 1m
 
-edg deseed \
+go run . deseed \
 --driver oracle \
 --config _examples/bank/oracle.yaml \
 --url "oracle://system:password@localhost:1521/defaultdb"
 
-edg down \
+go run . down \
 --driver oracle \
 --config _examples/bank/oracle.yaml \
 --url "oracle://system:password@localhost:1521/defaultdb"
