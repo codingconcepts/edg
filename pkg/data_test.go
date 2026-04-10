@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/codingconcepts/edg/pkg/config"
+
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
@@ -184,7 +186,7 @@ func newTestEnv(t *testing.T) *Env {
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		nurandC:   map[int]int{},
-		request:   &Request{},
+		request:   &config.Request{},
 	}
 
 	env.env = map[string]any{}
@@ -198,7 +200,7 @@ func TestQuery(t *testing.T) {
 		columns     []string
 		rows        [][]any
 		queryErr    error
-		query       Query
+		query       config.Query
 		args        []any
 		expectErr   string
 		expected    []map[string]any
@@ -208,7 +210,7 @@ func TestQuery(t *testing.T) {
 			mockPattern: "SELECT id, name FROM users",
 			columns:     []string{"id", "name"},
 			rows:        [][]any{{1, "alice"}, {2, "bob"}},
-			query:       Query{Name: "users", Query: "SELECT id, name FROM users"},
+			query:       config.Query{Name: "users", Query: "SELECT id, name FROM users"},
 			expected: []map[string]any{
 				{"id": 1, "name": "alice"},
 				{"id": 2, "name": "bob"},
@@ -218,7 +220,7 @@ func TestQuery(t *testing.T) {
 			name:        "query error",
 			mockPattern: "SELECT",
 			queryErr:    fmt.Errorf("connection refused"),
-			query:       Query{Name: "users", Query: "SELECT 1"},
+			query:       config.Query{Name: "users", Query: "SELECT 1"},
 			expectErr:   "running statement: connection refused",
 		},
 		{
@@ -226,7 +228,7 @@ func TestQuery(t *testing.T) {
 			mockPattern: "SELECT id, name FROM users WHERE id = \\$1",
 			columns:     []string{"id", "name"},
 			rows:        [][]any{{42, "charlie"}},
-			query:       Query{Name: "users", Query: "SELECT id, name FROM users WHERE id = $1"},
+			query:       config.Query{Name: "users", Query: "SELECT id, name FROM users WHERE id = $1"},
 			args:        []any{42},
 			expected: []map[string]any{
 				{"id": 42, "name": "charlie"},

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/codingconcepts/edg/pkg/convert"
 	"github.com/codingconcepts/edg/pkg/random"
 )
 
@@ -66,7 +67,7 @@ func setRand(values []any, weights []any) (any, error) {
 
 	intWeights := make([]int, len(weights))
 	for i, w := range weights {
-		iw, err := toInt(w)
+		iw, err := convert.ToInt(w)
 		if err != nil {
 			return nil, fmt.Errorf("set_rand weight %d: %w", i, err)
 		}
@@ -100,11 +101,11 @@ func pickFromSet(name string, values []any, indexFn func(max float64) (int, erro
 //
 //	set_norm(['a', 'b', 'c', 'd', 'e'], 2, 0.8)
 func setNormal(values []any, rawMean, rawStddev any) (any, error) {
-	m, err := toFloat(rawMean)
+	m, err := convert.ToFloat(rawMean)
 	if err != nil {
 		return nil, fmt.Errorf("set_norm mean: %w", err)
 	}
-	s, err := toFloat(rawStddev)
+	s, err := convert.ToFloat(rawStddev)
 	if err != nil {
 		return nil, fmt.Errorf("set_norm stddev: %w", err)
 	}
@@ -120,7 +121,7 @@ func setNormal(values []any, rawMean, rawStddev any) (any, error) {
 //
 //	set_exp(['a', 'b', 'c', 'd', 'e'], 0.5)
 func setExp(values []any, rawRate any) (any, error) {
-	r, err := toFloat(rawRate)
+	r, err := convert.ToFloat(rawRate)
 	if err != nil {
 		return nil, fmt.Errorf("set_exp rate: %w", err)
 	}
@@ -136,11 +137,11 @@ func setExp(values []any, rawRate any) (any, error) {
 //
 //	set_lognorm(['a', 'b', 'c', 'd', 'e'], 1.0, 0.5)
 func setLognormal(values []any, rawMu, rawSigma any) (any, error) {
-	m, err := toFloat(rawMu)
+	m, err := convert.ToFloat(rawMu)
 	if err != nil {
 		return nil, fmt.Errorf("set_lognorm mu: %w", err)
 	}
-	s, err := toFloat(rawSigma)
+	s, err := convert.ToFloat(rawSigma)
 	if err != nil {
 		return nil, fmt.Errorf("set_lognorm sigma: %w", err)
 	}
@@ -156,11 +157,11 @@ func setLognormal(values []any, rawMu, rawSigma any) (any, error) {
 //
 //	set_zipf(['a', 'b', 'c', 'd', 'e'], 2.0, 1.0)
 func setZipfian(values []any, rawS, rawV any) (any, error) {
-	s, err := toFloat(rawS)
+	s, err := convert.ToFloat(rawS)
 	if err != nil {
 		return nil, fmt.Errorf("set_zipf s: %w", err)
 	}
-	v, err := toFloat(rawV)
+	v, err := convert.ToFloat(rawV)
 	if err != nil {
 		return nil, fmt.Errorf("set_zipf v: %w", err)
 	}

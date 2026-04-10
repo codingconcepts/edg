@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/codingconcepts/edg/pkg/random"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -121,9 +122,9 @@ func skipIfNoDB(t *testing.T) {
 	}
 }
 
-func loadConfig(t *testing.T, data []byte) *Request {
+func loadConfig(t *testing.T, data []byte) *config.Request {
 	t.Helper()
-	var req Request
+	var req config.Request
 	if err := yaml.Unmarshal(data, &req); err != nil {
 		t.Fatalf("parsing config: %v", err)
 	}

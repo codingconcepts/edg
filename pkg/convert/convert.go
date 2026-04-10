@@ -1,4 +1,4 @@
-package pkg
+package convert
 
 import (
 	"fmt"
@@ -8,14 +8,14 @@ import (
 	"github.com/codingconcepts/edg/pkg/random"
 )
 
-func constant(v any) any {
+func Constant(v any) any {
 	return v
 }
 
-// batch returns sequential integers [0, n) as a [][]any batch set,
+// Batch returns sequential integers [0, n) as a [][]any batch set,
 // driving batched query execution without requiring a SQL query.
-func batch(n any) ([][]any, error) {
-	count, err := toInt(n)
+func Batch(n any) ([][]any, error) {
+	count, err := ToInt(n)
 	if err != nil {
 		return nil, fmt.Errorf("batch: %w", err)
 	}
@@ -26,7 +26,7 @@ func batch(n any) ([][]any, error) {
 	return result, nil
 }
 
-func toInt(v any) (int, error) {
+func ToInt(v any) (int, error) {
 	switch n := v.(type) {
 	case int:
 		return n, nil
@@ -45,7 +45,7 @@ func toInt(v any) (int, error) {
 	}
 }
 
-func toFloat(v any) (float64, error) {
+func ToFloat(v any) (float64, error) {
 	switch n := v.(type) {
 	case float64:
 		return n, nil
@@ -64,28 +64,28 @@ func toFloat(v any) (float64, error) {
 	}
 }
 
-func wrap(s string) string {
+func Wrap(s string) string {
 	if strings.HasPrefix(s, "{") {
 		return s
 	}
 	return "{" + s + "}"
 }
 
-// cond returns trueVal if predicate is true, falseVal otherwise.
+// Cond returns trueVal if predicate is true, falseVal otherwise.
 //
 //	cond(predicate, trueVal, falseVal)
-func cond(predicate, trueVal, falseVal any) any {
+func Cond(predicate, trueVal, falseVal any) any {
 	if b, ok := predicate.(bool); ok && b {
 		return trueVal
 	}
 	return falseVal
 }
 
-// nullable returns nil with the given probability, otherwise returns val.
+// Nullable returns nil with the given probability, otherwise returns val.
 //
 //	nullable(gen('email'), 0.3)
-func nullable(val, rawProbability any) (any, error) {
-	p, err := toFloat(rawProbability)
+func Nullable(val, rawProbability any) (any, error) {
+	p, err := ToFloat(rawProbability)
 	if err != nil {
 		return nil, fmt.Errorf("nullable probability: %w", err)
 	}
@@ -95,10 +95,10 @@ func nullable(val, rawProbability any) (any, error) {
 	return val, nil
 }
 
-// coalesce returns the first non-nil value from arguments.
+// Coalesce returns the first non-nil value from arguments.
 //
 //	coalesce(val1, val2, val3, ...)
-func coalesce(values ...any) any {
+func Coalesce(values ...any) any {
 	for _, v := range values {
 		if v != nil {
 			return v
@@ -107,18 +107,18 @@ func coalesce(values ...any) any {
 	return nil
 }
 
-// tmpl formats a string using fmt.Sprintf.
+// Tmpl formats a string using fmt.Sprintf.
 //
 //	template('ORD-%05d-%s', seq(1, 1), ref_rand('w').id)
-func tmpl(format string, args ...any) string {
+func Tmpl(format string, args ...any) string {
 	return fmt.Sprintf(format, args...)
 }
 
-// sqlFormatValue formats a value for safe inline substitution in SQL.
+// SQLFormatValue formats a value for safe inline substitution in SQL.
 // Strings are single-quoted with embedded quotes escaped ('→'');
 // numeric types are returned as-is; nil becomes NULL. The escaping
 // is the same across PostgreSQL, MySQL, and Oracle.
-func sqlFormatValue(v any) string {
+func SQLFormatValue(v any) string {
 	if v == nil {
 		return "NULL"
 	}

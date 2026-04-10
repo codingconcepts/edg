@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/codingconcepts/edg/pkg"
+	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/codingconcepts/edg/pkg/random"
 	"github.com/expr-lang/expr"
 	_ "github.com/go-sql-driver/mysql"
@@ -47,7 +48,7 @@ func main() {
 
 			input := strings.Join(args, " ")
 
-			var req pkg.Request
+			var req config.Request
 			env, err := pkg.NewEnv(nil, &req)
 			if err != nil {
 				return err
@@ -90,7 +91,7 @@ func main() {
 	}
 }
 
-func connect() (*sql.DB, *pkg.Request, error) {
+func connect() (*sql.DB, *config.Request, error) {
 	url := flagURL
 	if url == "" {
 		url = os.Getenv("URL")
@@ -99,7 +100,7 @@ func connect() (*sql.DB, *pkg.Request, error) {
 		return nil, nil, fmt.Errorf("--url flag or URL env var required")
 	}
 
-	req, err := pkg.LoadConfig(configFile)
+	req, err := config.LoadConfig(configFile)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -207,7 +208,7 @@ func downCmd() *cobra.Command {
 	}
 }
 
-func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *pkg.Request, duration time.Duration, workers int, printInterval time.Duration) error {
+func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config.Request, duration time.Duration, workers int, printInterval time.Duration) error {
 	var stats map[string]*queryStats
 	var elapsed time.Duration
 	var err error
@@ -224,7 +225,7 @@ func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *pkg.Re
 	return checkExpectations(req.Expectations, stats, elapsed)
 }
 
-func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *pkg.Request, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
+func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *config.Request, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
 	initEnv, err := pkg.NewEnv(db, req)
 	if err != nil {
 		return nil, 0, err
@@ -233,7 +234,7 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *pkg.R
 		return nil, 0, err
 	}
 
-	results := make(chan pkg.QueryResult, 1000)
+	results := make(chan config.QueryResult, 1000)
 	start := time.Now()
 
 	go func() {
@@ -275,7 +276,7 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *pkg.R
 	return stats, time.Since(start), nil
 }
 
-func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *pkg.Request, duration time.Duration, workers int, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
+func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config.Request, duration time.Duration, workers int, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
 	initEnv, err := pkg.NewEnv(db, req)
 	if err != nil {
 		return nil, 0, err
@@ -284,7 +285,7 @@ func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *p
 		return nil, 0, err
 	}
 
-	results := make(chan pkg.QueryResult, workers*100)
+	results := make(chan config.QueryResult, workers*100)
 	start := time.Now()
 
 	go func() {
@@ -339,7 +340,7 @@ func runCmd() *cobra.Command {
 	return cmd
 }
 
-func startWorkers(ctx context.Context, numWorkers int, db *sql.DB, req *pkg.Request, initEnv *pkg.Env, results chan<- pkg.QueryResult) *sync.WaitGroup {
+func startWorkers(ctx context.Context, numWorkers int, db *sql.DB, req *config.Request, initEnv *pkg.Env, results chan<- config.QueryResult) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
 	for i := range numWorkers {
@@ -373,7 +374,7 @@ type queryStats struct {
 	latencies    []time.Duration
 }
 
-func printResults(results <-chan pkg.QueryResult, interval time.Duration, start time.Time, numWorkers int, totalDuration time.Duration) map[string]*queryStats {
+func printResults(results <-chan config.QueryResult, interval time.Duration, start time.Time, numWorkers int, totalDuration time.Duration) map[string]*queryStats {
 	stats := map[string]*queryStats{}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -575,7 +576,7 @@ func validateCmd() *cobra.Command {
 				return fmt.Errorf("--config flag required")
 			}
 
-			req, err := pkg.LoadConfig(configFile)
+			req, err := config.LoadConfig(configFile)
 			if err != nil {
 				return err
 			}
@@ -681,9 +682,9 @@ func replCmd() *cobra.Command {
 		Use:   "repl",
 		Short: "Interactive expression evaluator",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var req pkg.Request
+			var req config.Request
 			if configFile != "" {
-				r, err := pkg.LoadConfig(configFile)
+				r, err := config.LoadConfig(configFile)
 				if err != nil {
 					return err
 				}

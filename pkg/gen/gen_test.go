@@ -1,4 +1,4 @@
-package pkg
+package gen
 
 import (
 	"encoding/json"
@@ -11,30 +11,30 @@ import (
 )
 
 func TestGen(t *testing.T) {
-	result, err := gen("number:1,100")
+	result, err := Gen("number:1,100")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result == nil {
-		t.Fatal("gen returned nil for valid pattern")
+		t.Fatal("Gen returned nil for valid pattern")
 	}
 
-	result, err = gen("{number:1,100}")
+	result, err = Gen("{number:1,100}")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result == nil {
-		t.Fatal("gen returned nil for already-wrapped pattern")
+		t.Fatal("Gen returned nil for already-wrapped pattern")
 	}
 }
 
 func TestGenBatch(t *testing.T) {
-	result, err := genBatch(25, 10, "email")
+	result, err := GenBatch(25, 10, "email")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result) != 3 {
-		t.Fatalf("genBatch(25, 10) returned %d batches, want 3", len(result))
+		t.Fatalf("GenBatch(25, 10) returned %d batches, want 3", len(result))
 	}
 
 	// First two batches should have 10 emails each.
@@ -58,23 +58,23 @@ func TestGenBatch(t *testing.T) {
 	for _, row := range result {
 		for _, v := range strings.Split(row[0].(string), ",") {
 			if seen[v] {
-				t.Errorf("genBatch produced duplicate: %s", v)
+				t.Errorf("GenBatch produced duplicate: %s", v)
 			}
 			seen[v] = true
 		}
 	}
 	if len(seen) != 25 {
-		t.Errorf("genBatch produced %d unique values, want 25", len(seen))
+		t.Errorf("GenBatch produced %d unique values, want 25", len(seen))
 	}
 }
 
 func TestGenBatch_ExactMultiple(t *testing.T) {
-	result, err := genBatch(20, 10, "email")
+	result, err := GenBatch(20, 10, "email")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result) != 2 {
-		t.Fatalf("genBatch(20, 10) returned %d batches, want 2", len(result))
+		t.Fatalf("GenBatch(20, 10) returned %d batches, want 2", len(result))
 	}
 	for i, row := range result {
 		parts := strings.Split(row[0].(string), ",")
@@ -86,28 +86,28 @@ func TestGenBatch_ExactMultiple(t *testing.T) {
 
 func TestFloatRand(t *testing.T) {
 	for range 1000 {
-		v, err := floatRand(1.0, 10.0, 2)
+		v, err := FloatRand(1.0, 10.0, 2)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if v < 1.0 || v > 10.0 {
-			t.Fatalf("floatRand(1.0, 10.0, 2) = %v, out of range", v)
+			t.Fatalf("FloatRand(1.0, 10.0, 2) = %v, out of range", v)
 		}
 		scaled := v * 100
 		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
-			t.Fatalf("floatRand precision 2: %v not rounded correctly", v)
+			t.Fatalf("FloatRand precision 2: %v not rounded correctly", v)
 		}
 	}
 }
 
 func TestUniformRand(t *testing.T) {
 	for range 1000 {
-		v, err := uniformRand(5.0, 15.0)
+		v, err := UniformRand(5.0, 15.0)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if v < 5.0 || v >= 15.0 {
-			t.Fatalf("uniformRand(5.0, 15.0) = %v, out of range", v)
+			t.Fatalf("UniformRand(5.0, 15.0) = %v, out of range", v)
 		}
 	}
 }
@@ -115,48 +115,48 @@ func TestUniformRand(t *testing.T) {
 func TestZipfRand(t *testing.T) {
 	bins := make([]int, 100)
 	for range 10000 {
-		v, err := zipfRand(2.0, 1.0, 99)
+		v, err := ZipfRand(2.0, 1.0, 99)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if v < 0 || v > 99 {
-			t.Fatalf("zipfRand out of range: %d", v)
+			t.Fatalf("ZipfRand out of range: %d", v)
 		}
 		bins[v]++
 	}
 	if bins[0] < bins[99] {
-		t.Errorf("zipfRand not skewed: bin[0]=%d, bin[99]=%d", bins[0], bins[99])
+		t.Errorf("ZipfRand not skewed: bin[0]=%d, bin[99]=%d", bins[0], bins[99])
 	}
 }
 
 func TestZipfRand_InvalidParams(t *testing.T) {
-	v, err := zipfRand(0.5, 1.0, 100)
+	v, err := ZipfRand(0.5, 1.0, 100)
 	if err != nil {
 		// Invalid params returning an error is acceptable.
 		return
 	}
 	if v != 0 {
-		t.Errorf("zipfRand with s <= 1 = %d, want 0", v)
+		t.Errorf("ZipfRand with s <= 1 = %d, want 0", v)
 	}
 }
 
 func TestGenRegex(t *testing.T) {
-	result := genRegex("[A-Z]{3}-[0-9]{4}")
+	result := GenRegex("[A-Z]{3}-[0-9]{4}")
 	matched, _ := regexp.MatchString(`^[A-Z]{3}-[0-9]{4}$`, result)
 	if !matched {
-		t.Errorf("genRegex = %q, does not match pattern", result)
+		t.Errorf("GenRegex = %q, does not match pattern", result)
 	}
 }
 
 func TestJsonObj(t *testing.T) {
-	result, err := jsonObj("name", "alice", "age", 30)
+	result, err := JsonObj("name", "alice", "age", 30)
 	if err != nil {
-		t.Fatalf("jsonObj error: %v", err)
+		t.Fatalf("JsonObj error: %v", err)
 	}
 
 	var m map[string]any
 	if err := json.Unmarshal([]byte(result), &m); err != nil {
-		t.Fatalf("jsonObj produced invalid JSON: %v", err)
+		t.Fatalf("JsonObj produced invalid JSON: %v", err)
 	}
 	if m["name"] != "alice" {
 		t.Errorf("name = %v, want alice", m["name"])
@@ -167,24 +167,24 @@ func TestJsonObj(t *testing.T) {
 }
 
 func TestJsonObj_OddArgs(t *testing.T) {
-	_, err := jsonObj("key1", "val1", "key2")
+	_, err := JsonObj("key1", "val1", "key2")
 	if err == nil {
-		t.Fatal("jsonObj with odd args should return error")
+		t.Fatal("JsonObj with odd args should return error")
 	}
 }
 
 func TestJsonArr(t *testing.T) {
-	result, err := jsonArr(3, 3, "email")
+	result, err := JsonArr(3, 3, "email")
 	if err != nil {
-		t.Fatalf("jsonArr error: %v", err)
+		t.Fatalf("JsonArr error: %v", err)
 	}
 
 	var arr []any
 	if err := json.Unmarshal([]byte(result), &arr); err != nil {
-		t.Fatalf("jsonArr produced invalid JSON: %v", err)
+		t.Fatalf("JsonArr produced invalid JSON: %v", err)
 	}
 	if len(arr) != 3 {
-		t.Errorf("jsonArr length = %d, want 3", len(arr))
+		t.Errorf("JsonArr length = %d, want 3", len(arr))
 	}
 }
 
@@ -194,7 +194,7 @@ func TestGenPoint(t *testing.T) {
 	radiusKM := 10.0
 
 	for range 100 {
-		p, err := genPoint(centerLat, centerLon, radiusKM)
+		p, err := GenPoint(centerLat, centerLon, radiusKM)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -208,7 +208,7 @@ func TestGenPoint(t *testing.T) {
 				math.Sin(dLon/2)*math.Sin(dLon/2)
 		dist := 6371.0 * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 		if dist > radiusKM+0.01 {
-			t.Fatalf("genPoint distance %.4f km exceeds radius", dist)
+			t.Fatalf("GenPoint distance %.4f km exceeds radius", dist)
 		}
 	}
 }
@@ -219,7 +219,7 @@ func TestGenPointWKT(t *testing.T) {
 	radiusKM := 10.0
 
 	for range 100 {
-		wkt, err := genPointWKT(centerLat, centerLon, radiusKM)
+		wkt, err := GenPointWKT(centerLat, centerLon, radiusKM)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -227,7 +227,7 @@ func TestGenPointWKT(t *testing.T) {
 		var lon, lat float64
 		_, err = fmt.Sscanf(wkt, "POINT(%f %f)", &lon, &lat)
 		if err != nil {
-			t.Fatalf("genPointWKT returned invalid WKT %q: %v", wkt, err)
+			t.Fatalf("GenPointWKT returned invalid WKT %q: %v", wkt, err)
 		}
 
 		dLat := (lat - centerLat) * math.Pi / 180
@@ -237,7 +237,7 @@ func TestGenPointWKT(t *testing.T) {
 				math.Sin(dLon/2)*math.Sin(dLon/2)
 		dist := 6371.0 * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 		if dist > radiusKM+0.01 {
-			t.Fatalf("genPointWKT distance %.4f km exceeds radius", dist)
+			t.Fatalf("GenPointWKT distance %.4f km exceeds radius", dist)
 		}
 	}
 }
@@ -245,87 +245,87 @@ func TestGenPointWKT(t *testing.T) {
 func TestRandTimestamp(t *testing.T) {
 	min := "2020-01-01T00:00:00Z"
 	max := "2025-01-01T00:00:00Z"
-	result, err := randTimestamp(min, max)
+	result, err := RandTimestamp(min, max)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result == "" {
-		t.Fatal("randTimestamp returned empty string")
+		t.Fatal("RandTimestamp returned empty string")
 	}
 
 	ts, err := time.Parse(time.RFC3339, result)
 	if err != nil {
-		t.Fatalf("randTimestamp produced invalid RFC3339: %v", err)
+		t.Fatalf("RandTimestamp produced invalid RFC3339: %v", err)
 	}
 	minT, _ := time.Parse(time.RFC3339, min)
 	maxT, _ := time.Parse(time.RFC3339, max)
 	if ts.Before(minT) || ts.After(maxT) {
-		t.Errorf("randTimestamp %v not in range [%v, %v]", ts, minT, maxT)
+		t.Errorf("RandTimestamp %v not in range [%v, %v]", ts, minT, maxT)
 	}
 }
 
 func TestRandTimestamp_InvalidInput(t *testing.T) {
-	_, err := randTimestamp("bad", "2025-01-01T00:00:00Z")
+	_, err := RandTimestamp("bad", "2025-01-01T00:00:00Z")
 	if err == nil {
-		t.Fatal("randTimestamp with bad min should return error")
+		t.Fatal("RandTimestamp with bad min should return error")
 	}
 }
 
 func TestRandDuration(t *testing.T) {
-	result, err := randDuration("1h", "24h")
+	result, err := RandDuration("1h", "24h")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result == "" {
-		t.Fatal("randDuration returned empty string")
+		t.Fatal("RandDuration returned empty string")
 	}
 
 	d, err := time.ParseDuration(result)
 	if err != nil {
-		t.Fatalf("randDuration produced invalid duration: %v", err)
+		t.Fatalf("RandDuration produced invalid duration: %v", err)
 	}
 	if d < time.Hour || d > 24*time.Hour {
-		t.Errorf("randDuration %v not in range [1h, 24h]", d)
+		t.Errorf("RandDuration %v not in range [1h, 24h]", d)
 	}
 }
 
 func TestRandDuration_InvalidInput(t *testing.T) {
-	_, err := randDuration("bad", "24h")
+	_, err := RandDuration("bad", "24h")
 	if err == nil {
-		t.Fatal("randDuration with bad min should return error")
+		t.Fatal("RandDuration with bad min should return error")
 	}
 }
 
 func TestDateRand(t *testing.T) {
-	result, err := dateRand("2006-01-02", "2020-01-01T00:00:00Z", "2025-01-01T00:00:00Z")
+	result, err := DateRand("2006-01-02", "2020-01-01T00:00:00Z", "2025-01-01T00:00:00Z")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result == "" {
-		t.Fatal("dateRand returned empty string")
+		t.Fatal("DateRand returned empty string")
 	}
 
 	ts, err := time.Parse("2006-01-02", result)
 	if err != nil {
-		t.Fatalf("dateRand produced invalid date: %v", err)
+		t.Fatalf("DateRand produced invalid date: %v", err)
 	}
 	if ts.Year() < 2020 || ts.Year() > 2025 {
-		t.Errorf("dateRand year %d not in range [2020, 2025]", ts.Year())
+		t.Errorf("DateRand year %d not in range [2020, 2025]", ts.Year())
 	}
 }
 
 func TestDateOffset(t *testing.T) {
-	result, err := dateOffset("1h")
+	result, err := DateOffset("1h")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result == "" {
-		t.Fatal("dateOffset returned empty string")
+		t.Fatal("DateOffset returned empty string")
 	}
 
 	ts, err := time.Parse(time.RFC3339, result)
 	if err != nil {
-		t.Fatalf("dateOffset produced invalid RFC3339: %v", err)
+		t.Fatalf("DateOffset produced invalid RFC3339: %v", err)
 	}
 
 	expected := time.Now().Add(time.Hour).UTC()
@@ -334,14 +334,14 @@ func TestDateOffset(t *testing.T) {
 		diff = -diff
 	}
 	if diff > 2*time.Second {
-		t.Errorf("dateOffset('1h') = %v, expected ~%v", ts, expected)
+		t.Errorf("DateOffset('1h') = %v, expected ~%v", ts, expected)
 	}
 }
 
 func TestDateOffset_InvalidInput(t *testing.T) {
-	_, err := dateOffset("bad")
+	_, err := DateOffset("bad")
 	if err == nil {
-		t.Fatal("dateOffset with bad duration should return error")
+		t.Fatal("DateOffset with bad duration should return error")
 	}
 }
 
@@ -355,12 +355,12 @@ func TestExpRand(t *testing.T) {
 
 	sum := 0.0
 	for range n {
-		v, err := expRand(rate, min, max)
+		v, err := ExpRand(rate, min, max)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if v < min || v > max {
-			t.Fatalf("expRand value %v outside [%.0f, %.0f]", v, min, max)
+			t.Fatalf("ExpRand value %v outside [%.0f, %.0f]", v, min, max)
 		}
 		sum += v
 	}
@@ -374,16 +374,16 @@ func TestExpRand(t *testing.T) {
 
 func TestExpRandF(t *testing.T) {
 	for range 100 {
-		v, err := expRandF(0.5, 0.0, 100.0, 2)
+		v, err := ExpRandF(0.5, 0.0, 100.0, 2)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if v < 0 || v > 100 {
-			t.Fatalf("expRandF value %v outside [0, 100]", v)
+			t.Fatalf("ExpRandF value %v outside [0, 100]", v)
 		}
 		scaled := v * 100
 		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
-			t.Fatalf("expRandF precision 2: %v not rounded correctly", v)
+			t.Fatalf("ExpRandF precision 2: %v not rounded correctly", v)
 		}
 	}
 }
@@ -398,182 +398,164 @@ func TestLognormRand(t *testing.T) {
 	)
 
 	for range n {
-		v, err := lognormRand(mu, sigma, min, max)
+		v, err := LognormRand(mu, sigma, min, max)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if v < min || v > max {
-			t.Fatalf("lognormRand value %v outside [%.0f, %.0f]", v, min, max)
+			t.Fatalf("LognormRand value %v outside [%.0f, %.0f]", v, min, max)
 		}
 	}
 }
 
 func TestLognormRandF(t *testing.T) {
 	for range 100 {
-		v, err := lognormRandF(2.0, 0.5, 1.0, 100.0, 2)
+		v, err := LognormRandF(2.0, 0.5, 1.0, 100.0, 2)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if v < 1 || v > 100 {
-			t.Fatalf("lognormRandF value %v outside [1, 100]", v)
+			t.Fatalf("LognormRandF value %v outside [1, 100]", v)
 		}
 		scaled := v * 100
 		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
-			t.Fatalf("lognormRandF precision 2: %v not rounded correctly", v)
+			t.Fatalf("LognormRandF precision 2: %v not rounded correctly", v)
 		}
 	}
 }
 
 func TestGenBytes(t *testing.T) {
-	result, err := genBytes(8)
+	result, err := GenBytes(8)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(result, `\x`) {
-		t.Fatalf("genBytes(8) = %q, want \\x prefix", result)
+		t.Fatalf("GenBytes(8) = %q, want \\x prefix", result)
 	}
 	if len(result) != 18 { // \x + 16 hex chars
-		t.Fatalf("genBytes(8) length = %d, want 18", len(result))
+		t.Fatalf("GenBytes(8) length = %d, want 18", len(result))
 	}
 }
 
 func TestGenBit(t *testing.T) {
-	result, err := genBit(8)
+	result, err := GenBit(8)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result) != 8 {
-		t.Fatalf("genBit(8) length = %d, want 8", len(result))
+		t.Fatalf("GenBit(8) length = %d, want 8", len(result))
 	}
 	matched, _ := regexp.MatchString(`^[01]+$`, result)
 	if !matched {
-		t.Fatalf("genBit(8) = %q, contains non-bit characters", result)
+		t.Fatalf("GenBit(8) = %q, contains non-bit characters", result)
 	}
 }
 
 func TestGenBool(t *testing.T) {
 	trueCount := 0
 	for range 1000 {
-		if genBool() {
+		if GenBool() {
 			trueCount++
 		}
 	}
 	if trueCount == 0 || trueCount == 1000 {
-		t.Fatalf("genBool returned the same value 1000 times (true=%d)", trueCount)
+		t.Fatalf("GenBool returned the same value 1000 times (true=%d)", trueCount)
 	}
 }
 
 func TestGenVarBit(t *testing.T) {
 	for range 100 {
-		result, err := genVarBit(16)
+		result, err := GenVarBit(16)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(result) < 1 || len(result) > 16 {
-			t.Fatalf("genVarBit(16) length = %d, want 1-16", len(result))
+			t.Fatalf("GenVarBit(16) length = %d, want 1-16", len(result))
 		}
 	}
 }
 
 func TestGenInet(t *testing.T) {
-	result, err := genInet("10.0.0.0/8")
+	result, err := GenInet("10.0.0.0/8")
 	if err != nil {
-		t.Fatalf("genInet error: %v", err)
+		t.Fatalf("GenInet error: %v", err)
 	}
 	if !strings.HasPrefix(result, "10.") {
-		t.Fatalf("genInet('10.0.0.0/8') = %q, want 10.x.x.x", result)
+		t.Fatalf("GenInet('10.0.0.0/8') = %q, want 10.x.x.x", result)
 	}
 }
 
 func TestGenInet_InvalidCIDR(t *testing.T) {
-	_, err := genInet("bad")
+	_, err := GenInet("bad")
 	if err == nil {
-		t.Fatal("genInet with invalid CIDR should return error")
+		t.Fatal("GenInet with invalid CIDR should return error")
 	}
 }
 
 func TestGenArray(t *testing.T) {
-	result, err := genArray(3, 3, "number:1,100")
+	result, err := GenArray(3, 3, "number:1,100")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(result, "{") || !strings.HasSuffix(result, "}") {
-		t.Fatalf("genArray = %q, want {}-wrapped", result)
+		t.Fatalf("GenArray = %q, want {}-wrapped", result)
 	}
 	inner := result[1 : len(result)-1]
 	parts := strings.Split(inner, ",")
 	if len(parts) != 3 {
-		t.Errorf("genArray(3,3) produced %d elements, want 3", len(parts))
+		t.Errorf("GenArray(3,3) produced %d elements, want 3", len(parts))
 	}
 }
 
 func TestGenArray_Range(t *testing.T) {
 	for range 100 {
-		result, err := genArray(2, 5, "letter")
+		result, err := GenArray(2, 5, "letter")
 		if err != nil {
 			t.Fatal(err)
 		}
 		inner := result[1 : len(result)-1]
 		parts := strings.Split(inner, ",")
 		if len(parts) < 2 || len(parts) > 5 {
-			t.Fatalf("genArray(2,5) produced %d elements, want 2-5", len(parts))
+			t.Fatalf("GenArray(2,5) produced %d elements, want 2-5", len(parts))
 		}
 	}
 }
 
 func TestGenTime(t *testing.T) {
-	result, err := genTime("08:00:00", "17:00:00")
+	result, err := GenTime("08:00:00", "17:00:00")
 	if err != nil {
-		t.Fatalf("genTime error: %v", err)
+		t.Fatalf("GenTime error: %v", err)
 	}
 	if result < "08:00:00" || result > "17:00:00" {
-		t.Fatalf("genTime = %q, out of range", result)
+		t.Fatalf("GenTime = %q, out of range", result)
 	}
 }
 
 func TestGenTime_InvalidInput(t *testing.T) {
-	_, err := genTime("bad", "17:00:00")
+	_, err := GenTime("bad", "17:00:00")
 	if err == nil {
-		t.Fatal("genTime with invalid min should return error")
+		t.Fatal("GenTime with invalid min should return error")
 	}
 }
 
 func TestGenTimez(t *testing.T) {
-	result, err := genTimez("08:00:00", "17:00:00")
+	result, err := GenTimez("08:00:00", "17:00:00")
 	if err != nil {
-		t.Fatalf("genTimez error: %v", err)
+		t.Fatalf("GenTimez error: %v", err)
 	}
 	if !strings.HasSuffix(result, "+00:00") {
-		t.Fatalf("genTimez = %q, want +00:00 suffix", result)
+		t.Fatalf("GenTimez = %q, want +00:00 suffix", result)
 	}
 	timePart := strings.TrimSuffix(result, "+00:00")
 	if timePart < "08:00:00" || timePart > "17:00:00" {
-		t.Fatalf("genTimez time part = %q, out of range", timePart)
+		t.Fatalf("GenTimez time part = %q, out of range", timePart)
 	}
 }
 
 func TestGenTimez_InvalidInput(t *testing.T) {
-	_, err := genTimez("bad", "17:00:00")
+	_, err := GenTimez("bad", "17:00:00")
 	if err == nil {
-		t.Fatal("genTimez with invalid min should return error")
-	}
-}
-
-func TestNormRandF(t *testing.T) {
-	env := testEnv(nil)
-
-	for range 100 {
-		v, err := env.normRandF(50, 10, 1, 100, 2)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v < 1 || v > 100 {
-			t.Fatalf("normRandF value %v outside [1, 100]", v)
-		}
-		scaled := v * 100
-		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
-			t.Fatalf("normRandF precision 2: %v not rounded correctly", v)
-		}
+		t.Fatal("GenTimez with invalid min should return error")
 	}
 }
 
@@ -589,7 +571,7 @@ func BenchmarkGenBatch(b *testing.B) {
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
 			for range b.N {
-				_, _ = genBatch(tc.total, tc.batch, "number:1,1000")
+				_, _ = GenBatch(tc.total, tc.batch, "number:1,1000")
 			}
 		})
 	}

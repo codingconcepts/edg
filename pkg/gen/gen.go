@@ -1,4 +1,4 @@
-package pkg
+package gen
 
 import (
 	"encoding/json"
@@ -7,27 +7,28 @@ import (
 	"strings"
 	"time"
 
+	"github.com/codingconcepts/edg/pkg/convert"
 	"github.com/codingconcepts/edg/pkg/random"
 )
 
-func gen(s string) (any, error) {
-	val, err := random.Fake.Generate(wrap(s))
+func Gen(s string) (any, error) {
+	val, err := random.Fake.Generate(convert.Wrap(s))
 	if err != nil {
 		return nil, fmt.Errorf("gen(%q): %w", s, err)
 	}
 	return val, nil
 }
 
-// genBatch generates totalCount values using the given gofakeit pattern,
+// GenBatch generates totalCount values using the given gofakeit pattern,
 // split into groups of batchSize. Returns [][]any where each inner slice
 // contains a comma-separated string of generated values, acting as a
 // batch driver for GenerateArgs.
-func genBatch(totalCount, batchSize any, pattern string) ([][]any, error) {
-	total, err := toInt(totalCount)
+func GenBatch(totalCount, batchSize any, pattern string) ([][]any, error) {
+	total, err := convert.ToInt(totalCount)
 	if err != nil {
 		return nil, fmt.Errorf("gen_batch total: %w", err)
 	}
-	size, err := toInt(batchSize)
+	size, err := convert.ToInt(batchSize)
 	if err != nil {
 		return nil, fmt.Errorf("gen_batch size: %w", err)
 	}
@@ -43,7 +44,7 @@ func genBatch(totalCount, batchSize any, pattern string) ([][]any, error) {
 		}
 		parts := make([]string, n)
 		for j := range n {
-			val, err := gen(pattern)
+			val, err := Gen(pattern)
 			if err != nil {
 				return nil, err
 			}
@@ -54,77 +55,77 @@ func genBatch(totalCount, batchSize any, pattern string) ([][]any, error) {
 	return result, nil
 }
 
-func genUUIDv1() (string, error) { return random.UUIDv1() }
-func genUUIDv4() string          { return random.UUIDv4() }
-func genUUIDv6() (string, error) { return random.UUIDv6() }
-func genUUIDv7() (string, error) { return random.UUIDv7() }
+func GenUUIDv1() (string, error) { return random.UUIDv1() }
+func GenUUIDv4() string          { return random.UUIDv4() }
+func GenUUIDv6() (string, error) { return random.UUIDv6() }
+func GenUUIDv7() (string, error) { return random.UUIDv7() }
 
-// floatRand generates a random float64 in [min, max] rounded to the
+// FloatRand generates a random float64 in [min, max] rounded to the
 // given number of decimal places.
 //
 //	uniform_f(min, max, precision)
-func floatRand(rawMin, rawMax, rawPrecision any) (float64, error) {
-	mn, err := toFloat(rawMin)
+func FloatRand(rawMin, rawMax, rawPrecision any) (float64, error) {
+	mn, err := convert.ToFloat(rawMin)
 	if err != nil {
 		return 0, fmt.Errorf("uniform_f min: %w", err)
 	}
-	mx, err := toFloat(rawMax)
+	mx, err := convert.ToFloat(rawMax)
 	if err != nil {
 		return 0, fmt.Errorf("uniform_f max: %w", err)
 	}
-	p, err := toInt(rawPrecision)
+	p, err := convert.ToInt(rawPrecision)
 	if err != nil {
 		return 0, fmt.Errorf("uniform_f precision: %w", err)
 	}
 	return random.Float(mn, mx, p), nil
 }
 
-// uniformRand generates a uniform random float64 in [min, max].
+// UniformRand generates a uniform random float64 in [min, max].
 //
 //	uniform(min, max)
-func uniformRand(rawMin, rawMax any) (float64, error) {
-	mn, err := toFloat(rawMin)
+func UniformRand(rawMin, rawMax any) (float64, error) {
+	mn, err := convert.ToFloat(rawMin)
 	if err != nil {
 		return 0, fmt.Errorf("uniform min: %w", err)
 	}
-	mx, err := toFloat(rawMax)
+	mx, err := convert.ToFloat(rawMax)
 	if err != nil {
 		return 0, fmt.Errorf("uniform max: %w", err)
 	}
 	return random.Uniform(mn, mx), nil
 }
 
-// zipfRand generates a Zipfian-distributed random integer in [0, max].
+// ZipfRand generates a Zipfian-distributed random integer in [0, max].
 // Parameters s (> 1) and v (>= 1) control the distribution shape.
 //
 //	zipf(s, v, max)
-func zipfRand(rawS, rawV, rawImax any) (int, error) {
-	s, err := toFloat(rawS)
+func ZipfRand(rawS, rawV, rawImax any) (int, error) {
+	s, err := convert.ToFloat(rawS)
 	if err != nil {
 		return 0, fmt.Errorf("zipf s: %w", err)
 	}
-	v, err := toFloat(rawV)
+	v, err := convert.ToFloat(rawV)
 	if err != nil {
 		return 0, fmt.Errorf("zipf v: %w", err)
 	}
-	imax, err := toInt(rawImax)
+	imax, err := convert.ToInt(rawImax)
 	if err != nil {
 		return 0, fmt.Errorf("zipf imax: %w", err)
 	}
 	return random.Zipf(s, v, imax)
 }
 
-// genRegex generates a random string matching the given regex pattern.
+// GenRegex generates a random string matching the given regex pattern.
 //
 //	regex('[A-Z]{3}-[0-9]{4}')
-func genRegex(pattern string) string {
+func GenRegex(pattern string) string {
 	return random.Regex(pattern)
 }
 
-// jsonObj builds a JSON object string from key-value pair arguments.
+// JsonObj builds a JSON object string from key-value pair arguments.
 //
 //	json_obj('key1', val1, 'key2', val2)
-func jsonObj(pairs ...any) (string, error) {
+func JsonObj(pairs ...any) (string, error) {
 	if len(pairs)%2 != 0 {
 		return "", errors.New("json_obj requires an even number of arguments (key-value pairs)")
 	}
@@ -141,16 +142,16 @@ func jsonObj(pairs ...any) (string, error) {
 	return string(b), nil
 }
 
-// jsonArr builds a JSON array string of N random values generated by
+// JsonArr builds a JSON array string of N random values generated by
 // the given gofakeit pattern, where N is in [minN, maxN].
 //
 //	json_arr(1, 5, 'email')
-func jsonArr(rawMinN, rawMaxN any, pattern string) (string, error) {
-	lo, err := toInt(rawMinN)
+func JsonArr(rawMinN, rawMaxN any, pattern string) (string, error) {
+	lo, err := convert.ToInt(rawMinN)
 	if err != nil {
 		return "", fmt.Errorf("json_arr min: %w", err)
 	}
-	hi, err := toInt(rawMaxN)
+	hi, err := convert.ToInt(rawMaxN)
 	if err != nil {
 		return "", fmt.Errorf("json_arr max: %w", err)
 	}
@@ -158,7 +159,7 @@ func jsonArr(rawMinN, rawMaxN any, pattern string) (string, error) {
 
 	values := make([]any, n)
 	for i := range n {
-		v, err := gen(pattern)
+		v, err := Gen(pattern)
 		if err != nil {
 			return "", err
 		}
@@ -172,20 +173,20 @@ func jsonArr(rawMinN, rawMaxN any, pattern string) (string, error) {
 	return string(b), nil
 }
 
-// genPoint generates a random geographic point within radiusKM of
+// GenPoint generates a random geographic point within radiusKM of
 // (lat, lon) and returns a map with "lat" and "lon" keys.
 //
 //	point(51.5, -0.1, 10).lat
-func genPoint(rawLat, rawLon, rawRadiusKM any) (map[string]any, error) {
-	lat, err := toFloat(rawLat)
+func GenPoint(rawLat, rawLon, rawRadiusKM any) (map[string]any, error) {
+	lat, err := convert.ToFloat(rawLat)
 	if err != nil {
 		return nil, fmt.Errorf("point lat: %w", err)
 	}
-	lon, err := toFloat(rawLon)
+	lon, err := convert.ToFloat(rawLon)
 	if err != nil {
 		return nil, fmt.Errorf("point lon: %w", err)
 	}
-	r, err := toFloat(rawRadiusKM)
+	r, err := convert.ToFloat(rawRadiusKM)
 	if err != nil {
 		return nil, fmt.Errorf("point radius: %w", err)
 	}
@@ -193,31 +194,31 @@ func genPoint(rawLat, rawLon, rawRadiusKM any) (map[string]any, error) {
 	return map[string]any{"lat": newLat, "lon": newLon}, nil
 }
 
-// genPointWKT generates a random geographic point within radiusKM of
+// GenPointWKT generates a random geographic point within radiusKM of
 // (lat, lon) and returns a WKT string: "POINT(lon lat)".
 //
 //	point_wkt(51.5, -0.1, 10)
-func genPointWKT(rawLat, rawLon, rawRadiusKM any) (string, error) {
-	pt, err := genPoint(rawLat, rawLon, rawRadiusKM)
+func GenPointWKT(rawLat, rawLon, rawRadiusKM any) (string, error) {
+	pt, err := GenPoint(rawLat, rawLon, rawRadiusKM)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("POINT(%f %f)", pt["lon"], pt["lat"]), nil
 }
 
-// randTimestamp generates a random timestamp between min and max,
+// RandTimestamp generates a random timestamp between min and max,
 // both in RFC3339 format. Returns the result in RFC3339.
 //
 //	timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
-func randTimestamp(min, max string) (string, error) {
-	return dateRand(time.RFC3339, min, max)
+func RandTimestamp(min, max string) (string, error) {
+	return DateRand(time.RFC3339, min, max)
 }
 
-// randDuration generates a random duration between min and max,
+// RandDuration generates a random duration between min and max,
 // both as Go duration strings (e.g. "1h", "30m").
 //
 //	duration('1h', '24h')
-func randDuration(min, max string) (string, error) {
+func RandDuration(min, max string) (string, error) {
 	minD, err := time.ParseDuration(min)
 	if err != nil {
 		return "", fmt.Errorf("duration min %q: %w", min, err)
@@ -229,11 +230,11 @@ func randDuration(min, max string) (string, error) {
 	return random.Duration(minD, maxD).String(), nil
 }
 
-// dateRand generates a random timestamp between min and max (RFC3339)
+// DateRand generates a random timestamp between min and max (RFC3339)
 // and formats the result using the given Go time format string.
 //
 //	date('2006-01-02', '2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
-func dateRand(format, min, max string) (string, error) {
+func DateRand(format, min, max string) (string, error) {
 	minT, err := time.Parse(time.RFC3339, min)
 	if err != nil {
 		return "", fmt.Errorf("date min %q: %w", min, err)
@@ -245,12 +246,12 @@ func dateRand(format, min, max string) (string, error) {
 	return random.Timestamp(minT, maxT).UTC().Format(format), nil
 }
 
-// dateOffset returns the current time offset by the given Go duration
+// DateOffset returns the current time offset by the given Go duration
 // string, formatted as RFC3339.
 //
 //	date_offset('-72h')
 //	date_offset('30m')
-func dateOffset(duration string) (string, error) {
+func DateOffset(duration string) (string, error) {
 	d, err := time.ParseDuration(duration)
 	if err != nil {
 		return "", fmt.Errorf("date_offset %q: %w", duration, err)
@@ -258,135 +259,135 @@ func dateOffset(duration string) (string, error) {
 	return time.Now().Add(d).UTC().Format(time.RFC3339), nil
 }
 
-// expRand returns an exponentially-distributed random float in [min, max],
+// ExpRand returns an exponentially-distributed random float in [min, max],
 // rounded to 0 decimal places by default.
 //
 //	exp(rate, min, max)
-func expRand(rawRate, rawMin, rawMax any) (float64, error) {
-	return expRandF(rawRate, rawMin, rawMax, 0)
+func ExpRand(rawRate, rawMin, rawMax any) (float64, error) {
+	return ExpRandF(rawRate, rawMin, rawMax, 0)
 }
 
-// expRandF returns an exponentially-distributed random float in [min, max],
+// ExpRandF returns an exponentially-distributed random float in [min, max],
 // rounded to the given number of decimal places.
 //
 //	exp_f(rate, min, max, precision)
-func expRandF(rawRate, rawMin, rawMax, rawPrecision any) (float64, error) {
-	rate, err := toFloat(rawRate)
+func ExpRandF(rawRate, rawMin, rawMax, rawPrecision any) (float64, error) {
+	rate, err := convert.ToFloat(rawRate)
 	if err != nil {
 		return 0, fmt.Errorf("exp_f rate: %w", err)
 	}
-	mn, err := toFloat(rawMin)
+	mn, err := convert.ToFloat(rawMin)
 	if err != nil {
 		return 0, fmt.Errorf("exp_f min: %w", err)
 	}
-	mx, err := toFloat(rawMax)
+	mx, err := convert.ToFloat(rawMax)
 	if err != nil {
 		return 0, fmt.Errorf("exp_f max: %w", err)
 	}
-	p, err := toInt(rawPrecision)
+	p, err := convert.ToInt(rawPrecision)
 	if err != nil {
 		return 0, fmt.Errorf("exp_f precision: %w", err)
 	}
 	return random.Exp(rate, mn, mx, p)
 }
 
-// lognormRand returns a log-normally-distributed random float in [min, max],
+// LognormRand returns a log-normally-distributed random float in [min, max],
 // rounded to 0 decimal places by default.
 //
 //	lognorm(mu, sigma, min, max)
-func lognormRand(rawMu, rawSigma, rawMin, rawMax any) (float64, error) {
-	return lognormRandF(rawMu, rawSigma, rawMin, rawMax, 0)
+func LognormRand(rawMu, rawSigma, rawMin, rawMax any) (float64, error) {
+	return LognormRandF(rawMu, rawSigma, rawMin, rawMax, 0)
 }
 
-// lognormRandF returns a log-normally-distributed random float in [min, max],
+// LognormRandF returns a log-normally-distributed random float in [min, max],
 // rounded to the given number of decimal places.
 //
 //	lognorm_f(mu, sigma, min, max, precision)
-func lognormRandF(rawMu, rawSigma, rawMin, rawMax, rawPrecision any) (float64, error) {
-	mu, err := toFloat(rawMu)
+func LognormRandF(rawMu, rawSigma, rawMin, rawMax, rawPrecision any) (float64, error) {
+	mu, err := convert.ToFloat(rawMu)
 	if err != nil {
 		return 0, fmt.Errorf("lognorm_f mu: %w", err)
 	}
-	sigma, err := toFloat(rawSigma)
+	sigma, err := convert.ToFloat(rawSigma)
 	if err != nil {
 		return 0, fmt.Errorf("lognorm_f sigma: %w", err)
 	}
-	mn, err := toFloat(rawMin)
+	mn, err := convert.ToFloat(rawMin)
 	if err != nil {
 		return 0, fmt.Errorf("lognorm_f min: %w", err)
 	}
-	mx, err := toFloat(rawMax)
+	mx, err := convert.ToFloat(rawMax)
 	if err != nil {
 		return 0, fmt.Errorf("lognorm_f max: %w", err)
 	}
-	p, err := toInt(rawPrecision)
+	p, err := convert.ToInt(rawPrecision)
 	if err != nil {
 		return 0, fmt.Errorf("lognorm_f precision: %w", err)
 	}
 	return random.LogNorm(mu, sigma, mn, mx, p)
 }
 
-// genBytes generates n random bytes as a hex-encoded string prefixed
+// GenBytes generates n random bytes as a hex-encoded string prefixed
 // with \x, matching the CockroachDB/PostgreSQL BYTES literal format.
 //
 //	bytes(16)
-func genBytes(rawN any) (string, error) {
-	n, err := toInt(rawN)
+func GenBytes(rawN any) (string, error) {
+	n, err := convert.ToInt(rawN)
 	if err != nil {
 		return "", fmt.Errorf("bytes: %w", err)
 	}
 	return random.Bytes(n), nil
 }
 
-// genBit generates a random fixed-length bit string of exactly n bits.
+// GenBit generates a random fixed-length bit string of exactly n bits.
 //
 //	bit(8)
-func genBit(rawN any) (string, error) {
-	n, err := toInt(rawN)
+func GenBit(rawN any) (string, error) {
+	n, err := convert.ToInt(rawN)
 	if err != nil {
 		return "", fmt.Errorf("bit: %w", err)
 	}
 	return random.Bit(n), nil
 }
 
-// genBool generates a random true or false value.
+// GenBool generates a random true or false value.
 //
 //	bool()
-func genBool() bool {
+func GenBool() bool {
 	return random.Rng.IntN(2) == 1
 }
 
-// genVarBit generates a random variable-length bit string of 1 to n bits.
+// GenVarBit generates a random variable-length bit string of 1 to n bits.
 //
 //	varbit(16)
-func genVarBit(rawN any) (string, error) {
-	n, err := toInt(rawN)
+func GenVarBit(rawN any) (string, error) {
+	n, err := convert.ToInt(rawN)
 	if err != nil {
 		return "", fmt.Errorf("varbit: %w", err)
 	}
 	return random.VarBit(n), nil
 }
 
-// genInet generates a random IP address within the given CIDR block.
+// GenInet generates a random IP address within the given CIDR block.
 // Supports both IPv4 and IPv6.
 //
 //	inet('192.168.1.0/24')
 //	inet('fd00::/64')
-func genInet(cidr string) (string, error) {
+func GenInet(cidr string) (string, error) {
 	return random.Inet(cidr)
 }
 
-// genArray generates a CockroachDB/PostgreSQL array literal with a
+// GenArray generates a CockroachDB/PostgreSQL array literal with a
 // random number of elements in [min, max], each produced by the given
 // gofakeit pattern.
 //
 //	array(2, 5, 'intrange[1,100]')
-func genArray(rawMinN, rawMaxN any, pattern string) (string, error) {
-	lo, err := toInt(rawMinN)
+func GenArray(rawMinN, rawMaxN any, pattern string) (string, error) {
+	lo, err := convert.ToInt(rawMinN)
 	if err != nil {
 		return "", fmt.Errorf("array min: %w", err)
 	}
-	hi, err := toInt(rawMaxN)
+	hi, err := convert.ToInt(rawMaxN)
 	if err != nil {
 		return "", fmt.Errorf("array max: %w", err)
 	}
@@ -394,7 +395,7 @@ func genArray(rawMinN, rawMaxN any, pattern string) (string, error) {
 
 	parts := make([]string, n)
 	for i := range n {
-		v, err := gen(pattern)
+		v, err := Gen(pattern)
 		if err != nil {
 			return "", err
 		}
@@ -404,18 +405,18 @@ func genArray(rawMinN, rawMaxN any, pattern string) (string, error) {
 	return "{" + strings.Join(parts, ",") + "}", nil
 }
 
-// genTime generates a random time of day between min and max (HH:MM:SS).
+// GenTime generates a random time of day between min and max (HH:MM:SS).
 //
 //	time('08:00:00', '17:30:00')
-func genTime(minStr, maxStr string) (string, error) {
+func GenTime(minStr, maxStr string) (string, error) {
 	return random.TimeOfDay(minStr, maxStr)
 }
 
-// genTimez generates a random time of day between min and max (HH:MM:SS)
+// GenTimez generates a random time of day between min and max (HH:MM:SS)
 // with a +00:00 timezone suffix, for use with TIMETZ columns.
 //
 //	timez('08:00:00', '17:30:00')
-func genTimez(minStr, maxStr string) (string, error) {
+func GenTimez(minStr, maxStr string) (string, error) {
 	t, err := random.TimeOfDay(minStr, maxStr)
 	if err != nil {
 		return "", err

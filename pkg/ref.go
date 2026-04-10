@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/codingconcepts/edg/pkg/convert"
 	"github.com/codingconcepts/edg/pkg/random"
 )
 
@@ -212,15 +213,15 @@ func (e *Env) getNurandC(A int) int {
 //
 //	NURand(A, x, y) = (((random(0, A) | random(x, y)) + C) % (y - x + 1)) + x
 func (e *Env) nuRand(rawA, rawX, rawY any) (int, error) {
-	A, err := toInt(rawA)
+	A, err := convert.ToInt(rawA)
 	if err != nil {
 		return 0, fmt.Errorf("nurand A: %w", err)
 	}
-	x, err := toInt(rawX)
+	x, err := convert.ToInt(rawX)
 	if err != nil {
 		return 0, fmt.Errorf("nurand x: %w", err)
 	}
-	y, err := toInt(rawY)
+	y, err := convert.ToInt(rawY)
 	if err != nil {
 		return 0, fmt.Errorf("nurand y: %w", err)
 	}
@@ -232,23 +233,23 @@ func (e *Env) nuRand(rawA, rawX, rawY any) (int, error) {
 // where N is chosen randomly in [min, max]. Used for multi-item order
 // lines in New-Order transactions.
 func (e *Env) nuRandN(rawA, rawX, rawY, rawMinN, rawMaxN any) (string, error) {
-	A, err := toInt(rawA)
+	A, err := convert.ToInt(rawA)
 	if err != nil {
 		return "", fmt.Errorf("nurand_n A: %w", err)
 	}
-	x, err := toInt(rawX)
+	x, err := convert.ToInt(rawX)
 	if err != nil {
 		return "", fmt.Errorf("nurand_n x: %w", err)
 	}
-	y, err := toInt(rawY)
+	y, err := convert.ToInt(rawY)
 	if err != nil {
 		return "", fmt.Errorf("nurand_n y: %w", err)
 	}
-	minN, err := toInt(rawMinN)
+	minN, err := convert.ToInt(rawMinN)
 	if err != nil {
 		return "", fmt.Errorf("nurand_n minN: %w", err)
 	}
-	maxN, err := toInt(rawMaxN)
+	maxN, err := convert.ToInt(rawMaxN)
 	if err != nil {
 		return "", fmt.Errorf("nurand_n maxN: %w", err)
 	}
@@ -288,23 +289,23 @@ func (e *Env) normRand(rawMean, rawStddev, rawMin, rawMax any) (float64, error) 
 //
 //	norm_f(mean, stddev, min, max, precision)
 func (e *Env) normRandF(rawMean, rawStddev, rawMin, rawMax, rawPrecision any) (float64, error) {
-	mean, err := toFloat(rawMean)
+	mean, err := convert.ToFloat(rawMean)
 	if err != nil {
 		return 0, fmt.Errorf("norm_f mean: %w", err)
 	}
-	stddev, err := toFloat(rawStddev)
+	stddev, err := convert.ToFloat(rawStddev)
 	if err != nil {
 		return 0, fmt.Errorf("norm_f stddev: %w", err)
 	}
-	mn, err := toFloat(rawMin)
+	mn, err := convert.ToFloat(rawMin)
 	if err != nil {
 		return 0, fmt.Errorf("norm_f min: %w", err)
 	}
-	mx, err := toFloat(rawMax)
+	mx, err := convert.ToFloat(rawMax)
 	if err != nil {
 		return 0, fmt.Errorf("norm_f max: %w", err)
 	}
-	p, err := toInt(rawPrecision)
+	p, err := convert.ToInt(rawPrecision)
 	if err != nil {
 		return 0, fmt.Errorf("norm_f precision: %w", err)
 	}
@@ -316,11 +317,11 @@ func (e *Env) normRandF(rawMean, rawStddev, rawMin, rawMax, rawPrecision any) (f
 //
 //	norm_n(mean, stddev, min, max, minN, maxN)
 func (e *Env) normRandN(rawMean, rawStddev, rawMin, rawMax, rawMinN, rawMaxN any) (string, error) {
-	minN, err := toInt(rawMinN)
+	minN, err := convert.ToInt(rawMinN)
 	if err != nil {
 		return "", fmt.Errorf("norm_n minN: %w", err)
 	}
-	maxN, err := toInt(rawMaxN)
+	maxN, err := convert.ToInt(rawMaxN)
 	if err != nil {
 		return "", fmt.Errorf("norm_n maxN: %w", err)
 	}
@@ -352,11 +353,11 @@ func (e *Env) normRandN(rawMean, rawStddev, rawMin, rawMax, rawMinN, rawMaxN any
 //
 //	seq(start, step)
 func (e *Env) seq(rawStart, rawStep any) (int64, error) {
-	s, err := toInt(rawStart)
+	s, err := convert.ToInt(rawStart)
 	if err != nil {
 		return 0, fmt.Errorf("seq start: %w", err)
 	}
-	st, err := toInt(rawStep)
+	st, err := convert.ToInt(rawStep)
 	if err != nil {
 		return 0, fmt.Errorf("seq step: %w", err)
 	}
@@ -379,11 +380,11 @@ func (e *Env) weightedSampleN(name, field, weightField string, rawMinN, rawMaxN 
 		return "", nil
 	}
 
-	lo, err := toInt(rawMinN)
+	lo, err := convert.ToInt(rawMinN)
 	if err != nil {
 		return "", fmt.Errorf("weighted_sample_n minN: %w", err)
 	}
-	hi, err := toInt(rawMaxN)
+	hi, err := convert.ToInt(rawMaxN)
 	if err != nil {
 		return "", fmt.Errorf("weighted_sample_n maxN: %w", err)
 	}
@@ -391,7 +392,7 @@ func (e *Env) weightedSampleN(name, field, weightField string, rawMinN, rawMaxN 
 
 	items := make([]weightedItem, len(data))
 	for i, row := range data {
-		w, err := toInt(row[weightField])
+		w, err := convert.ToInt(row[weightField])
 		if err != nil {
 			return "", fmt.Errorf("weighted_sample_n weight for row %d: %w", i, err)
 		}
@@ -411,7 +412,7 @@ func (e *Env) weightedSampleN(name, field, weightField string, rawMinN, rawMaxN 
 		if len(parts) >= n {
 			break
 		}
-		idx, err := toInt(wi.choose())
+		idx, err := convert.ToInt(wi.choose())
 		if err != nil {
 			return "", err
 		}

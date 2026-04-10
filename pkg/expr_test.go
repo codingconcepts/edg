@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/codingconcepts/edg/pkg/config"
 )
 
 // newExprEnv builds an Env with the same globals and expressions
@@ -12,7 +14,7 @@ import (
 func newExprEnv(t *testing.T) *Env {
 	t.Helper()
 
-	req := &Request{
+	req := &config.Request{
 		Globals: map[string]any{
 			"prices":    []any{9.99, 19.99, 4.99, 29.99, 14.99},
 			"tags":      []any{"electronics", "books", "clothing", "food", "toys"},

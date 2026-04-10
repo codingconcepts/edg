@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+
+	"github.com/codingconcepts/edg/pkg/config"
 )
 
-func (e *Env) Query(ctx context.Context, db *sql.DB, q *Query, args ...any) error {
+func (e *Env) Query(ctx context.Context, db *sql.DB, q *config.Query, args ...any) error {
 	rows, err := db.QueryContext(ctx, q.Query, args...)
 	if err != nil {
 		return fmt.Errorf("running statement: %w", err)
@@ -23,7 +25,7 @@ func (e *Env) Query(ctx context.Context, db *sql.DB, q *Query, args ...any) erro
 	return nil
 }
 
-func (e *Env) Exec(ctx context.Context, db *sql.DB, q *Query, args ...any) error {
+func (e *Env) Exec(ctx context.Context, db *sql.DB, q *config.Query, args ...any) error {
 	_, err := db.ExecContext(ctx, q.Query, args...)
 	if err != nil {
 		return fmt.Errorf("running statement: %w", err)

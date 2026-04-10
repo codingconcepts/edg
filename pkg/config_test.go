@@ -3,24 +3,25 @@ package pkg
 import (
 	"strings"
 	"testing"
-	"time"
 
-	"gopkg.in/yaml.v3"
+	"github.com/codingconcepts/edg/pkg/config"
+	"github.com/codingconcepts/edg/pkg/convert"
+	"github.com/codingconcepts/edg/pkg/gen"
 )
 
 func TestCompileArgs(t *testing.T) {
 	env := testEnv(map[string][]map[string]any{
 		"items": sampleRows(),
 	})
-	env.env["const"] = constant
-	env.env["gen"] = gen
+	env.env["const"] = convert.Constant
+	env.env["gen"] = gen.Gen
 	env.env["ref_rand"] = env.refRand
 
-	q := &Query{
+	q := &config.Query{
 		Args: []string{"const(42)", "gen('number:1,10')"},
 	}
 
-	if err := q.CompileArgs(env); err != nil {
+	if err := q.CompileArgs(env.env); err != nil {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
@@ -32,11 +33,11 @@ func TestCompileArgs(t *testing.T) {
 func TestCompileArgs_InvalidExpr(t *testing.T) {
 	env := testEnv(nil)
 
-	q := &Query{
+	q := &config.Query{
 		Args: []string{"invalid_func()"},
 	}
 
-	if err := q.CompileArgs(env); err == nil {
+	if err := q.CompileArgs(env.env); err == nil {
 		t.Error("expected error for invalid expression, got nil")
 	}
 }
@@ -44,9 +45,9 @@ func TestCompileArgs_InvalidExpr(t *testing.T) {
 func TestCompileArgs_Empty(t *testing.T) {
 	env := testEnv(nil)
 
-	q := &Query{}
+	q := &config.Query{}
 
-	if err := q.CompileArgs(env); err != nil {
+	if err := q.CompileArgs(env.env); err != nil {
 		t.Fatalf("CompileArgs with no args failed: %v", err)
 	}
 
@@ -58,9 +59,9 @@ func TestCompileArgs_Empty(t *testing.T) {
 func TestGenerateArgs_NoArgs(t *testing.T) {
 	env := testEnv(nil)
 
-	q := &Query{}
+	q := &config.Query{}
 
-	argSets, err := q.GenerateArgs(env)
+	argSets, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -72,16 +73,16 @@ func TestGenerateArgs_NoArgs(t *testing.T) {
 
 func TestGenerateArgs_WithConst(t *testing.T) {
 	env := testEnv(nil)
-	env.env["const"] = constant
+	env.env["const"] = convert.Constant
 
-	q := &Query{
+	q := &config.Query{
 		Args: []string{"const(42)", "const('hello')"},
 	}
-	if err := q.CompileArgs(env); err != nil {
+	if err := q.CompileArgs(env.env); err != nil {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	argSets, err := q.GenerateArgs(env)
+	argSets, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -104,15 +105,15 @@ func TestGenerateArgs_WithConst(t *testing.T) {
 
 func TestGenerateArgs_ClearsOneCacheAfter(t *testing.T) {
 	env := testEnv(nil)
-	env.env["const"] = constant
+	env.env["const"] = convert.Constant
 	env.oneCache["test"] = "data"
 
-	q := &Query{Args: []string{"const(1)"}}
-	if err := q.CompileArgs(env); err != nil {
+	q := &config.Query{Args: []string{"const(1)"}}
+	if err := q.CompileArgs(env.env); err != nil {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	if _, err := q.GenerateArgs(env); err != nil {
+	if _, err := env.GenerateArgs(q); err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
 
@@ -123,15 +124,15 @@ func TestGenerateArgs_ClearsOneCacheAfter(t *testing.T) {
 
 func TestGenerateArgs_ResetsUniqIndexAfter(t *testing.T) {
 	env := testEnv(nil)
-	env.env["const"] = constant
+	env.env["const"] = convert.Constant
 	env.uniqIndex = 5
 
-	q := &Query{Args: []string{"const(1)"}}
-	if err := q.CompileArgs(env); err != nil {
+	q := &config.Query{Args: []string{"const(1)"}}
+	if err := q.CompileArgs(env.env); err != nil {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	if _, err := q.GenerateArgs(env); err != nil {
+	if _, err := env.GenerateArgs(q); err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
 
@@ -140,118 +141,40 @@ func TestGenerateArgs_ResetsUniqIndexAfter(t *testing.T) {
 	}
 }
 
-func TestRequestParsesSeedSection(t *testing.T) {
-	input := `
-up:
-  - name: create_table
-    query: CREATE TABLE t (id INT PRIMARY KEY)
-seed:
-  - name: populate_table
-    args:
-      - items
-    query: INSERT INTO t SELECT s FROM generate_series(1, $1) AS s
-down:
-  - name: drop_table
-    query: DROP TABLE t
-`
-	var req Request
-	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
-
-	if len(req.Up) != 1 {
-		t.Fatalf("expected 1 up query, got %d", len(req.Up))
-	}
-	if len(req.Seed) != 1 {
-		t.Fatalf("expected 1 seed query, got %d", len(req.Seed))
-	}
-	if req.Seed[0].Name != "populate_table" {
-		t.Errorf("seed query name = %q, want %q", req.Seed[0].Name, "populate_table")
-	}
-	if len(req.Seed[0].Args) != 1 {
-		t.Fatalf("expected 1 seed arg, got %d", len(req.Seed[0].Args))
-	}
-	if len(req.Down) != 1 {
-		t.Fatalf("expected 1 down query, got %d", len(req.Down))
-	}
-}
-
-func TestRequestParsesDeseedSection(t *testing.T) {
-	input := `
-deseed:
-  - name: truncate_items
-    type: exec
-    query: TRUNCATE TABLE item
-  - name: truncate_warehouse
-    type: exec
-    query: TRUNCATE TABLE warehouse
-`
-	var req Request
-	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
-
-	if len(req.Deseed) != 2 {
-		t.Fatalf("expected 2 deseed queries, got %d", len(req.Deseed))
-	}
-	if req.Deseed[0].Name != "truncate_items" {
-		t.Errorf("deseed query name = %q, want %q", req.Deseed[0].Name, "truncate_items")
-	}
-	if req.Deseed[0].Type != QueryTypeExec {
-		t.Errorf("deseed query type = %q, want %q", req.Deseed[0].Type, QueryTypeExec)
-	}
-}
-
-func TestRequestParsesEmptySeed(t *testing.T) {
-	input := `
-up:
-  - name: create_table
-    query: CREATE TABLE t (id INT PRIMARY KEY)
-`
-	var req Request
-	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
-
-	if len(req.Seed) != 0 {
-		t.Errorf("expected 0 seed queries, got %d", len(req.Seed))
-	}
-}
-
 func TestNewEnv_RejectsUnknownQueryType(t *testing.T) {
 	tests := []struct {
 		name    string
-		req     *Request
+		req     *config.Request
 		wantErr bool
 	}{
 		{
 			name:    "valid exec",
-			req:     &Request{Run: []*Query{{Name: "q", Type: QueryTypeExec, Query: "SELECT 1"}}},
+			req:     &config.Request{Run: []*config.Query{{Name: "q", Type: config.QueryTypeExec, Query: "SELECT 1"}}},
 			wantErr: false,
 		},
 		{
 			name:    "valid query",
-			req:     &Request{Run: []*Query{{Name: "q", Type: QueryTypeQuery, Query: "SELECT 1"}}},
+			req:     &config.Request{Run: []*config.Query{{Name: "q", Type: config.QueryTypeQuery, Query: "SELECT 1"}}},
 			wantErr: false,
 		},
 		{
 			name:    "valid query_batch",
-			req:     &Request{Run: []*Query{{Name: "q", Type: QueryTypeQueryBatch, Query: "SELECT 1"}}},
+			req:     &config.Request{Run: []*config.Query{{Name: "q", Type: config.QueryTypeQueryBatch, Query: "SELECT 1"}}},
 			wantErr: false,
 		},
 		{
 			name:    "valid exec_batch",
-			req:     &Request{Run: []*Query{{Name: "q", Type: QueryTypeExecBatch, Query: "SELECT 1"}}},
+			req:     &config.Request{Run: []*config.Query{{Name: "q", Type: config.QueryTypeExecBatch, Query: "SELECT 1"}}},
 			wantErr: false,
 		},
 		{
 			name:    "empty defaults to query",
-			req:     &Request{Run: []*Query{{Name: "q", Type: "", Query: "SELECT 1"}}},
+			req:     &config.Request{Run: []*config.Query{{Name: "q", Type: "", Query: "SELECT 1"}}},
 			wantErr: false,
 		},
 		{
 			name:    "unknown type",
-			req:     &Request{Run: []*Query{{Name: "q", Type: "bogus", Query: "SELECT 1"}}},
+			req:     &config.Request{Run: []*config.Query{{Name: "q", Type: "bogus", Query: "SELECT 1"}}},
 			wantErr: true,
 		},
 	}
@@ -281,12 +204,12 @@ func BenchmarkCompileArgs(b *testing.B) {
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
 			env := benchEnv(100)
-			env.env["const"] = constant
+			env.env["const"] = convert.Constant
 			env.env["ref_rand"] = env.refRand
 			b.ResetTimer()
 			for range b.N {
-				q := &Query{Args: tc.args}
-				q.CompileArgs(env)
+				q := &config.Query{Args: tc.args}
+				q.CompileArgs(env.env)
 			}
 		})
 	}
@@ -304,7 +227,7 @@ func BenchmarkGenerateArgs(b *testing.B) {
 			envSize: 100,
 			args:    []string{"const(42)", "ref_rand('items')"},
 			extra: func(env *Env) {
-				env.env["const"] = constant
+				env.env["const"] = convert.Constant
 				env.env["ref_rand"] = env.refRand
 			},
 		},
@@ -313,8 +236,8 @@ func BenchmarkGenerateArgs(b *testing.B) {
 			envSize: 0,
 			args:    []string{"batch(3)", "const(10)"},
 			extra: func(env *Env) {
-				env.env["const"] = constant
-				env.env["batch"] = batch
+				env.env["const"] = convert.Constant
+				env.env["batch"] = convert.Batch
 			},
 		},
 	}
@@ -322,13 +245,13 @@ func BenchmarkGenerateArgs(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			env := benchEnv(tc.envSize)
 			tc.extra(env)
-			q := &Query{Args: tc.args}
-			if err := q.CompileArgs(env); err != nil {
+			q := &config.Query{Args: tc.args}
+			if err := q.CompileArgs(env.env); err != nil {
 				b.Fatal(err)
 			}
 			b.ResetTimer()
 			for range b.N {
-				q.GenerateArgs(env)
+				env.GenerateArgs(q)
 			}
 		})
 	}
@@ -336,18 +259,18 @@ func BenchmarkGenerateArgs(b *testing.B) {
 
 func TestGenerateArgs_MixedBatchAndScalar(t *testing.T) {
 	env := testEnv(nil)
-	env.env["const"] = constant
+	env.env["const"] = convert.Constant
 
 	// Simulate ref_each returning batch arg sets.
 	batchData := [][]any{{1}, {2}, {3}}
 	env.env["test_batch"] = func() [][]any { return batchData }
 
-	q := &Query{Args: []string{"test_batch()", "const(10)", "const(3000)"}}
-	if err := q.CompileArgs(env); err != nil {
+	q := &config.Query{Args: []string{"test_batch()", "const(10)", "const(3000)"}}
+	if err := q.CompileArgs(env.env); err != nil {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	argSets, err := q.GenerateArgs(env)
+	argSets, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -380,20 +303,20 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 			{"name": "books", "markup": 1.1},
 		},
 	})
-	env.env["gen"] = gen
+	env.env["gen"] = gen.Gen
 	env.env["ref_same"] = env.refSame
 
-	q := &Query{
-		Type:  QueryTypeExecBatch,
+	q := &config.Query{
+		Type:  config.QueryTypeExecBatch,
 		Count: 10,
 		Size:  4,
 		Args:  []string{"gen('noun')", "ref_same('categories').name", "ref_same('categories').markup"},
 	}
-	if err := q.CompileArgs(env); err != nil {
+	if err := q.CompileArgs(env.env); err != nil {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	argSets, err := q.GenerateArgs(env)
+	argSets, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -449,21 +372,21 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 
 func TestGenerateArgs_BatchType_GlobalRefs(t *testing.T) {
 	env := testEnv(nil)
-	env.env["const"] = constant
+	env.env["const"] = convert.Constant
 	env.env["products"] = 7
 	env.env["batch_size"] = 3
 
-	q := &Query{
-		Type:  QueryTypeExecBatch,
+	q := &config.Query{
+		Type:  config.QueryTypeExecBatch,
 		Count: "products",
 		Size:  "batch_size",
 		Args:  []string{"const(42)"},
 	}
-	if err := q.CompileArgs(env); err != nil {
+	if err := q.CompileArgs(env.env); err != nil {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	argSets, err := q.GenerateArgs(env)
+	argSets, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -489,18 +412,18 @@ func TestGenerateArgs_BatchType_GlobalRefs(t *testing.T) {
 
 func TestGenerateArgs_BatchType_SizeDefaultsToCount(t *testing.T) {
 	env := testEnv(nil)
-	env.env["const"] = constant
+	env.env["const"] = convert.Constant
 
-	q := &Query{
-		Type:  QueryTypeExecBatch,
+	q := &config.Query{
+		Type:  config.QueryTypeExecBatch,
 		Count: 5,
 		Args:  []string{"const('x')"},
 	}
-	if err := q.CompileArgs(env); err != nil {
+	if err := q.CompileArgs(env.env); err != nil {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	argSets, err := q.GenerateArgs(env)
+	argSets, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -513,106 +436,5 @@ func TestGenerateArgs_BatchType_SizeDefaultsToCount(t *testing.T) {
 	parts := strings.Split(argSets[0][0].(string), ",")
 	if len(parts) != 5 {
 		t.Errorf("expected 5 CSV values, got %d", len(parts))
-	}
-}
-
-func TestRequestParsesBatchType(t *testing.T) {
-	input := `
-seed:
-  - name: populate_product
-    type: exec_batch
-    count: 100
-    size: 50
-    args:
-      - gen('productname')
-    query: |-
-      INSERT INTO product (name) SELECT unnest(string_to_array('$1', ','))
-`
-	var req Request
-	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
-
-	if len(req.Seed) != 1 {
-		t.Fatalf("expected 1 seed query, got %d", len(req.Seed))
-	}
-	q := req.Seed[0]
-	if q.Type != QueryTypeExecBatch {
-		t.Errorf("type = %q, want %q", q.Type, QueryTypeExecBatch)
-	}
-	gotCount, err := toInt(q.Count)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gotCount != 100 {
-		t.Errorf("count = %v, want 100", q.Count)
-	}
-	gotSize, err := toInt(q.Size)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gotSize != 50 {
-		t.Errorf("size = %v, want 50", q.Size)
-	}
-}
-
-func TestRequestParsesExpectations(t *testing.T) {
-	input := `
-run:
-  - name: check_balance
-    query: SELECT 1
-expectations:
-  - error_rate < 1
-  - check_balance.p99 < 100
-`
-	var req Request
-	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
-
-	if len(req.Expectations) != 2 {
-		t.Fatalf("expected 2 expectations, got %d", len(req.Expectations))
-	}
-	if req.Expectations[0] != "error_rate < 1" {
-		t.Errorf("expectation[0] = %q, want %q", req.Expectations[0], "error_rate < 1")
-	}
-	if req.Expectations[1] != "check_balance.p99 < 100" {
-		t.Errorf("expectation[1] = %q, want %q", req.Expectations[1], "check_balance.p99 < 100")
-	}
-}
-
-func TestDurationUnmarshalYAML(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		want    time.Duration
-		wantErr bool
-	}{
-		{"seconds", "wait: 5s", 5 * time.Second, false},
-		{"milliseconds", "wait: 250ms", 250 * time.Millisecond, false},
-		{"minutes", "wait: 2m", 2 * time.Minute, false},
-		{"complex", "wait: 1m30s", 90 * time.Second, false},
-		{"invalid", "wait: notaduration", 0, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var out struct {
-				Wait Duration `yaml:"wait"`
-			}
-			err := yaml.Unmarshal([]byte(tt.input), &out)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Unmarshal error: %v", err)
-			}
-			if time.Duration(out.Wait) != tt.want {
-				t.Errorf("got %v, want %v", time.Duration(out.Wait), tt.want)
-			}
-		})
 	}
 }

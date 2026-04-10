@@ -3,6 +3,8 @@ package pkg
 import (
 	"log/slog"
 	"math"
+
+	"github.com/codingconcepts/edg/pkg/convert"
 )
 
 // getDataset retrieves a named dataset from the environment as []map[string]any.
@@ -28,7 +30,7 @@ func (e *Env) aggSum(name, field string) float64 {
 	}
 	var total float64
 	for _, row := range data {
-		v, err := toFloat(row[field])
+		v, err := convert.ToFloat(row[field])
 		if err != nil {
 			slog.Warn("sum: skipping non-numeric value", "field", field, "value", row[field])
 			continue
@@ -59,7 +61,7 @@ func (e *Env) aggMin(name, field string) float64 {
 	}
 	result := math.Inf(1)
 	for _, row := range data {
-		v, err := toFloat(row[field])
+		v, err := convert.ToFloat(row[field])
 		if err != nil {
 			slog.Warn("min: skipping non-numeric value", "field", field, "value", row[field])
 			continue
@@ -81,7 +83,7 @@ func (e *Env) aggMax(name, field string) float64 {
 	}
 	result := math.Inf(-1)
 	for _, row := range data {
-		v, err := toFloat(row[field])
+		v, err := convert.ToFloat(row[field])
 		if err != nil {
 			slog.Warn("max: skipping non-numeric value", "field", field, "value", row[field])
 			continue
