@@ -82,20 +82,20 @@ docker compose -f _examples/compose_oracle.yml up -d
 go run ./cmd/edg up \
 --driver oracle \
 --config _examples/populate/oracle.yaml \
---url "oracle://system:password@localhost:1521/FREEPDB1"
+--url "oracle://system:password@localhost:1521/defaultdb"
 
 go run ./cmd/edg seed \
 --driver oracle \
 --config _examples/populate/oracle.yaml \
---url "oracle://system:password@localhost:1521/FREEPDB1"
+--url "oracle://system:password@localhost:1521/defaultdb"
 
 go run ./cmd/edg deseed \
 --driver oracle \
 --config _examples/populate/oracle.yaml \
---url "oracle://system:password@localhost:1521/FREEPDB1"
+--url "oracle://system:password@localhost:1521/defaultdb"
 
 go run ./cmd/edg down \
 --driver oracle \
 --config _examples/populate/oracle.yaml \
---url "oracle://system:password@localhost:1521/FREEPDB1"
+--url "oracle://system:password@localhost:1521/defaultdb"
 ```

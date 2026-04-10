@@ -1,0 +1,60 @@
+# Reference data workload for Oracle
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  customers: 100
+
+reference:
+  regions:
+    - {name: us, cities: [a, b, c]}
+    - {name: eu, cities: [d, e, f]}
+    - {name: ap, cities: [g, h, i]}
+
+up:
+
+  - name: create_customer
+    type: exec
+    query: |-
+      CREATE TABLE customer (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        email VARCHAR2(255) NOT NULL,
+        region VARCHAR2(50) NOT NULL,
+        city VARCHAR2(50) NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+seed:
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    size: 10
+    args:
+      - gen('email')
+      - ref_same('regions').name
+      - set_rand(ref_same('regions').cities, [])
+    query: |-
+      INSERT INTO customer (email, region, city)
+      SELECT e.val, r.val, c.val
+      FROM (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))) e
+      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$2', ',', '","') || '"'))) r ON e.rn = r.rn
+      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$3', ',', '","') || '"'))) c ON e.rn = c.rn
+
+deseed:
+
+  - name: truncate_customer
+    type: exec
+    query: TRUNCATE TABLE customer
+
+down:
+
+  - name: drop_customer
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE customer CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;

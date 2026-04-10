@@ -1,0 +1,63 @@
+# Exclusive columns workload for MySQL
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
+globals:
+  contacts: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_contact
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS contact (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255),
+        phone VARCHAR(50),
+        CHECK (
+          (email IS NOT NULL AND phone IS NULL) OR
+          (email IS NULL AND phone IS NOT NULL)
+        )
+      )
+
+seed:
+
+  - name: populate_contact
+    type: exec_batch
+    count: contacts
+    size: batch_size
+    args:
+      - gen('name')
+      - bool()
+      - cond(arg(1), gen('email'), nil)
+      - cond(!arg(1), gen('phone'), nil)
+    query: |-
+      INSERT INTO contact (name, email, phone)
+      SELECT j1.val, j3.val, j4.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(255) PATH '$', rn FOR ORDINALITY)
+      ) j1
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$3', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(255) PATH '$', rn FOR ORDINALITY)
+      ) j3 ON j1.rn = j3.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$4', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(50) PATH '$', rn FOR ORDINALITY)
+      ) j4 ON j1.rn = j4.rn
+
+deseed:
+
+  - name: delete_contact
+    type: exec
+    query: DELETE FROM contact
+
+down:
+
+  - name: drop_contact
+    type: exec
+    query: DROP TABLE IF EXISTS contact

@@ -1,0 +1,137 @@
+# Stages workload for Oracle
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  customers: 100000
+  initial_balance: 10000
+  batch_size: 100
+
+stages:
+  - name: ramp
+    workers: 1
+    duration: 10s
+  - name: steady
+    workers: 10
+    duration: 30s
+
+up:
+
+  - name: create_customer
+    query: |-
+      CREATE TABLE customer (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        email VARCHAR2(320) NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_account
+    query: |-
+      CREATE TABLE account (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        balance NUMBER NOT NULL,
+        customer_id NUMBER NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+seed:
+
+  - name: populate_customer
+    args:
+      - gen_batch(customers, batch_size, 'email')
+    query: |-
+      INSERT INTO customer (email)
+      SELECT column_value
+      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))
+
+  - name: populate_account
+    args:
+      - batch(customers / batch_size)
+      - initial_balance
+      - batch_size
+    query: |-
+      INSERT INTO account (balance, customer_id)
+      SELECT $2, c.id
+      FROM customer c
+      ORDER BY c.id
+      OFFSET $1 * $3 ROWS FETCH NEXT $3 ROWS ONLY
+
+deseed:
+
+  - name: truncate_account
+    type: exec
+    query: TRUNCATE TABLE account
+
+  - name: truncate_customer
+    type: exec
+    query: TRUNCATE TABLE customer
+
+down:
+
+  - name: drop_account
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE account CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_customer
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE customer CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+init:
+
+  - name: fetch_accounts
+    type: query
+    query: SELECT id FROM account
+
+run_weights:
+  check_balance: 50
+  credit_account: 5
+  make_transfer: 45
+
+run:
+
+  - name: check_balance
+    type: query
+    args:
+      - ref_rand('fetch_accounts').id
+    query: |-
+      SELECT balance FROM account WHERE id = :1
+
+  - name: credit_account
+    type: exec
+    args:
+      - ref_rand('fetch_accounts').id
+      - gen('number:1,1000')
+    query: |-
+      UPDATE account SET balance = balance + :2
+      WHERE id = :1
+
+  - name: make_transfer
+    type: exec
+    args:
+      - ref_diff('fetch_accounts').id
+      - ref_diff('fetch_accounts').id
+      - gen('number:1,100')
+    query: |-
+      DECLARE
+        v_from_id NUMBER := :1;
+        v_to_id NUMBER := :2;
+        v_amount NUMBER := :3;
+      BEGIN
+        UPDATE account SET
+          balance = CASE
+                      WHEN id = v_to_id THEN balance + v_amount
+                      WHEN id = v_from_id THEN balance - v_amount
+                    END
+        WHERE id IN (v_from_id, v_to_id);
+      END;

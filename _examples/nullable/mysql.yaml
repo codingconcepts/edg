@@ -1,0 +1,63 @@
+# Nullable columns workload for MySQL
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
+globals:
+  users: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_user
+    query: |-
+      CREATE TABLE IF NOT EXISTS `user` (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        email VARCHAR(255) NOT NULL,
+        phone VARCHAR(50),
+        bio TEXT,
+        referred_by CHAR(36)
+      )
+
+seed:
+
+  - name: populate_user
+    type: exec_batch
+    count: users
+    size: batch_size
+    args:
+      - gen('email')
+      - nullable(gen('phone'), 0.3)
+      - nullable(gen('sentence:5'), 0.5)
+      - nullable(uuid_v4(), 0.8)
+    query: |-
+      INSERT INTO `user` (email, phone, bio, referred_by)
+      SELECT j1.val, j2.val, j3.val, j4.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(255) PATH '$', rn FOR ORDINALITY)
+      ) j1
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$2', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(50) PATH '$', rn FOR ORDINALITY)
+      ) j2 ON j1.rn = j2.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$3', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val TEXT PATH '$', rn FOR ORDINALITY)
+      ) j3 ON j1.rn = j3.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$4', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val CHAR(36) PATH '$', rn FOR ORDINALITY)
+      ) j4 ON j1.rn = j4.rn
+
+deseed:
+
+  - name: delete_user
+    type: exec
+    query: DELETE FROM `user`
+
+down:
+
+  - name: drop_user
+    type: exec
+    query: DROP TABLE IF EXISTS `user`

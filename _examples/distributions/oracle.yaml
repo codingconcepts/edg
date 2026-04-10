@@ -1,0 +1,97 @@
+# Distributions workload for Oracle
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  rows: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_distributions
+    query: |-
+      CREATE TABLE distributions (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        dist_type VARCHAR2(50) NOT NULL,
+        value NUMBER NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+seed:
+
+  - name: seed_uniform
+    args:
+      - batch(rows / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO distributions (dist_type, value)
+      SELECT 'uniform', DBMS_RANDOM.VALUE * 100
+      FROM DUAL
+      CONNECT BY LEVEL <= $2
+
+deseed:
+
+  - name: truncate_distributions
+    type: exec
+    query: TRUNCATE TABLE distributions
+
+down:
+
+  - name: drop_distributions
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE distributions CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+run:
+
+  - name: insert_uniform
+    type: exec
+    args:
+      - uniform(0, 100)
+    query: |-
+      INSERT INTO distributions (dist_type, value)
+      VALUES ('uniform', :1)
+
+  - name: insert_zipfian
+    type: exec
+    args:
+      - zipf(2.0, 1.0, 99)
+    query: |-
+      INSERT INTO distributions (dist_type, value)
+      VALUES ('zipfian', :1)
+
+  - name: insert_normal
+    type: exec
+    args:
+      - norm_f(50, 15, 0, 100, 2)
+    query: |-
+      INSERT INTO distributions (dist_type, value)
+      VALUES ('normal', :1)
+
+  - name: insert_exponential
+    type: exec
+    args:
+      - exp_f(0.5, 0, 100, 2)
+    query: |-
+      INSERT INTO distributions (dist_type, value)
+      VALUES ('exponential', :1)
+
+  - name: insert_lognormal
+    type: exec
+    args:
+      - lognorm_f(2.0, 0.5, 0, 100, 2)
+    query: |-
+      INSERT INTO distributions (dist_type, value)
+      VALUES ('lognormal', :1)
+
+run_weights:
+  insert_uniform: 20
+  insert_zipfian: 20
+  insert_normal: 20
+  insert_exponential: 20
+  insert_lognormal: 20

@@ -1,0 +1,16 @@
+- name: create_customer
+  query: |-
+    CREATE TABLE customer (
+      id NUMBER GENERATED ALWAYS AS IDENTITY,
+      email VARCHAR2(320) NOT NULL,
+      PRIMARY KEY (id)
+    )
+
+- name: create_account
+  query: |-
+    CREATE TABLE account (
+      id NUMBER GENERATED ALWAYS AS IDENTITY,
+      balance NUMBER NOT NULL,
+      customer_id NUMBER NOT NULL,
+      PRIMARY KEY (id)
+    )

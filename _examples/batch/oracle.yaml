@@ -1,0 +1,95 @@
+# Batch types workload for Oracle
+#
+# Oracle does not support INSERT...RETURNING in the same way as
+# PostgreSQL, so query_batch is replaced with exec_batch + a
+# follow-up query to fetch the inserted rows for ref_* functions.
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  products: 20
+  reviews: 50
+
+up:
+
+  - name: create_product
+    type: exec
+    query: |-
+      CREATE TABLE product (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        name VARCHAR2(255) NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_review
+    type: exec
+    query: |-
+      CREATE TABLE review (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        product_id NUMBER NOT NULL,
+        rating NUMBER NOT NULL,
+        body VARCHAR2(4000) NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+seed:
+
+  - name: insert_products
+    type: exec_batch
+    count: products
+    args:
+      - gen('productname')
+    query: |-
+      INSERT INTO product (name)
+      SELECT column_value
+      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))
+
+  - name: fetch_products
+    type: query
+    query: SELECT id, name FROM product
+
+  - name: insert_reviews
+    type: exec_batch
+    count: reviews
+    size: 10
+    args:
+      - ref_rand('fetch_products').id
+      - norm(4, 1, 1, 5)
+      - gen('loremipsumsentence:5')
+    query: |-
+      INSERT INTO review (product_id, rating, body)
+      SELECT p.val, r.val, b.val
+      FROM (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))) p
+      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$2', ',', '","') || '"'))) r ON p.rn = r.rn
+      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$3', ',', '","') || '"'))) b ON p.rn = b.rn
+
+deseed:
+
+  - name: truncate_review
+    type: exec
+    query: TRUNCATE TABLE review
+
+  - name: truncate_product
+    type: exec
+    query: TRUNCATE TABLE product
+
+down:
+
+  - name: drop_review
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE review CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_product
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE product CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;

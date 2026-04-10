@@ -1,6 +1,6 @@
 # Exclusive Columns
 
-This example demonstrates how to populate a table where exactly one of two columns must be provided (XOR constraint). A common pattern for tables with a CHECK constraint enforcing mutual exclusivity.
+Demonstrates how to populate a table where exactly one of two columns must be provided (XOR constraint). A common pattern for tables with a CHECK constraint enforcing mutual exclusivity.
 
 ## How it works
 
@@ -27,12 +27,55 @@ CHECK (
 )
 ```
 
-## Running
+## CockroachDB
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_crdb.yml up -d
+docker exec -it node1 cockroach init --insecure
+docker exec -it node1 cockroach sql --insecure
+```
+
+### Run
 
 ```sh
 go run ./cmd/edg all \
 --driver pgx \
 --config _examples/exclusive_columns/crdb.yaml \
---url "postgres://root@localhost:26257?sslmode=disable" 1
---duration 5s
+--url "postgres://root@localhost:26257?sslmode=disable"
+```
+
+## MySQL
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_mysql.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg all \
+--driver mysql \
+--config _examples/exclusive_columns/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/exclusive_columns?parseTime=true"
+```
+
+## Oracle
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_oracle.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg all \
+--driver oracle \
+--config _examples/exclusive_columns/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
 ```

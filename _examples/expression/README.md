@@ -45,44 +45,7 @@ go run ./cmd/edg run \
 --url "postgres://root@localhost:26257?sslmode=disable" \
 -w 1 \
 -d 5s
-```
 
-### Verify
-
-```sql
-SELECT label, result FROM expr_demo ORDER BY label;
-```
-
-```
-        label        |                  result
----------------------+-------------------------------------------
- all(# > 0)          | true
- any(# > 25)         | true
- bitand(0xFF, 0x0F)  | 15
- contains            | true
- filter+map          | 19.99,29.99,14.99
- find(# > 20)        | 29.99
- first               | Alice
- if/else             | B
- keys                | a,b,c
- len(array)          | 5
- let bindings        | 25
- mean                | 15.992
- range 1..5          | 15
- reduce(#acc + #)    | 79.95
- reverse             | Eve,Diana,Charlie,Bob,Alice
- slice [1:3]         | Bob,Charlie
- sort                | 4.99,9.99,14.99,19.99,29.99
- toBase64            | aGVsbG8=
- toJSON              | {"name":"test","value":42}
- trimPrefix          | value
- type                | int
- ...
-```
-
-### Teardown
-
-```sh
 go run ./cmd/edg deseed \
 --driver pgx \
 --config _examples/expression/crdb.yaml \
@@ -92,4 +55,72 @@ go run ./cmd/edg down \
 --driver pgx \
 --config _examples/expression/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
+```
+
+## MySQL
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_mysql.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg up \
+--driver mysql \
+--config _examples/expression/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/expression?parseTime=true"
+
+go run ./cmd/edg run \
+--driver mysql \
+--config _examples/expression/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/expression?parseTime=true" \
+-w 1 \
+-d 5s
+
+go run ./cmd/edg deseed \
+--driver mysql \
+--config _examples/expression/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/expression?parseTime=true"
+
+go run ./cmd/edg down \
+--driver mysql \
+--config _examples/expression/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/expression?parseTime=true"
+```
+
+## Oracle
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_oracle.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg up \
+--driver oracle \
+--config _examples/expression/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+
+go run ./cmd/edg run \
+--driver oracle \
+--config _examples/expression/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb" \
+-w 1 \
+-d 5s
+
+go run ./cmd/edg deseed \
+--driver oracle \
+--config _examples/expression/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+
+go run ./cmd/edg down \
+--driver oracle \
+--config _examples/expression/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
 ```

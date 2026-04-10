@@ -40,3 +40,37 @@ go run ./cmd/edg all \
 --config _examples/expectations/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 ```
+
+## MySQL
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_mysql.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg all \
+--driver mysql \
+--config _examples/expectations/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/expectations?parseTime=true"
+```
+
+## Oracle
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_oracle.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg all \
+--driver oracle \
+--config _examples/expectations/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+```

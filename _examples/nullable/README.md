@@ -1,6 +1,6 @@
 # Nullable Columns
 
-This example demonstrates the `nullable(expr, probability)` function for injecting NULL values into nullable columns with controlled frequency.
+Demonstrates the `nullable(expr, probability)` function for injecting NULL values into nullable columns with controlled frequency.
 
 ## Usage
 
@@ -24,11 +24,55 @@ The example creates a `user` table with several nullable columns, each with a di
 | `bio` | `nullable(gen('sentence:5'), 0.5)` | 50% |
 | `referred_by` | `nullable(uuid_v4(), 0.8)` | 80% |
 
-## Running
+## CockroachDB
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_crdb.yml up -d
+docker exec -it node1 cockroach init --insecure
+docker exec -it node1 cockroach sql --insecure
+```
+
+### Run
 
 ```sh
 go run ./cmd/edg all \
 --driver pgx \
 --config _examples/nullable/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
+```
+
+## MySQL
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_mysql.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg all \
+--driver mysql \
+--config _examples/nullable/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/nullable?parseTime=true"
+```
+
+## Oracle
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_oracle.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg all \
+--driver oracle \
+--config _examples/nullable/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
 ```

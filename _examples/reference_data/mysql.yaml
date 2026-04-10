@@ -1,0 +1,63 @@
+# Reference data workload for MySQL
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
+globals:
+  customers: 100
+
+reference:
+  regions:
+    - {name: us, cities: [a, b, c]}
+    - {name: eu, cities: [d, e, f]}
+    - {name: ap, cities: [g, h, i]}
+
+up:
+
+  - name: create_customer
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS customer (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        email VARCHAR(255) NOT NULL,
+        region VARCHAR(50) NOT NULL,
+        city VARCHAR(50) NOT NULL
+      )
+
+seed:
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    size: 10
+    args:
+      - gen('email')
+      - ref_same('regions').name
+      - set_rand(ref_same('regions').cities, [])
+    query: |-
+      INSERT INTO customer (email, region, city)
+      SELECT j1.val, j2.val, j3.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(255) PATH '$', rn FOR ORDINALITY)
+      ) j1
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$2', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(50) PATH '$', rn FOR ORDINALITY)
+      ) j2 ON j1.rn = j2.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$3', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(50) PATH '$', rn FOR ORDINALITY)
+      ) j3 ON j1.rn = j3.rn
+
+deseed:
+
+  - name: delete_customer
+    type: exec
+    query: DELETE FROM customer
+
+down:
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer

@@ -44,23 +44,7 @@ go run ./cmd/edg run \
 --url "postgres://root@localhost:26257?sslmode=disable" \
 -w 4 \
 -d 10s
-```
 
-### Verify
-
-```sql
-SELECT * FROM agg_snapshot ORDER BY created_at DESC LIMIT 5;
-```
-
-```
-                   id                  | total_products | total_value | avg_price | min_price | max_price | distinct_categories |          created_at
----------------------------------------+----------------+-------------+-----------+-----------+-----------+---------------------+-------------------------------
- a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d |            500 |   125432.50 |    250.87 |      1.23 |    499.87 |                   5 | 2026-04-05 12:00:01.000000+00
-```
-
-### Teardown
-
-```sh
 go run ./cmd/edg deseed \
 --driver pgx \
 --config _examples/aggregation/crdb.yaml \
@@ -70,4 +54,82 @@ go run ./cmd/edg down \
 --driver pgx \
 --config _examples/aggregation/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
+```
+
+## MySQL
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_mysql.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg up \
+--driver mysql \
+--config _examples/aggregation/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/aggregation?parseTime=true"
+
+go run ./cmd/edg seed \
+--driver mysql \
+--config _examples/aggregation/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/aggregation?parseTime=true"
+
+go run ./cmd/edg run \
+--driver mysql \
+--config _examples/aggregation/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/aggregation?parseTime=true" \
+-w 4 \
+-d 10s
+
+go run ./cmd/edg deseed \
+--driver mysql \
+--config _examples/aggregation/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/aggregation?parseTime=true"
+
+go run ./cmd/edg down \
+--driver mysql \
+--config _examples/aggregation/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/aggregation?parseTime=true"
+```
+
+## Oracle
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_oracle.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg up \
+--driver oracle \
+--config _examples/aggregation/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+
+go run ./cmd/edg seed \
+--driver oracle \
+--config _examples/aggregation/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+
+go run ./cmd/edg run \
+--driver oracle \
+--config _examples/aggregation/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb" \
+-w 4 \
+-d 10s
+
+go run ./cmd/edg deseed \
+--driver oracle \
+--config _examples/aggregation/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+
+go run ./cmd/edg down \
+--driver oracle \
+--config _examples/aggregation/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
 ```

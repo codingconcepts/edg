@@ -5,6 +5,8 @@ Demonstrates `query_batch` and `exec_batch` query types. A `query_batch` inserts
 - **`query_batch`** evaluates args per row (controlled by `count` and `size`), collects values into comma-separated strings, and stores the query results for use by `ref_*` functions.
 - **`exec_batch`** does the same arg generation but executes without reading results.
 
+> **Note:** MySQL and Oracle do not support `INSERT...RETURNING`, so the MySQL and Oracle configs use `exec_batch` + a follow-up `query` to fetch inserted rows instead of `query_batch`.
+
 ## CockroachDB
 
 ### Setup
@@ -27,25 +29,7 @@ go run ./cmd/edg seed \
 --driver pgx \
 --config _examples/batch/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
-```
 
-Check data
-
-```sql
-SELECT
-  p.name,
-  COUNT(r.id) AS review_count,
-  AVG(r.rating)::DECIMAL(3,1) AS avg_rating,
-  array_agg(r.rating) AS ratings
-FROM product p
-JOIN review r ON r.product_id = p.id
-GROUP BY p.name
-ORDER BY review_count DESC;
-```
-
-### Teardown
-
-```sh
 go run ./cmd/edg deseed \
 --driver pgx \
 --config _examples/batch/crdb.yaml \
@@ -55,4 +39,68 @@ go run ./cmd/edg down \
 --driver pgx \
 --config _examples/batch/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
+```
+
+## MySQL
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_mysql.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg up \
+--driver mysql \
+--config _examples/batch/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/batch?parseTime=true"
+
+go run ./cmd/edg seed \
+--driver mysql \
+--config _examples/batch/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/batch?parseTime=true"
+
+go run ./cmd/edg deseed \
+--driver mysql \
+--config _examples/batch/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/batch?parseTime=true"
+
+go run ./cmd/edg down \
+--driver mysql \
+--config _examples/batch/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/batch?parseTime=true"
+```
+
+## Oracle
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_oracle.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg up \
+--driver oracle \
+--config _examples/batch/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+
+go run ./cmd/edg seed \
+--driver oracle \
+--config _examples/batch/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+
+go run ./cmd/edg deseed \
+--driver oracle \
+--config _examples/batch/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+
+go run ./cmd/edg down \
+--driver oracle \
+--config _examples/batch/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
 ```

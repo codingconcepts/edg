@@ -49,47 +49,35 @@ go run ./cmd/edg down \
 --url "postgres://root@localhost:26257?sslmode=disable"
 ```
 
-## Oracle
+## MySQL
 
 ### Setup
 
 ```sh
-docker run \
---name oracle \
--d \
--p 1521:1521 \
--p 5500:5500 \
--e ORACLE_PDB=defaultdb \
--e ORACLE_PWD=password \
-container-registry.oracle.com/database/enterprise:19.19.0.0
+docker compose -f _examples/compose_mysql.yml up -d
 ```
 
 ### Run
 
 ```sh
-go run ./cmd/edg up \
---driver oracle \
---config _examples/bank/oracle.yaml \
---url "oracle://system:password@localhost:1521/defaultdb"
+go run ./cmd/edg all \
+--driver mysql \
+--config _examples/bank/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/bank?parseTime=true"
+```
 
-go run ./cmd/edg seed \
---driver oracle \
---config _examples/bank/oracle.yaml \
---url "oracle://system:password@localhost:1521/defaultdb"
+## Oracle
 
-go run ./cmd/edg run \
---driver oracle \
---config _examples/bank/oracle.yaml \
---url "oracle://system:password@localhost:1521/defaultdb" \
--w 100 \
--d 1m
+### Setup
 
-go run ./cmd/edg deseed \
---driver oracle \
---config _examples/bank/oracle.yaml \
---url "oracle://system:password@localhost:1521/defaultdb"
+```sh
+docker compose -f _examples/compose_oracle.yml up -d
+```
 
-go run ./cmd/edg down \
+### Run
+
+```sh
+go run ./cmd/edg all \
 --driver oracle \
 --config _examples/bank/oracle.yaml \
 --url "oracle://system:password@localhost:1521/defaultdb"

@@ -1,0 +1,15 @@
+- name: create_customer
+  query: |-
+    CREATE TABLE IF NOT EXISTS customer (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      email VARCHAR(255) NOT NULL
+    )
+
+- name: create_account
+  query: |-
+    CREATE TABLE IF NOT EXISTS account (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      balance DOUBLE NOT NULL,
+      customer_id CHAR(36) NOT NULL,
+      FOREIGN KEY (customer_id) REFERENCES customer(id)
+    )

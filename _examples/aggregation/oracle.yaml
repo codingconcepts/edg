@@ -1,0 +1,103 @@
+# Aggregation workload for Oracle
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  products: 500
+  batch_size: 100
+
+up:
+
+  - name: create_product
+    query: |-
+      CREATE TABLE product (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        category VARCHAR2(50) NOT NULL,
+        price NUMBER(10,2) NOT NULL,
+        stock_qty NUMBER NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+  - name: create_agg_snapshot
+    query: |-
+      CREATE TABLE agg_snapshot (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        total_products NUMBER NOT NULL,
+        total_value NUMBER(12,2) NOT NULL,
+        avg_price NUMBER(10,2) NOT NULL,
+        min_price NUMBER(10,2) NOT NULL,
+        max_price NUMBER(10,2) NOT NULL,
+        distinct_categories NUMBER NOT NULL,
+        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+        PRIMARY KEY (id)
+      )
+
+seed:
+
+  - name: populate_product
+    args:
+      - products
+    query: |-
+      INSERT INTO product (category, price, stock_qty)
+      SELECT
+        DECODE(TRUNC(DBMS_RANDOM.VALUE * 5 + 1), 1, 'electronics', 2, 'clothing', 3, 'books', 4, 'food', 'toys'),
+        TRUNC(DBMS_RANDOM.VALUE * 499 + 1, 2),
+        TRUNC(DBMS_RANDOM.VALUE * 200 + 1)
+      FROM DUAL
+      CONNECT BY LEVEL <= $1
+
+deseed:
+
+  - name: truncate_agg_snapshot
+    type: exec
+    query: TRUNCATE TABLE agg_snapshot
+
+  - name: truncate_product
+    type: exec
+    query: TRUNCATE TABLE product
+
+down:
+
+  - name: drop_agg_snapshot
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE agg_snapshot CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_product
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE product CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+run:
+
+  - name: fetch_products
+    type: query
+    args:
+      - gen('number:1,10')
+    query: |-
+      SELECT id, category, price, stock_qty
+      FROM product
+      ORDER BY DBMS_RANDOM.VALUE
+      FETCH FIRST :1 ROWS ONLY
+
+  - name: record_snapshot
+    type: exec
+    args:
+      - count('fetch_products')
+      - sum('fetch_products', 'price')
+      - avg('fetch_products', 'price')
+      - min('fetch_products', 'price')
+      - max('fetch_products', 'price')
+      - distinct('fetch_products', 'category')
+    query: |-
+      INSERT INTO agg_snapshot (total_products, total_value, avg_price, min_price, max_price, distinct_categories)
+      VALUES (:1, :2, :3, :4, :5, :6)

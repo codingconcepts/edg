@@ -1,0 +1,124 @@
+# Stages workload for MySQL
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
+globals:
+  customers: 100000
+  initial_balance: 10000
+  batch_size: 10000
+
+stages:
+  - name: ramp
+    workers: 1
+    duration: 10s
+  - name: steady
+    workers: 10
+    duration: 30s
+
+up:
+
+  - name: create_customer
+    query: |-
+      CREATE TABLE IF NOT EXISTS customer (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        email VARCHAR(255) NOT NULL
+      )
+
+  - name: create_account
+    query: |-
+      CREATE TABLE IF NOT EXISTS account (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        balance DOUBLE NOT NULL,
+        customer_id CHAR(36) NOT NULL,
+        FOREIGN KEY (customer_id) REFERENCES customer(id)
+      )
+
+seed:
+
+  - name: populate_customer
+    args:
+      - gen_batch(customers, batch_size, 'email')
+    query: |-
+      INSERT INTO customer (email)
+      SELECT j.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
+      ) j
+
+  - name: populate_account
+    args:
+      - batch(customers / batch_size)
+      - initial_balance
+      - batch_size
+    query: |-
+      INSERT INTO account (balance, customer_id)
+      SELECT $2, c.id
+      FROM customer c
+      ORDER BY c.id
+      LIMIT $3 OFFSET $1 * $3
+
+deseed:
+
+  - name: delete_account
+    type: exec
+    query: DELETE FROM account
+
+  - name: delete_customer
+    type: exec
+    query: DELETE FROM customer
+
+down:
+
+  - name: drop_account
+    type: exec
+    query: DROP TABLE IF EXISTS account
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer
+
+init:
+
+  - name: fetch_accounts
+    type: query
+    query: SELECT id FROM account ORDER BY RAND()
+
+run_weights:
+  check_balance: 50
+  credit_account: 5
+  make_transfer: 45
+
+run:
+
+  - name: check_balance
+    type: query
+    args:
+      - ref_rand('fetch_accounts').id
+    query: |-
+      SELECT balance FROM account WHERE id = ?
+
+  - name: credit_account
+    type: exec
+    args:
+      - gen('number:1,1000')
+      - ref_rand('fetch_accounts').id
+    query: |-
+      UPDATE account SET balance = balance + ?
+      WHERE id = ?
+
+  - name: make_transfer
+    type: exec
+    args:
+      - ref_diff('fetch_accounts').id
+      - ref_diff('fetch_accounts').id
+      - gen('number:1,100')
+    query: |-
+      UPDATE account a
+      JOIN (SELECT ? AS from_id, ? AS to_id, CAST(? AS DOUBLE) AS amount) p ON 1=1
+      SET a.balance = CASE
+                        WHEN a.id = p.to_id THEN a.balance + p.amount
+                        WHEN a.id = p.from_id THEN a.balance - p.amount
+                      END
+      WHERE a.id = p.from_id OR a.id = p.to_id

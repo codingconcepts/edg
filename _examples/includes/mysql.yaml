@@ -1,0 +1,61 @@
+# Config Includes workload for MySQL
+#
+# Demonstrates the !include directive with MySQL-specific SQL.
+# Globals are shared across all databases; schema, teardown,
+# and run queries use database-specific include files.
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
+globals: !include shared/globals.yaml
+
+up: !include shared/schema_mysql.yaml
+
+seed:
+
+  - name: populate_customer
+    args:
+      - gen_batch(customers, batch_size, 'email')
+    query: |-
+      INSERT INTO customer (email)
+      SELECT j.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
+      ) j
+
+  - name: populate_account
+    args:
+      - batch(customers / batch_size)
+      - initial_balance
+      - batch_size
+    query: |-
+      INSERT INTO account (balance, customer_id)
+      SELECT $2, c.id
+      FROM customer c
+      ORDER BY c.id
+      LIMIT $3 OFFSET $1 * $3
+
+deseed:
+
+  - name: delete_account
+    type: exec
+    query: DELETE FROM account
+
+  - name: delete_customer
+    type: exec
+    query: DELETE FROM customer
+
+down: !include shared/teardown_mysql.yaml
+
+init:
+
+  - name: fetch_accounts
+    type: query
+    query: SELECT id FROM account ORDER BY RAND()
+
+run_weights:
+  check_balance: 50
+  credit_account: 50
+
+run: !include shared/run_queries_mysql.yaml

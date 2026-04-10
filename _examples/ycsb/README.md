@@ -51,3 +51,81 @@ go run ./cmd/edg down \
 --config _examples/ycsb/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
 ```
+
+## MySQL
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_mysql.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg up \
+--driver mysql \
+--config _examples/ycsb/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/ycsb?parseTime=true"
+
+go run ./cmd/edg seed \
+--driver mysql \
+--config _examples/ycsb/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/ycsb?parseTime=true"
+
+go run ./cmd/edg run \
+--driver mysql \
+--config _examples/ycsb/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/ycsb?parseTime=true" \
+-w 100 \
+-d 1m
+
+go run ./cmd/edg deseed \
+--driver mysql \
+--config _examples/ycsb/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/ycsb?parseTime=true"
+
+go run ./cmd/edg down \
+--driver mysql \
+--config _examples/ycsb/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/ycsb?parseTime=true"
+```
+
+## Oracle
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_oracle.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg up \
+--driver oracle \
+--config _examples/ycsb/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+
+go run ./cmd/edg seed \
+--driver oracle \
+--config _examples/ycsb/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+
+go run ./cmd/edg run \
+--driver oracle \
+--config _examples/ycsb/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb" \
+-w 100 \
+-d 1m
+
+go run ./cmd/edg deseed \
+--driver oracle \
+--config _examples/ycsb/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+
+go run ./cmd/edg down \
+--driver oracle \
+--config _examples/ycsb/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+```

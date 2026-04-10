@@ -43,19 +43,51 @@ go run ./cmd/edg down \
 --url "postgres://root@localhost:26257?sslmode=disable"
 ```
 
+## MySQL
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_mysql.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg up \
+--driver mysql \
+--config _examples/tpcc/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/tpcc?parseTime=true"
+
+go run ./cmd/edg seed \
+--driver mysql \
+--config _examples/tpcc/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/tpcc?parseTime=true"
+
+go run ./cmd/edg run \
+--driver mysql \
+--config _examples/tpcc/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/tpcc?parseTime=true" \
+-w 100 \
+-d 1m
+
+go run ./cmd/edg deseed \
+--driver mysql \
+--config _examples/tpcc/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/tpcc?parseTime=true"
+
+go run ./cmd/edg down \
+--driver mysql \
+--config _examples/tpcc/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/tpcc?parseTime=true"
+```
+
 ## Oracle
 
 ### Setup
 
 ```sh
-docker run \
---name oracle \
--d \
--p 1521:1521 \
--p 5500:5500 \
--e ORACLE_PDB=defaultdb \
--e ORACLE_PWD=password \
-container-registry.oracle.com/database/enterprise:19.19.0.0
+docker compose -f _examples/compose_oracle.yml up -d
 ```
 
 ### Run

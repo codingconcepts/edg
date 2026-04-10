@@ -1,0 +1,57 @@
+# Nullable columns workload for Oracle
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  users: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_user
+    query: |-
+      CREATE TABLE "user" (
+        id NUMBER GENERATED ALWAYS AS IDENTITY,
+        email VARCHAR2(255) NOT NULL,
+        phone VARCHAR2(50),
+        bio VARCHAR2(4000),
+        referred_by VARCHAR2(36),
+        PRIMARY KEY (id)
+      )
+
+seed:
+
+  - name: populate_user
+    type: exec_batch
+    count: users
+    size: batch_size
+    args:
+      - gen('email')
+      - nullable(gen('phone'), 0.3)
+      - nullable(gen('sentence:5'), 0.5)
+      - nullable(uuid_v4(), 0.8)
+    query: |-
+      INSERT INTO "user" (email, phone, bio, referred_by)
+      SELECT e.val, p.val, b.val, r.val
+      FROM (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))) e
+      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$2', ',', '","') || '"'))) p ON e.rn = p.rn
+      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$3', ',', '","') || '"'))) b ON e.rn = b.rn
+      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$4', ',', '","') || '"'))) r ON e.rn = r.rn
+
+deseed:
+
+  - name: truncate_user
+    type: exec
+    query: TRUNCATE TABLE "user"
+
+down:
+
+  - name: drop_user
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE "user" CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;

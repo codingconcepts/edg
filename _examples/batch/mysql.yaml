@@ -1,0 +1,96 @@
+# Batch types workload for MySQL
+#
+# MySQL does not support INSERT...RETURNING, so query_batch is
+# replaced with exec_batch + a follow-up query to fetch the
+# inserted rows for use by ref_* functions.
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
+globals:
+  products: 20
+  reviews: 50
+
+up:
+
+  - name: create_product
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS product (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        name VARCHAR(255) NOT NULL
+      )
+
+  - name: create_review
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS review (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        product_id CHAR(36) NOT NULL,
+        rating INT NOT NULL,
+        body TEXT NOT NULL,
+        FOREIGN KEY (product_id) REFERENCES product(id)
+      )
+
+seed:
+
+  - name: insert_products
+    type: exec_batch
+    count: products
+    args:
+      - gen('productname')
+    query: |-
+      INSERT INTO product (name)
+      SELECT j.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
+      ) j
+
+  - name: fetch_products
+    type: query
+    query: SELECT id, name FROM product
+
+  - name: insert_reviews
+    type: exec_batch
+    count: reviews
+    size: 10
+    args:
+      - ref_rand('fetch_products').id
+      - norm(4, 1, 1, 5)
+      - gen('loremipsumsentence:5')
+    query: |-
+      INSERT INTO review (product_id, rating, body)
+      SELECT j1.val, CAST(j2.val AS UNSIGNED), j3.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(36) PATH '$', rn FOR ORDINALITY)
+      ) j1
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$2', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(20) PATH '$', rn FOR ORDINALITY)
+      ) j2 ON j1.rn = j2.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$3', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val TEXT PATH '$', rn FOR ORDINALITY)
+      ) j3 ON j1.rn = j3.rn
+
+deseed:
+
+  - name: delete_review
+    type: exec
+    query: DELETE FROM review
+
+  - name: delete_product
+    type: exec
+    query: DELETE FROM product
+
+down:
+
+  - name: drop_review
+    type: exec
+    query: DROP TABLE IF EXISTS review
+
+  - name: drop_product
+    type: exec
+    query: DROP TABLE IF EXISTS product

@@ -50,60 +50,7 @@ go run ./cmd/edg run \
 --url "postgres://root@localhost:26257?sslmode=disable" \
 -w 10 \
 -d 30s
-```
 
-### Verify distributions
-
-After running, query each distribution as a histogram. The `value` column is bucketed into ranges of 10, and the bar length is scaled relative to the most common bucket within that distribution.
-
-#### All distributions at a glance
-
-```sql
-SELECT
-  dist_type,
-  (floor(value / 10) * 10)::INT AS bucket,
-  count(*) AS total,
-  repeat('#', (count(*) * 40 / max(count(*)) OVER (PARTITION BY dist_type))::INT) AS histogram
-FROM distributions
-GROUP BY dist_type, bucket
-ORDER BY dist_type, bucket;
-```
-
-#### Individual distribution
-
-Replace `'normal'` with any of: `uniform`, `zipfian`, `normal`, `exponential`, `lognormal`.
-
-```sql
-SELECT
-  (floor(value / 10) * 10)::INT AS bucket,
-  count(*) AS total,
-  repeat('#', (count(*) * 50 / max(count(*)) OVER ())::INT) AS histogram
-FROM distributions
-WHERE dist_type = 'normal'
-GROUP BY bucket
-ORDER BY bucket;
-```
-
-Example output (normal):
-
-```
-  bucket | total |                     histogram
----------+-------+-----------------------------------------------------
-       0 |    21 | #
-      10 |   122 | ####
-      20 |   476 | ##############
-      30 |  1083 | #################################
-      40 |  1599 | ################################################
-      50 |  1661 | ##################################################
-      60 |  1087 | #################################
-      70 |   472 | ##############
-      80 |   132 | ####
-      90 |    25 | #
-```
-
-### Teardown
-
-```sh
 go run ./cmd/edg deseed \
 --driver pgx \
 --config _examples/distributions/crdb.yaml \
@@ -113,4 +60,72 @@ go run ./cmd/edg down \
 --driver pgx \
 --config _examples/distributions/crdb.yaml \
 --url "postgres://root@localhost:26257?sslmode=disable"
+```
+
+## MySQL
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_mysql.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg up \
+--driver mysql \
+--config _examples/distributions/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/distributions?parseTime=true"
+
+go run ./cmd/edg run \
+--driver mysql \
+--config _examples/distributions/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/distributions?parseTime=true" \
+-w 10 \
+-d 30s
+
+go run ./cmd/edg deseed \
+--driver mysql \
+--config _examples/distributions/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/distributions?parseTime=true"
+
+go run ./cmd/edg down \
+--driver mysql \
+--config _examples/distributions/mysql.yaml \
+--url "root:password@tcp(localhost:3306)/distributions?parseTime=true"
+```
+
+## Oracle
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_oracle.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg up \
+--driver oracle \
+--config _examples/distributions/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+
+go run ./cmd/edg run \
+--driver oracle \
+--config _examples/distributions/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb" \
+-w 10 \
+-d 30s
+
+go run ./cmd/edg deseed \
+--driver oracle \
+--config _examples/distributions/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
+
+go run ./cmd/edg down \
+--driver oracle \
+--config _examples/distributions/oracle.yaml \
+--url "oracle://system:password@localhost:1521/defaultdb"
 ```
