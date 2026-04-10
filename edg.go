@@ -16,8 +16,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/codingconcepts/edg/pkg"
 	"github.com/codingconcepts/edg/pkg/config"
+	"github.com/codingconcepts/edg/pkg/env"
 	"github.com/codingconcepts/edg/pkg/random"
 	"github.com/expr-lang/expr"
 	_ "github.com/go-sql-driver/mysql"
@@ -49,7 +49,7 @@ func main() {
 			input := strings.Join(args, " ")
 
 			var req config.Request
-			env, err := pkg.NewEnv(nil, &req)
+			env, err := env.NewEnv(nil, &req)
 			if err != nil {
 				return err
 			}
@@ -135,7 +135,7 @@ func upCmd() *cobra.Command {
 			}
 			defer db.Close()
 
-			env, err := pkg.NewEnv(db, req)
+			env, err := env.NewEnv(db, req)
 			if err != nil {
 				return err
 			}
@@ -156,7 +156,7 @@ func seedCmd() *cobra.Command {
 			}
 			defer db.Close()
 
-			env, err := pkg.NewEnv(db, req)
+			env, err := env.NewEnv(db, req)
 			if err != nil {
 				return err
 			}
@@ -177,7 +177,7 @@ func deseedCmd() *cobra.Command {
 			}
 			defer db.Close()
 
-			env, err := pkg.NewEnv(db, req)
+			env, err := env.NewEnv(db, req)
 			if err != nil {
 				return err
 			}
@@ -198,7 +198,7 @@ func downCmd() *cobra.Command {
 			}
 			defer db.Close()
 
-			env, err := pkg.NewEnv(db, req)
+			env, err := env.NewEnv(db, req)
 			if err != nil {
 				return err
 			}
@@ -226,7 +226,7 @@ func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config
 }
 
 func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *config.Request, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
-	initEnv, err := pkg.NewEnv(db, req)
+	initEnv, err := env.NewEnv(db, req)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -277,7 +277,7 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *confi
 }
 
 func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config.Request, duration time.Duration, workers int, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
-	initEnv, err := pkg.NewEnv(db, req)
+	initEnv, err := env.NewEnv(db, req)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -340,12 +340,12 @@ func runCmd() *cobra.Command {
 	return cmd
 }
 
-func startWorkers(ctx context.Context, numWorkers int, db *sql.DB, req *config.Request, initEnv *pkg.Env, results chan<- config.QueryResult) *sync.WaitGroup {
+func startWorkers(ctx context.Context, numWorkers int, db *sql.DB, req *config.Request, initEnv *env.Env, results chan<- config.QueryResult) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
 	for i := range numWorkers {
 		wg.Go(func() {
-			workerEnv, err := pkg.NewEnv(db, req)
+			workerEnv, err := env.NewEnv(db, req)
 			if err != nil {
 				slog.Error("env error", "worker", i, "error", err)
 				return
@@ -521,7 +521,7 @@ func allCmd() *cobra.Command {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
 			defer cancel()
 
-			env, err := pkg.NewEnv(db, req)
+			env, err := env.NewEnv(db, req)
 			if err != nil {
 				return err
 			}
@@ -581,7 +581,7 @@ func validateCmd() *cobra.Command {
 				return err
 			}
 
-			if _, err := pkg.NewEnv(nil, req); err != nil {
+			if _, err := env.NewEnv(nil, req); err != nil {
 				return err
 			}
 
@@ -691,7 +691,7 @@ func replCmd() *cobra.Command {
 				req = *r
 			}
 
-			env, err := pkg.NewEnv(nil, &req)
+			env, err := env.NewEnv(nil, &req)
 			if err != nil {
 				return err
 			}

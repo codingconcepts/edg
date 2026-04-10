@@ -39,7 +39,6 @@ View the docs [here](https://edg.run/docs).
 
 ## Todos
 
-* Schema introspection - generate scripts from existing databases
 * Multi-statement transactions - wrap multiple run queries in explicit BEGIN/COMMIT for realistic workload simulation (e.g., read-then-write patterns)
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences
 * Global sequencies (`seq_global(name, start, step)`) for all workers to share in a thread safe way
