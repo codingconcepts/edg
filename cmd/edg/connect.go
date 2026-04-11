@@ -33,6 +33,8 @@ func connect() (*sql.DB, *config.Request, error) {
 	switch flagDriver {
 	case "dsql":
 		db, err = connectDSQL(context.Background(), url)
+	case "mssql":
+		db, err = sql.Open("sqlserver", url)
 	default:
 		db, err = sql.Open(flagDriver, url)
 	}

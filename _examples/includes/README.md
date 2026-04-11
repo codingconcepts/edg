@@ -22,21 +22,21 @@ includes/
   crdb.yaml                          # CockroachDB workload
   mysql.yaml                         # MySQL workload
   oracle.yaml                        # Oracle workload
-  sqlserver.yaml                     # SQL Server workload
+  mssql.yaml                         # MSSQL workload
   shared/
     globals.yaml                     # Shared global variables (all databases)
     schema.yaml                      # CockroachDB schema
     schema_mysql.yaml                # MySQL schema
     schema_oracle.yaml               # Oracle schema
-    schema_sqlserver.yaml            # SQL Server schema
+    schema_mssql.yaml                # MSSQL schema
     teardown.yaml                    # CockroachDB teardown
     teardown_mysql.yaml              # MySQL teardown
     teardown_oracle.yaml             # Oracle teardown
-    teardown_sqlserver.yaml          # SQL Server teardown
+    teardown_mssql.yaml              # MSSQL teardown
     run_queries.yaml                 # CockroachDB run queries
     run_queries_mysql.yaml           # MySQL run queries
     run_queries_oracle.yaml          # Oracle run queries
-    run_queries_sqlserver.yaml       # SQL Server run queries
+    run_queries_mssql.yaml           # MSSQL run queries
 ```
 
 ## What can be included
@@ -116,19 +116,19 @@ go run ./cmd/edg all \
 --url "oracle://system:password@localhost:1521/defaultdb"
 ```
 
-## SQL Server
+## MSSQL
 
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_sqlserver.yml up -d
+docker compose -f _examples/compose_mssql.yml up -d
 ```
 
 ### Run
 
 ```sh
 go run ./cmd/edg all \
---driver sqlserver \
---config _examples/includes/sqlserver.yaml \
+--driver mssql \
+--config _examples/includes/mssql.yaml \
 --url "sqlserver://sa:P4ssw0rd@localhost:1433?database=includes&encrypt=disable"
 ```

@@ -16,7 +16,7 @@ Query arguments are written as expressions compiled at startup, giving you acces
 | Aurora DSQL | `dsql` | `clusterid.dsql.us-east-1.on.aws` |
 | Oracle | `oracle` | `oracle://system:password@localhost:1521/db` |
 | MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
-| SQL Server | `sqlserver` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
+| MSSQL | `mssql` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
 
 ## Quick Start
 
@@ -39,7 +39,6 @@ View the docs [here](https://edg.run/docs).
 
 ## Todos
 
-* sqlserver -> mssql
 * Multi-statement transactions - wrap multiple run queries in explicit BEGIN/COMMIT for realistic workload simulation (e.g., read-then-write patterns)
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences
 * Global sequencies (`seq_global(name, start, step)`) for all workers to share in a thread safe way

@@ -32,8 +32,8 @@ var mysqlConfig []byte
 //go:embed testdata/oracle.yaml
 var oracleConfig []byte
 
-//go:embed testdata/sqlserver.yaml
-var sqlserverConfig []byte
+//go:embed testdata/mssql.yaml
+var mssqlConfig []byte
 
 const runIterations = 5
 
@@ -233,10 +233,10 @@ func TestIntegration_Oracle(t *testing.T) {
 	runIntegrationTests(t, oracleConfig, queries)
 }
 
-func TestIntegration_SQLServer(t *testing.T) {
+func TestIntegration_MSSQL(t *testing.T) {
 	skipIfNoDB(t)
-	if driverName != "sqlserver" {
-		t.Skip("skipping SQL Server test (DRIVER != sqlserver)")
+	if driverName != "mssql" {
+		t.Skip("skipping MSSQL test (DRIVER != mssql)")
 	}
 
 	queries := map[string]string{
@@ -258,7 +258,7 @@ func TestIntegration_SQLServer(t *testing.T) {
 		"agg":           "SELECT sum_val, avg_val, min_val, max_val, count_val, distinct_val FROM test_agg",
 	}
 
-	runIntegrationTests(t, sqlserverConfig, queries)
+	runIntegrationTests(t, mssqlConfig, queries)
 }
 
 func runIntegrationTests(t *testing.T, config []byte, queries map[string]string) {

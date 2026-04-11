@@ -229,9 +229,9 @@ seed:
 
 #### JSON format (`batch_format: json`)
 
-When `batch_format` is set to `json`, each arg position is serialized as a properly escaped JSON array (e.g. `["val1","val2","val3"]`). This is required for SQL Server, where the default CSV format can break `OPENJSON` if values contain commas or double quotes.
+When `batch_format` is set to `json`, each arg position is serialized as a properly escaped JSON array (e.g. `["val1","val2","val3"]`). This is required for MSSQL, where the default CSV format can break `OPENJSON` if values contain commas or double quotes.
 
-With `batch_format: json`, SQL Server queries use `OPENJSON('$N')` directly with no string manipulation needed:
+With `batch_format: json`, MSSQL queries use `OPENJSON('$N')` directly with no string manipulation needed:
 
 ```yaml
 seed:
@@ -300,7 +300,7 @@ Each driver has its own placeholder format:
 | `dsql` (Aurora DSQL) | `$1`, `$2`, `$3` |
 | `mysql` | `?` (positional) |
 | `oracle` | `:1`, `:2`, `:3` |
-| `sqlserver` | `@p1`, `@p2`, `@p3` |
+| `mssql` | `@p1`, `@p2`, `@p3` |
 
 Since `run` queries always use bind params, their SQL must use the correct format for the target driver.
 

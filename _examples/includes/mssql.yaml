@@ -9,7 +9,7 @@
 
 globals: !include shared/globals.yaml
 
-up: !include shared/schema_sqlserver.yaml
+up: !include shared/schema_mssql.yaml
 
 seed:
 
@@ -42,7 +42,7 @@ deseed:
     type: exec
     query: DELETE FROM customer
 
-down: !include shared/teardown_sqlserver.yaml
+down: !include shared/teardown_mssql.yaml
 
 init:
 
@@ -54,4 +54,4 @@ run_weights:
   check_balance: 50
   credit_account: 50
 
-run: !include shared/run_queries_sqlserver.yaml
+run: !include shared/run_queries_mssql.yaml

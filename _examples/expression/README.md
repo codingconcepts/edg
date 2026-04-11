@@ -125,36 +125,36 @@ go run ./cmd/edg down \
 --url "oracle://system:password@localhost:1521/defaultdb"
 ```
 
-## SQL Server
+## MSSQL
 
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_sqlserver.yml up -d
+docker compose -f _examples/compose_mssql.yml up -d
 ```
 
 ### Run
 
 ```sh
 go run ./cmd/edg up \
---driver sqlserver \
---config _examples/expression/sqlserver.yaml \
+--driver mssql \
+--config _examples/expression/mssql.yaml \
 --url "sqlserver://sa:P4ssw0rd@localhost:1433?database=expression&encrypt=disable"
 
 go run ./cmd/edg run \
---driver sqlserver \
---config _examples/expression/sqlserver.yaml \
+--driver mssql \
+--config _examples/expression/mssql.yaml \
 --url "sqlserver://sa:P4ssw0rd@localhost:1433?database=expression&encrypt=disable" \
 -w 1 \
 -d 5s
 
 go run ./cmd/edg deseed \
---driver sqlserver \
---config _examples/expression/sqlserver.yaml \
+--driver mssql \
+--config _examples/expression/mssql.yaml \
 --url "sqlserver://sa:P4ssw0rd@localhost:1433?database=expression&encrypt=disable"
 
 go run ./cmd/edg down \
---driver sqlserver \
---config _examples/expression/sqlserver.yaml \
+--driver mssql \
+--config _examples/expression/mssql.yaml \
 --url "sqlserver://sa:P4ssw0rd@localhost:1433?database=expression&encrypt=disable"
 ```

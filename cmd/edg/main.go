@@ -53,7 +53,7 @@ func main() {
 
 	root.PersistentFlags().StringVar(&flagURL, "url", "", "database connection URL (env: URL)")
 	root.PersistentFlags().StringVar(&configFile, "config", "", "workload YAML config file")
-	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql, sqlserver, dsql]")
+	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql, mssql, dsql]")
 	root.PersistentFlags().Uint64Var(&flagRngSeed, "rng-seed", 0, "PRNG seed for deterministic output")
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {

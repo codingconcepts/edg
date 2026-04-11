@@ -24,6 +24,7 @@ type dbConfig struct {
 	compose  string
 	yamlFile string
 	initCmds [][]string
+	timeout  time.Duration
 }
 
 var databases = map[string]dbConfig{
@@ -32,12 +33,14 @@ var databases = map[string]dbConfig{
 		url:      "postgres://root@localhost:26257?sslmode=disable",
 		compose:  "compose_crdb.yml",
 		yamlFile: "crdb.yaml",
+		timeout:  60 * time.Second,
 	},
 	"mysql": {
 		driver:   "mysql",
 		url:      "root:password@tcp(localhost:3306)/mysql?parseTime=true",
 		compose:  "compose_mysql.yml",
 		yamlFile: "mysql.yaml",
+		timeout:  60 * time.Second,
 		initCmds: [][]string{
 			{"docker", "exec", "mysql", "mysql", "-uroot", "-ppassword", "-e", "SET GLOBAL cte_max_recursion_depth = 200000"},
 		},
@@ -47,19 +50,21 @@ var databases = map[string]dbConfig{
 		url:      "oracle://system:password@localhost:1521/defaultdb",
 		compose:  "compose_oracle.yml",
 		yamlFile: "oracle.yaml",
+		timeout:  10 * time.Minute,
 	},
-	"sqlserver": {
+	"mssql": {
 		driver:   "sqlserver",
 		url:      "sqlserver://sa:P4ssw0rd@localhost:1433?database=master&encrypt=disable",
-		compose:  "compose_sqlserver.yml",
-		yamlFile: "sqlserver.yaml",
+		compose:  "compose_mssql.yml",
+		yamlFile: "mssql.yaml",
+		timeout:  60 * time.Second,
 	},
 }
 
 func main() {
 	log.SetFlags(0)
 
-	dbType := flag.String("db", "", "database type: crdb, mysql, oracle, sqlserver")
+	dbType := flag.String("db", "", "database type: crdb, mysql, oracle, mssql")
 	examplesDir := flag.String("examples", "_examples", "path to examples directory")
 	startFrom := flag.String("start", "", "skip examples before this one (by directory name)")
 	duration := flag.Duration("duration", 5*time.Second, "run duration per example")
@@ -67,13 +72,13 @@ func main() {
 	flag.Parse()
 
 	if *dbType == "" {
-		fmt.Fprintln(os.Stderr, "usage: harness -db <crdb|mysql|oracle|sqlserver>")
+		fmt.Fprintln(os.Stderr, "usage: harness -db <crdb|mysql|oracle|mssql>")
 		os.Exit(1)
 	}
 
 	cfg, ok := databases[*dbType]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "unsupported database: %s\nvalid options: crdb, mysql, oracle, sqlserver\n", *dbType)
+		fmt.Fprintf(os.Stderr, "unsupported database: %s\nvalid options: crdb, mysql, oracle, mssql\n", *dbType)
 		os.Exit(1)
 	}
 
@@ -201,7 +206,8 @@ func runInitWithRetry(args []string, maxRetries int) error {
 }
 
 func waitForDB(cfg dbConfig) error {
-	for range 60 {
+	retries := int(cfg.timeout.Seconds())
+	for range retries {
 		db, err := sql.Open(cfg.driver, cfg.url)
 		if err == nil {
 			err = db.Ping()
@@ -213,5 +219,5 @@ func waitForDB(cfg dbConfig) error {
 		}
 		time.Sleep(time.Second)
 	}
-	return fmt.Errorf("database did not become ready within 60 seconds")
+	return fmt.Errorf("database did not become ready within %s", cfg.timeout)
 }

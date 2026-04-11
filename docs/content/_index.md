@@ -19,7 +19,7 @@ Query arguments are written as expressions compiled at startup, giving you acces
 | Aurora DSQL | `dsql` | `clusterid.dsql.us-east-1.on.aws` |
 | Oracle | `oracle` | `oracle://system:password@localhost:1521/db` |
 | MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
-| SQL Server | `sqlserver` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
+| MSSQL | `mssql` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
 
 ## Quick Start
 
