@@ -154,6 +154,8 @@ run:
       - ten_percent                             # $14 1000
 ```
 
+## expr examples
+
 Expressions support the full expr-lang feature set, including:
 
 | Category | Examples |
@@ -170,8 +172,6 @@ Expressions support the full expr-lang feature set, including:
 | String functions | `upper()`, `lower()`, `trim()`, `trimPrefix()`, `trimSuffix()`, `split()`, `splitAfter()`, `replace()`, `repeat()`, `indexOf()`, `lastIndexOf()`, `hasPrefix()`, `hasSuffix()` |
 | String operators | `contains`, `startsWith`, `endsWith`, `matches` (regex) |
 | Type conversion | `int()`, `float()`, `string()`, `type()`, `toJSON()`, `fromJSON()`, `toBase64()`, `fromBase64()`, `toPairs()`, `fromPairs()` |
-
-## expr examples
 
 Here are some example expressions and their outputs but visit the [Expressions example](https://github.com/codingconcepts/edg/tree/main/_examples/expression/) for a complete demonstration of every category.
 
@@ -320,6 +320,11 @@ Pick from a predefined set of values using a distribution to control which items
 
 ```yaml
 args:
+  
+  #########################
+  # Constants and globals #
+  #########################
+
   # Always passes the integer 42.
   - const(42)
 
@@ -327,12 +332,93 @@ args:
   - expr(warehouses * 10)
   - warehouses * 10
 
+  # Looks up a global by name. Equivalent to using the variable directly.
+  - global('warehouses')
+
+  ###############
+  # Identifiers #
+  ###############
+
+  # Generates a random UUID v1 (timestamp + node ID).
+  - uuid_v1()
+
+  # Generates a random UUID v4 (random).
+  - uuid_v4()
+
+  # Generates a random UUID v6 (reordered timestamp).
+  - uuid_v6()
+
+  # Generates a random UUID v7 (time-ordered, sortable).
+  - uuid_v7()
+
+  # Auto-incrementing sequence: 1, 2, 3, ... (shared across calls for the worker).
+  - seq(1, 1)
+
+  # Auto-incrementing with custom start and step: 100, 110, 120, ...
+  - seq(100, 10)
+
+  #################
+  # Random values #
+  #################
+
   # Generates a random integer between 1 and 10 using gofakeit.
   - gen('number:1,10')
 
-  # Returns a random row from the 'fetch_warehouses' init query, pinned to this
-  # worker for its lifetime, and extracts the w_id field.
-  - ref_perm('fetch_warehouses').w_id
+  # Generate a product code matching a regex pattern.
+  - regex('[A-Z]{3}-[0-9]{4}')
+
+  # Regex: generate a random US phone number.
+  - regex('\\([0-9]{3}\\) [0-9]{3}-[0-9]{4}')
+
+  # Regex: generate a random hex colour code.
+  - regex('#[0-9a-f]{6}')
+
+  # Regex: generate a random IPv4 address.
+  - regex('[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}')
+
+  # Regex: generate a random MAC address.
+  - regex('[0-9a-f]{2}(:[0-9a-f]{2}){5}')
+
+  # Regex: generate a random license plate (e.g. "AB12 CDE").
+  - regex('[A-Z]{2}[0-9]{2} [A-Z]{3}')
+
+  # Random true or false.
+  - bool()
+
+  #########################
+  # Numeric distributions #
+  #########################
+
+  # Uniform random float between 0 and 1 (e.g. for percentages).
+  - uniform(0, 1)
+
+  # Random float between 0.01 and 999.99 with 2 decimal places (e.g. for prices).
+  - uniform_f(0.01, 999.99, 2)
+
+  # Normally-distributed integer review rating centred on 4, mostly 3-5.
+  - norm(4, 1, 1, 5)
+
+  # Normally-distributed float price centred on 50.00, rounded to 2 decimal places.
+  - norm_f(50.0, 15.0, 1.0, 100.0, 2)
+
+  # 5-10 unique normally-distributed values as a comma-separated string.
+  - norm_n(50.0, 10.0, 1, 100, 5, 10)
+
+  # Exponentially-distributed integer in [0, 100], rounded to 0 decimal places.
+  - exp(0.5, 0, 100)
+
+  # Exponentially-distributed float in [0, 100] with 2 decimal places.
+  - exp_f(0.5, 0, 100, 2)
+
+  # Log-normally-distributed integer in [1, 1000], rounded to 0 decimal places.
+  - lognorm(1.0, 0.5, 1, 1000)
+
+  # Log-normally-distributed float in [1, 1000] with 2 decimal places.
+  - lognorm_f(1.0, 0.5, 1, 1000, 2)
+
+  # Zipfian distribution: hot-key pattern where value 0 is most frequent.
+  # s=2.0 controls skew (higher = more skewed), v=1.0, max=999.
+  - zipf(2.0, 1.0, 999)
 
   # Non-uniform random int using TPC-C NURand.
   - nurand(1023, 1, customers / districts)
@@ -340,11 +426,9 @@ args:
   # Generates between 5 and 15 unique NURand values as a comma-separated string.
   - nurand_n(8191, 1, items, 5, 15)
 
-  # Drives batched execution: the parent query runs 10 times with $1 = 0..9.
-  - batch(customers / batch_size)
-
-  # Generates 100,000 unique emails via gofakeit, split into batches of 10,000.
-  - gen_batch(customers, batch_size, 'email')
+  #####################
+  # Set distributions #
+  #####################
 
   # Picks a random payment method with uniform probability.
   - set_rand(['credit_card', 'debit_card', 'paypal'], [])
@@ -366,65 +450,9 @@ args:
   # Picks a category using Zipfian distribution (strong skew toward first items).
   - set_zipf(['electronics', 'clothing', 'books', 'food', 'toys'], 2.0, 1.0)
 
-  # Generates a random UUID v4 (random) or v7 (time-ordered, sortable).
-  - uuid_v4()
-  - uuid_v7()
-
-  # Random float between 0.01 and 999.99 with 2 decimal places (e.g. for prices).
-  - uniform_f(0.01, 999.99, 2)
-
-  # Uniform random float between 0 and 1 (e.g. for percentages).
-  - uniform(0, 1)
-
-  # Auto-incrementing sequence: 1, 2, 3, ... (shared across calls for the worker).
-  - seq(1, 1)
-
-  # Auto-incrementing with custom start and step: 100, 110, 120, ...
-  - seq(100, 10)
-
-  # Formatted order number using template and seq: "ORD-00001", "ORD-00002", ...
-  - template('ORD-%05d', seq(1, 1))
-
-  # Zipfian distribution: hot-key pattern where value 0 is most frequent.
-  # s=2.0 controls skew (higher = more skewed), v=1.0, max=999.
-  - zipf(2.0, 1.0, 999)
-
-  # Normally-distributed integer review rating centred on 4, mostly 3-5.
-  - norm(4, 1, 1, 5)
-
-  # Normally-distributed float price centred on 50.00, rounded to 2 decimal places.
-  - norm_f(50.0, 15.0, 1.0, 100.0, 2)
-
-  # Conditional value based on a random roll.
-  - cond(gen('number:1,100') > 95, 'premium', 'standard')
-
-  # Mutually exclusive columns: use bool() as a coin flip and arg() to
-  # ensure exactly one of two columns is populated.
-  - bool()                           # coin flip
-  - cond(arg(0), gen('email'), nil)  # email if true, NULL if false
-  - cond(!arg(0), gen('phone'), nil) # phone if false, NULL if true
-
-  # 30% chance of NULL, otherwise a random email. Useful for nullable columns.
-  - nullable(gen('email'), 0.3)
-
-  # First non-nil fallback value.
-  - coalesce(ref_rand('optional_data').value, 'default')
-
-  # Generate a product code matching a regex pattern.
-  - regex('[A-Z]{3}-[0-9]{4}')
-
-  # Build a JSON metadata object for a JSONB column.
-  - json_obj('source', 'web', 'version', 2, 'active', true)
-
-  # Build a JSON array of 1-5 random email addresses.
-  - json_arr(1, 5, 'email')
-
-  # Random geographic point within 10km of London, access lat/lon separately.
-  - point(51.5074, -0.1278, 10.0).lat
-  - point(51.5074, -0.1278, 10.0).lon
-
-  # Random geographic point as WKT for native geometry columns.
-  - point_wkt(51.5074, -0.1278, 10.0)
+  ###################
+  # Dates and times #
+  ###################
 
   # Random timestamp between two dates (RFC3339 format).
   - timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
@@ -438,32 +466,53 @@ args:
   # Random duration between 1 hour and 24 hours.
   - duration('1h', '24h')
 
-  # Pick 3-8 products weighted by their popularity column.
-  - weighted_sample_n('fetch_products', 'id', 'popularity', 3, 8)
+  # Random time of day between 08:00 and 18:00 (HH:MM:SS format).
+  - time('08:00:00', '18:00:00')
 
-  # Regex: generate a random US phone number.
-  - regex('\\([0-9]{3}\\) [0-9]{3}-[0-9]{4}')
+  # Random time of day with timezone suffix (for TIMETZ columns).
+  - timez('09:00:00', '17:00:00')
 
-  # Regex: generate a random hex colour code.
-  - regex('#[0-9a-f]{6}')
+  ##########################
+  # Strings and formatting #
+  ##########################
 
-  # Regex: generate a random IPv4 address.
-  - regex('[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}')
+  # Formatted order number using template and seq: "ORD-00001", "ORD-00002", ...
+  - template('ORD-%05d', seq(1, 1))
 
-  # Regex: generate a random MAC address.
-  - regex('[0-9a-f]{2}(:[0-9a-f]{2}){5}')
+  #################
+  # JSON & Arrays #
+  #################
 
-  # Regex: generate a random license plate (e.g. "AB12 CDE").
-  - regex('[A-Z]{2}[0-9]{2} [A-Z]{3}')
+  # Build a JSON metadata object for a JSONB column.
+  - json_obj('source', 'web', 'version', 2, 'active', true)
 
-  # Exponentially-distributed float in [0, 100] with 2 decimal places.
-  - exp_f(0.5, 0, 100, 2)
+  # Build a JSON array of 1-5 random email addresses.
+  - json_arr(1, 5, 'email')
 
-  # Log-normally-distributed float in [1, 1000] with 2 decimal places.
-  - lognorm_f(1.0, 0.5, 1, 1000, 2)
+  # PostgreSQL/CockroachDB array literal with 2-5 random email addresses.
+  - array(2, 5, 'email')
+
+  ##############
+  # Geographic #
+  ##############
+
+  # Random geographic point within 10km of London, access lat/lon separately.
+  - point(51.5074, -0.1278, 10.0).lat
+  - point(51.5074, -0.1278, 10.0).lon
+
+  # Random geographic point as WKT for native geometry columns.
+  - point_wkt(51.5074, -0.1278, 10.0)
+
+  ###########
+  # Network #
+  ###########
 
   # Random IP address within a CIDR block (e.g. for network simulation).
   - inet('192.168.1.0/24')
+
+  ##########
+  # Binary #
+  ##########
 
   # Random 16 bytes as a hex-encoded CockroachDB/PostgreSQL BYTES literal.
   - bytes(16)
@@ -474,14 +523,39 @@ args:
   # Random variable-length bit string of 1-16 bits.
   - varbit(16)
 
-  # PostgreSQL/CockroachDB array literal with 2-5 random email addresses.
-  - array(2, 5, 'email')
+  ##################
+  # Reference data #
+  ##################
 
-  # Random time of day between 08:00 and 18:00 (HH:MM:SS format).
-  - time('08:00:00', '18:00:00')
+  # Returns a random row from the 'fetch_warehouses' dataset.
+  - ref_rand('fetch_warehouses').w_id
 
-  # Random time of day with timezone suffix (for TIMETZ columns).
-  - timez('09:00:00', '17:00:00')
+  # Returns the same random row for all ref_same calls within a single query execution.
+  # Useful when multiple columns need values from the same row.
+  - ref_same('fetch_warehouses').w_id
+
+  # Returns a unique row on each call within a query (no repeats).
+  # Useful for generating rows that reference distinct foreign keys.
+  - ref_diff('fetch_warehouses').w_id
+
+  # Returns a random row from the 'fetch_warehouses' init query, pinned to this
+  # worker for its lifetime, and extracts the w_id field.
+  - ref_perm('fetch_warehouses').w_id
+
+  # Executes a SQL query and returns all rows. Each row becomes a separate arg set,
+  # so the parent query runs once per returned row.
+  - ref_each('SELECT id FROM warehouses ORDER BY id')
+
+  # Picks 3-8 unique random rows from a named dataset, extracts the 'id' field
+  # from each, and returns a comma-separated string.
+  - ref_n('fetch_warehouses', 'id', 3, 8)
+
+  # Pick 3-8 products weighted by their popularity column.
+  - weighted_sample_n('fetch_products', 'id', 'popularity', 3, 8)
+
+  ###############
+  # Aggregation #
+  ###############
 
   # Sum of the 'price' field across all rows in the 'fetch_products' dataset.
   - sum('fetch_products', 'price')
@@ -498,6 +572,33 @@ args:
 
   # Number of distinct category IDs across all products.
   - distinct('fetch_products', 'category_id')
+
+  ####################
+  # Batch operations #
+  ####################
+
+  # Drives batched execution: the parent query runs 10 times with $1 = 0..9.
+  - batch(customers / batch_size)
+
+  # Generates 100,000 unique emails via gofakeit, split into batches of 10,000.
+  - gen_batch(customers, batch_size, 'email')
+
+  ### Conditionals & Dependent Columns ###
+
+  # Conditional value based on a random roll.
+  - cond(gen('number:1,100') > 95, 'premium', 'standard')
+
+  # Mutually exclusive columns: use bool() as a coin flip and arg() to
+  # ensure exactly one of two columns is populated.
+  - bool()                           # coin flip
+  - cond(arg(0), gen('email'), nil)  # email if true, NULL if false
+  - cond(!arg(0), gen('phone'), nil) # phone if false, NULL if true
+
+  # 30% chance of NULL, otherwise a random email. Useful for nullable columns.
+  - nullable(gen('email'), 0.3)
+
+  # First non-nil fallback value.
+  - coalesce(ref_rand('optional_data').value, 'default')
 
   # Dependent columns: later args can reference earlier ones by index.
   # arg(0) is the first arg, arg(1) is the second, etc.
