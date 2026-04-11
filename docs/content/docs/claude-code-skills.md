@@ -1,6 +1,6 @@
 ---
 title: Claude Code Skills
-weight: 8
+weight: 9
 ---
 
 # Claude Code Skills

@@ -513,6 +513,8 @@ edg all \
 
 If any expectation defined in `workload.yaml` fails, the command exits with code 1, failing the pipeline step.
 
+For a complete guide to using edg as an integration testing tool, see [Integration Testing]({{< relref "integration-testing" >}}).
+
 ## Includes
 
 Use the `!include` YAML tag to split workload configs into reusable fragments. This is useful when multiple workloads share the same schema, reference data, or expressions.

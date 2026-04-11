@@ -105,3 +105,4 @@ This creates the table, seeds 1,000 users, runs random lookups with 10 concurren
 - [Configuration]({{< relref "configuration" >}}) -- full YAML config reference
 - [Expressions]({{< relref "expressions" >}}) -- every built-in function and the expr-lang feature set
 - [Example Workloads]({{< relref "example-workloads" >}}) -- TPC-C, e-commerce, IoT, and more
+- [Integration Testing]({{< relref "integration-testing" >}}) -- using edg to seed databases for integration tests
