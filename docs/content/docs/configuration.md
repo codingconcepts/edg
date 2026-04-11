@@ -227,30 +227,51 @@ seed:
       SELECT unnest(string_to_array('$1', ','))
 ```
 
+Which resolves to the following query automatically by edg:
+
+```sql
+INSERT INTO users (email)
+SELECT unnest(string_to_array(
+  'a@x.com,b@y.com,...,z@x.com', ','
+))
+```
+
 #### MySQL
 
-When `batch_format` is set to `json`, each arg position is serialized as a properly escaped JSON array (e.g. `["val1","val2","val3"]`). This is required for MSSQL, where the default CSV format can break `OPENJSON` if values contain commas or double quotes.
-
-With `batch_format: json`, MSSQL queries use `OPENJSON('$N')` directly with no string manipulation needed:
+MySQL uses `JSON_TABLE` to unpack batch values. The CSV string is converted to a JSON array using `CONCAT` and `REPLACE`, then `JSON_TABLE` extracts each element as a row. Multiple columns are correlated using `FOR ORDINALITY`:
 
 ```yaml
 seed:
-  - name: populate_contacts
+  - name: populate_users
     type: exec_batch
-    batch_format: json
     count: 1000
     size: 100
     args:
-      - gen('name')
       - gen('email')
     query: |-
-      INSERT INTO contact (name, email)
-      SELECT j1.value, j2.value
-      FROM OPENJSON('$1') j1
-      JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
+      INSERT INTO users (email)
+      SELECT j.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
+      ) j
 ```
 
-Multiple OPENJSON calls are correlated using `[key]`, which is the zero-based array index. NULL values appear as JSON `null` and can be handled with `NULLIF(j.value, 'null')` if the target column is nullable.
+Which resolves to the following query automatically by edg:
+
+```sql
+INSERT INTO users (email)
+SELECT j.val
+FROM JSON_TABLE(
+  CONCAT('["',
+    REPLACE(
+      'a@x.com,b@y.com,...,z@x.com',
+      ',', '","'
+    ),
+  '"]'),
+  '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
+) j
+```
 
 #### Oracle
 
@@ -278,6 +299,54 @@ seed:
              PASSING '$2' AS "v"
              COLUMNS value VARCHAR2(255) PATH '.'
            ) x2 ON x1.rowid = x2.rowid
+```
+
+Which resolves to the following query automatically by edg:
+
+```sql
+INSERT INTO users (name, email)
+SELECT x1.value, x2.value
+FROM xmltable(
+  'for $s in tokenize($v, ",") return <r>{$s}</r>'
+  PASSING 'Alice,Bob,Charlie' AS "v"
+  COLUMNS value VARCHAR2(255) PATH '.'
+) x1
+JOIN xmltable(
+  'for $s in tokenize($v, ",") return <r>{$s}</r>'
+  PASSING 'a@x.com,b@y.com,c@z.com' AS "v"
+  COLUMNS value VARCHAR2(255) PATH '.'
+) x2 ON x1.rowid = x2.rowid
+```
+
+#### MSSQL
+
+When `batch_format` is set to `json`, each arg position is serialized as a properly escaped JSON array (e.g. `["val1","val2","val3"]`). This is required for MSSQL, where the default CSV format can break `OPENJSON` if values contain commas or double quotes. Multiple `OPENJSON` calls are correlated using `[key]`, which is the zero-based array index. NULL values appear as JSON `null` and can be handled with `NULLIF(j.value, 'null')` if the target column is nullable:
+
+```yaml
+seed:
+  - name: populate_contacts
+    type: exec_batch
+    batch_format: json
+    count: 1000
+    size: 100
+    args:
+      - gen('name')
+      - gen('email')
+    query: |-
+      INSERT INTO contact (name, email)
+      SELECT j1.value, j2.value
+      FROM OPENJSON('$1') j1
+      JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
+```
+
+Which resolves to the following query automatically by edg:
+
+```sql
+INSERT INTO contact (name, email)
+SELECT j1.value, j2.value
+FROM OPENJSON('["Alice","Bob",...,"Zara"]') j1
+JOIN OPENJSON('["a@x.com","b@y.com",...,"z@x.com"]') j2
+  ON j1.[key] = j2.[key]
 ```
 
 ### Wait
