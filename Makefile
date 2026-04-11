@@ -29,6 +29,21 @@ integration_test_sqlserver:
 	DRIVER="sqlserver" \
 	go test ./pkg -v -db -rng-seed 42
 	
+harness_crdb:
+	go run ./cmd/harness -db crdb
+
+harness_mysql:
+	go run ./cmd/harness -db mysql
+
+harness_sqlserver:
+	go run ./cmd/harness -db sqlserver
+
+harness_oracle:
+	go run ./cmd/harness -db oracle
+
+harness_all: harness_crdb harness_mysql harness_sqlserver
+	echo "done"
+
 docs:
 	(cd docs && hugo server --disableFastRender)
 

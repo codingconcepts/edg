@@ -116,7 +116,13 @@ func (e *Env) aggDistinct(name, field string) int {
 	}
 	seen := make(map[any]struct{}, len(data))
 	for _, row := range data {
-		seen[row[field]] = struct{}{}
+		v := row[field]
+		// Convert []byte to string so it can be used as a map key
+		// (slices are not hashable). MySQL returns TEXT/DECIMAL as []byte.
+		if b, ok := v.([]byte); ok {
+			v = string(b)
+		}
+		seen[v] = struct{}{}
 	}
 	return len(seen)
 }

@@ -16,15 +16,17 @@ up:
 
   - name: create_tenant
     query: |-
+      IF OBJECT_ID('tenant', 'U') IS NULL
       CREATE TABLE tenant (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         name NVARCHAR(255) NOT NULL,
-        plan NVARCHAR(20) NOT NULL DEFAULT 'free',
+        [plan] NVARCHAR(20) NOT NULL DEFAULT 'free',
         created_at DATETIME2 NOT NULL DEFAULT GETDATE()
       )
 
   - name: create_app_user
     query: |-
+      IF OBJECT_ID('app_user', 'U') IS NULL
       CREATE TABLE app_user (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         tenant_id UNIQUEIDENTIFIER NOT NULL,
@@ -36,6 +38,7 @@ up:
 
   - name: create_project
     query: |-
+      IF OBJECT_ID('project', 'U') IS NULL
       CREATE TABLE project (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         tenant_id UNIQUEIDENTIFIER NOT NULL,
@@ -46,6 +49,7 @@ up:
 
   - name: create_task
     query: |-
+      IF OBJECT_ID('task', 'U') IS NULL
       CREATE TABLE task (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         project_id UNIQUEIDENTIFIER NOT NULL,
@@ -63,6 +67,7 @@ up:
 
   - name: create_task_comment
     query: |-
+      IF OBJECT_ID('task_comment', 'U') IS NULL
       CREATE TABLE task_comment (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         task_id UNIQUEIDENTIFIER NOT NULL,
@@ -77,6 +82,7 @@ up:
 
   - name: create_billing_usage
     query: |-
+      IF OBJECT_ID('billing_usage', 'U') IS NULL
       CREATE TABLE billing_usage (
         tenant_id UNIQUEIDENTIFIER PRIMARY KEY,
         api_calls INT NOT NULL DEFAULT 0,
@@ -116,10 +122,10 @@ seed:
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $1
       )
-      INSERT INTO tenant (name, plan)
+      INSERT INTO tenant (name, [plan])
       SELECT
         CONCAT('tenant-', s),
-        CHOOSE(ABS(CHECKSUM(NEWID())) % 4 + 1, 'free','starter','pro','enterprise')
+        CASE ABS(CHECKSUM(NEWID()) % 4) WHEN 0 THEN 'free' WHEN 1 THEN 'starter' WHEN 2 THEN 'pro' ELSE 'enterprise' END
       FROM seq
       OPTION (MAXRECURSION 0)
 
@@ -131,7 +137,7 @@ seed:
 
   - name: populate_app_user
     args:
-      - ref_each('SELECT id FROM tenant')
+      - ref_each('SELECT CAST(id AS NVARCHAR(36)) AS id FROM tenant')
       - users_per_tenant
     query: |-
       WITH seq AS (
@@ -152,7 +158,7 @@ seed:
 
   - name: populate_project
     args:
-      - ref_each('SELECT id FROM tenant')
+      - ref_each('SELECT CAST(id AS NVARCHAR(36)) AS id FROM tenant')
       - projects_per_tenant
     query: |-
       WITH seq AS (
@@ -169,7 +175,7 @@ seed:
 
   - name: populate_task
     args:
-      - ref_each('SELECT p.id AS project_id, p.tenant_id FROM project p')
+      - ref_each('SELECT CAST(p.id AS NVARCHAR(36)) AS project_id, CAST(p.tenant_id AS NVARCHAR(36)) AS tenant_id FROM project p')
       - tasks_per_project
     query: |-
       WITH seq AS (
@@ -182,7 +188,7 @@ seed:
         '$1',
         '$2',
         CONCAT('task-', s, '-', SUBSTRING('$1', 1, 8)),
-        CHOOSE(ABS(CHECKSUM(NEWID())) % 4 + 1, 'open','in_progress','review','done'),
+        CASE ABS(CHECKSUM(NEWID()) % 4) WHEN 0 THEN 'open' WHEN 1 THEN 'in_progress' WHEN 2 THEN 'review' ELSE 'done' END,
         (SELECT TOP 1 id FROM app_user WHERE tenant_id = '$2' ORDER BY NEWID())
       FROM seq
       OPTION (MAXRECURSION 0)
@@ -372,7 +378,7 @@ run:
     query: |-
       SELECT TOP 20
         tn.name AS tenant_name,
-        tn.plan,
+        tn.[plan],
         bu.api_calls,
         COUNT(DISTINCT t.id) AS task_count,
         COUNT(DISTINCT u.id) AS user_count
@@ -380,5 +386,5 @@ run:
       LEFT JOIN billing_usage bu ON bu.tenant_id = tn.id
       LEFT JOIN task t ON t.tenant_id = tn.id AND t.deleted_at IS NULL
       LEFT JOIN app_user u ON u.tenant_id = tn.id
-      GROUP BY tn.id, tn.name, tn.plan, bu.api_calls
+      GROUP BY tn.id, tn.name, tn.[plan], bu.api_calls
       ORDER BY bu.api_calls DESC

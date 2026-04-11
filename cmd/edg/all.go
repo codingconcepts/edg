@@ -35,6 +35,16 @@ func allCmd() *cobra.Command {
 				return err
 			}
 
+			// Always run teardown, even if up/seed/run fails.
+			defer func() {
+				if len(req.Deseed) > 0 {
+					_ = env.Deseed(ctx)
+				}
+				if len(req.Down) > 0 {
+					_ = env.Down(ctx)
+				}
+			}()
+
 			if len(req.Up) > 0 {
 				if err := env.Up(ctx); err != nil {
 					return err
@@ -46,26 +56,18 @@ func allCmd() *cobra.Command {
 				}
 			}
 
-			var runErr error
+			if cmd.Flags().Changed("duration") {
+				req.Stages = nil
+			}
+
 			if len(req.Run) > 0 || len(req.Stages) > 0 {
 				// Create a child context for run's duration timeout so the
 				// parent context remains live for teardown.
 				runCtx, runCancel := context.WithCancel(ctx)
-				runErr = run(runCtx, runCancel, db, req, duration, workers, printInterval)
+				return run(runCtx, runCancel, db, req, duration, workers, printInterval)
 			}
 
-			// Always run teardown, even if the workload or expectations failed.
-			if len(req.Deseed) > 0 {
-				if err := env.Deseed(ctx); err != nil {
-					return err
-				}
-			}
-			if len(req.Down) > 0 {
-				if err := env.Down(ctx); err != nil {
-					return err
-				}
-			}
-			return runErr
+			return nil
 		},
 	}
 

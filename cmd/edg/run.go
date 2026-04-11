@@ -31,6 +31,10 @@ func runCmd() *cobra.Command {
 			}
 			defer db.Close()
 
+			if cmd.Flags().Changed("duration") {
+				req.Stages = nil
+			}
+
 			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
 			defer cancel()
 

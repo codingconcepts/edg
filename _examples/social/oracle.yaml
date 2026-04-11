@@ -8,7 +8,7 @@
 # bind syntax).
 
 globals:
-  users: 10000
+  users: 1000
   posts_per_user: 5
   follows_per_user: 10
   tags: 50

@@ -111,12 +111,12 @@ seed:
     args:
       - categories
     query: |-
+      INSERT INTO category (id, name)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $1
       )
-      INSERT INTO category (id, name)
       SELECT s, CONCAT('category-', s)
       FROM seq
 
@@ -125,12 +125,12 @@ seed:
       - products
       - categories
     query: |-
+      INSERT INTO product (id, category_id, name, price, stock_qty)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $1
       )
-      INSERT INTO product (id, category_id, name, price, stock_qty)
       SELECT
         s,
         (s % $2) + 1,

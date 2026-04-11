@@ -206,8 +206,13 @@ The `query_batch` and `exec_batch` types use two additional fields to control ho
 |---|---|
 | `count` | Total number of rows to generate. Evaluated as an expression, so it can reference globals. |
 | `size` | Number of rows per batch. If omitted or zero, defaults to `count` (single batch). Also evaluated as an expression. |
+| `batch_format` | Controls how batch values are serialized. Default is CSV (comma-separated). Set to `json` to produce JSON arrays. |
 
-Each arg expression is evaluated once per row. The results are collected into comma-separated strings per arg position. For example, with `count: 1000` and `size: 100`, you get 10 batches, each containing a comma-separated string of 100 generated values.
+Each arg expression is evaluated once per row. The results are collected into strings per arg position. For example, with `count: 1000` and `size: 100`, you get 10 batches, each containing 100 generated values.
+
+#### Default (CSV) format
+
+By default, batch values are joined with commas. This works well with PostgreSQL/CockroachDB `string_to_array` and MySQL `JSON_TABLE`:
 
 ```yaml
 seed:
@@ -221,6 +226,31 @@ seed:
       INSERT INTO users (email)
       SELECT unnest(string_to_array('$1', ','))
 ```
+
+#### JSON format (`batch_format: json`)
+
+When `batch_format` is set to `json`, each arg position is serialized as a properly escaped JSON array (e.g. `["val1","val2","val3"]`). This is required for SQL Server, where the default CSV format can break `OPENJSON` if values contain commas or double quotes.
+
+With `batch_format: json`, SQL Server queries use `OPENJSON('$N')` directly with no string manipulation needed:
+
+```yaml
+seed:
+  - name: populate_contacts
+    type: exec_batch
+    batch_format: json
+    count: contacts
+    size: batch_size
+    args:
+      - gen('name')
+      - gen('email')
+    query: |-
+      INSERT INTO contact (name, email)
+      SELECT j1.value, j2.value
+      FROM OPENJSON('$1') j1
+      JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
+```
+
+Multiple OPENJSON calls are correlated using `[key]`, which is the zero-based array index. NULL values appear as JSON `null` and can be handled with `NULLIF(j.value, 'null')` if the target column is nullable.
 
 ### Wait
 

@@ -19,6 +19,7 @@ up:
 
   - name: create_category
     query: |-
+      IF OBJECT_ID('category', 'U') IS NULL
       CREATE TABLE category (
         id INT PRIMARY KEY,
         name NVARCHAR(255) NOT NULL
@@ -26,6 +27,7 @@ up:
 
   - name: create_product
     query: |-
+      IF OBJECT_ID('product', 'U') IS NULL
       CREATE TABLE product (
         id INT PRIMARY KEY,
         category_id INT NOT NULL,
@@ -38,6 +40,7 @@ up:
 
   - name: create_customer
     query: |-
+      IF OBJECT_ID('customer', 'U') IS NULL
       CREATE TABLE customer (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         email NVARCHAR(255) NOT NULL,
@@ -47,6 +50,7 @@ up:
 
   - name: create_cart_item
     query: |-
+      IF OBJECT_ID('cart_item', 'U') IS NULL
       CREATE TABLE cart_item (
         customer_id UNIQUEIDENTIFIER NOT NULL,
         product_id INT NOT NULL,
@@ -59,6 +63,7 @@ up:
 
   - name: create_purchase_order
     query: |-
+      IF OBJECT_ID('purchase_order', 'U') IS NULL
       CREATE TABLE purchase_order (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         customer_id UNIQUEIDENTIFIER NOT NULL,
@@ -69,6 +74,7 @@ up:
 
   - name: create_order_item
     query: |-
+      IF OBJECT_ID('order_item', 'U') IS NULL
       CREATE TABLE order_item (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         order_id UNIQUEIDENTIFIER NOT NULL,
@@ -81,6 +87,7 @@ up:
 
   - name: create_review
     query: |-
+      IF OBJECT_ID('review', 'U') IS NULL
       CREATE TABLE review (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         product_id INT NOT NULL,
@@ -135,7 +142,7 @@ seed:
         (s % $2) + 1,
         CONVERT(NVARCHAR(255), NEWID()),
         CAST(RAND(CHECKSUM(NEWID())) * 499 + 1 AS DECIMAL(10,2)),
-        ABS(CHECKSUM(NEWID())) % 200 + 10
+        ABS(CHECKSUM(NEWID()) % 200) + 10
       FROM seq
       OPTION (MAXRECURSION 0)
 

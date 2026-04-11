@@ -24,12 +24,12 @@ seed:
       - batch(rows / batch_size)
       - batch_size
     query: |-
+      INSERT INTO distributions (dist_type, value)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $2
       )
-      INSERT INTO distributions (dist_type, value)
       SELECT 'uniform', RAND() * 100
       FROM seq
 

@@ -77,6 +77,7 @@ type Query struct {
 	Query        string        `json:"query" yaml:"query"`
 	Row          string        `json:"row" yaml:"row"`
 	Args         []string      `json:"args" yaml:"args"`
+	BatchFormat  string        `json:"batch_format" yaml:"batch_format"`
 	CompiledArgs []*vm.Program `json:"-" yaml:"-"`
 
 	CompiledCount *vm.Program `json:"-" yaml:"-"`

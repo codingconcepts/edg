@@ -114,12 +114,12 @@ seed:
     args:
       - tenants
     query: |-
+      INSERT INTO tenant (name, plan)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $1
       )
-      INSERT INTO tenant (name, plan)
       SELECT
         CONCAT('tenant-', s),
         ELT(FLOOR(RAND() * 4) + 1, 'free','starter','pro','enterprise')
@@ -136,12 +136,12 @@ seed:
       - ref_each('SELECT id FROM tenant')
       - users_per_tenant
     query: |-
+      INSERT INTO app_user (tenant_id, email, role)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $2
       )
-      INSERT INTO app_user (tenant_id, email, role)
       SELECT
         '$1',
         CONCAT('user_', s, '_', SUBSTRING('$1', 1, 8), '@example.com'),
@@ -156,12 +156,12 @@ seed:
       - ref_each('SELECT id FROM tenant')
       - projects_per_tenant
     query: |-
+      INSERT INTO project (tenant_id, name)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $2
       )
-      INSERT INTO project (tenant_id, name)
       SELECT
         '$1',
         CONCAT('project-', s, '-', SUBSTRING('$1', 1, 8))
@@ -172,12 +172,12 @@ seed:
       - ref_each('SELECT p.id AS project_id, p.tenant_id FROM project p')
       - tasks_per_project
     query: |-
+      INSERT INTO task (project_id, tenant_id, title, status, assignee_id)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $3
       )
-      INSERT INTO task (project_id, tenant_id, title, status, assignee_id)
       SELECT
         '$1',
         '$2',

@@ -75,12 +75,12 @@ seed:
     args:
       - devices
     query: |-
+      INSERT INTO device (id, name, location, device_type)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $1
       )
-      INSERT INTO device (id, name, location, device_type)
       SELECT
         s,
         CONCAT('device-', s),
@@ -93,12 +93,12 @@ seed:
       - ref_each('SELECT id FROM device')
       - sensors_per_device
     query: |-
+      INSERT INTO sensor (id, device_id, metric_name, unit, min_threshold, max_threshold)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $2
       )
-      INSERT INTO sensor (id, device_id, metric_name, unit, min_threshold, max_threshold)
       SELECT
         ($1 - 1) * $2 + s,
         $1,
@@ -113,12 +113,12 @@ seed:
       - ref_each('SELECT id, min_threshold, max_threshold FROM sensor')
       - readings_per_sensor
     query: |-
+      INSERT INTO reading (sensor_id, value, recorded_at)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $4
       )
-      INSERT INTO reading (sensor_id, value, recorded_at)
       SELECT
         $1,
         $2 + RAND() * ($3 - $2),

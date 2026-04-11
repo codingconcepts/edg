@@ -16,6 +16,7 @@ up:
 
   - name: create_customer
     query: |-
+      IF OBJECT_ID('customer', 'U') IS NULL
       CREATE TABLE customer (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         email NVARCHAR(255) NOT NULL
@@ -23,6 +24,7 @@ up:
 
   - name: create_account
     query: |-
+      IF OBJECT_ID('account', 'U') IS NULL
       CREATE TABLE account (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         balance FLOAT NOT NULL,

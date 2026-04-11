@@ -11,7 +11,7 @@ up:
 
   - name: create_user
     query: |-
-      CREATE TABLE IF NOT EXISTS `user` (
+      CREATE TABLE IF NOT EXISTS app_user (
         id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
         email VARCHAR(255) NOT NULL,
         phone VARCHAR(50),
@@ -31,7 +31,7 @@ seed:
       - nullable(gen('sentence:5'), 0.5)
       - nullable(uuid_v4(), 0.8)
     query: |-
-      INSERT INTO `user` (email, phone, bio, referred_by)
+      INSERT INTO app_user (email, phone, bio, referred_by)
       SELECT j1.val, j2.val, j3.val, j4.val
       FROM JSON_TABLE(
         CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
@@ -54,10 +54,10 @@ deseed:
 
   - name: delete_user
     type: exec
-    query: DELETE FROM `user`
+    query: DELETE FROM app_user
 
 down:
 
   - name: drop_user
     type: exec
-    query: DROP TABLE IF EXISTS `user`
+    query: DROP TABLE IF EXISTS app_user

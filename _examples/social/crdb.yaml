@@ -1,5 +1,5 @@
 globals:
-  users: 10000
+  users: 1000
   posts_per_user: 5
   follows_per_user: 10
   tags: 50
@@ -133,14 +133,12 @@ seed:
       - follows_per_user
     query: |-
       INSERT INTO follow (follower_id, following_id)
-      SELECT u.id, f.id
-      FROM user_profile u
-      CROSS JOIN LATERAL (
-        SELECT id FROM user_profile
-        WHERE id != u.id
-        ORDER BY random()
-        LIMIT $1
-      ) f
+      SELECT u.id, t.id
+      FROM (SELECT id, row_number() OVER (ORDER BY id) AS rn FROM user_profile) u
+      CROSS JOIN generate_series(1, $1) AS s
+      JOIN (SELECT id, row_number() OVER (ORDER BY id) AS rn, count(*) OVER () AS total FROM user_profile) t
+        ON t.rn = ((u.rn + s - 1) % t.total) + 1
+      WHERE u.id != t.id
       ON CONFLICT DO NOTHING
 
 deseed:

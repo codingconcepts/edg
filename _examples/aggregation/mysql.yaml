@@ -37,12 +37,12 @@ seed:
     args:
       - products
     query: |-
+      INSERT INTO product (category, price, stock_qty)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $1
       )
-      INSERT INTO product (category, price, stock_qty)
       SELECT
         ELT(FLOOR(RAND() * 5 + 1), 'electronics', 'clothing', 'books', 'food', 'toys'),
         CAST(RAND() * 499 + 1 AS DECIMAL(10,2)),

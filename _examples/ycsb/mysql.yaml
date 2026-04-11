@@ -54,13 +54,13 @@ seed:
       - batch(records / batch_size)
       - batch_size
     query: |-
+      INSERT INTO usertable (ycsb_key, field0, field1, field2, field3,
+        field4, field5, field6, field7, field8, field9)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $2
       )
-      INSERT INTO usertable (ycsb_key, field0, field1, field2, field3,
-        field4, field5, field6, field7, field8, field9)
       SELECT
         CONCAT('user', LPAD($1 * $2 + s - 1, 10, '0')),
         LPAD('', 100, MD5(RAND())),

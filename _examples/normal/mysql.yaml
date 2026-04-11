@@ -33,12 +33,12 @@ seed:
     args:
       - products
     query: |-
+      INSERT INTO product (id, name, price)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $1
       )
-      INSERT INTO product (id, name, price)
       SELECT
         s,
         CONCAT('product-', s),

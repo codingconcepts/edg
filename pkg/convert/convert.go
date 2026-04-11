@@ -1,6 +1,7 @@
 package convert
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -14,14 +15,24 @@ func Constant(v any) any {
 
 // Batch returns sequential integers [0, n) as a [][]any batch set,
 // driving batched query execution without requiring a SQL query.
-func Batch(n any) ([][]any, error) {
-	count, err := ToInt(n)
+func Batch(args ...any) ([][]any, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("batch: requires at least 1 argument")
+	}
+	count, err := ToInt(args[0])
 	if err != nil {
 		return nil, fmt.Errorf("batch: %w", err)
 	}
+	step := 1
+	if len(args) >= 2 {
+		step, err = ToInt(args[1])
+		if err != nil {
+			return nil, fmt.Errorf("batch step: %w", err)
+		}
+	}
 	result := make([][]any, count)
 	for i := range count {
-		result[i] = []any{i}
+		result[i] = []any{i * step}
 	}
 	return result, nil
 }
@@ -34,6 +45,12 @@ func ToInt(v any) (int, error) {
 		return int(n), nil
 	case int64:
 		return int(n), nil
+	case []byte:
+		i, err := strconv.Atoi(string(n))
+		if err != nil {
+			return 0, fmt.Errorf("cannot convert %q to int: %w", n, err)
+		}
+		return i, nil
 	case string:
 		i, err := strconv.Atoi(n)
 		if err != nil {
@@ -53,6 +70,12 @@ func ToFloat(v any) (float64, error) {
 		return float64(n), nil
 	case int64:
 		return float64(n), nil
+	case []byte:
+		f, err := strconv.ParseFloat(string(n), 64)
+		if err != nil {
+			return 0, fmt.Errorf("cannot convert %q to float: %w", n, err)
+		}
+		return f, nil
 	case string:
 		f, err := strconv.ParseFloat(n, 64)
 		if err != nil {
@@ -114,19 +137,62 @@ func Tmpl(format string, args ...any) string {
 	return fmt.Sprintf(format, args...)
 }
 
+// BatchFormatValue formats a value for use inside a batch CSV string
+// that will be placed within an already-quoted SQL context (e.g.
+// string_to_array('$1', ',')). Values are not wrapped in quotes;
+// embedded single quotes are escaped for SQL safety.
+func BatchFormatValue(v any) string {
+	if v == nil {
+		return "NULL"
+	}
+	var s string
+	if b, ok := v.([]byte); ok {
+		s = string(b)
+	} else {
+		s = fmt.Sprint(v)
+	}
+	return strings.ReplaceAll(s, "'", "''")
+}
+
+// BatchJoinJSON takes a slice of formatted batch values and returns a
+// properly escaped JSON array string (e.g. `["a","b","c"]`). Nil/NULL
+// values become JSON null. This is safe for use with SQL Server's
+// OPENJSON and avoids the delimiter/quoting issues of CSV joining.
+func BatchJoinJSON(parts []string) string {
+	elems := make([]string, len(parts))
+	for i, p := range parts {
+		if p == "NULL" {
+			elems[i] = "null"
+		} else {
+			b, _ := json.Marshal(p)
+			elems[i] = string(b)
+		}
+	}
+	return "[" + strings.Join(elems, ",") + "]"
+}
+
+// RawSQL is a string that is already formatted for SQL and should not
+// be quoted again by SQLFormatValue.
+type RawSQL string
+
 // SQLFormatValue formats a value for safe inline substitution in SQL.
 // Strings are single-quoted with embedded quotes escaped ('→'');
-// numeric types are returned as-is; nil becomes NULL. The escaping
-// is the same across PostgreSQL, MySQL, and Oracle.
+// numeric types are returned as-is; nil becomes NULL; RawSQL values
+// are returned unchanged. The escaping is the same across PostgreSQL,
+// MySQL, and Oracle.
 func SQLFormatValue(v any) string {
 	if v == nil {
 		return "NULL"
 	}
-	switch v.(type) {
+	switch n := v.(type) {
+	case RawSQL:
+		return string(n)
 	case int, int64, float64:
 		return fmt.Sprint(v)
+	case []byte:
+		return "'" + strings.ReplaceAll(string(n), "'", "''") + "'"
 	default:
-		s := fmt.Sprint(v)
+		s := fmt.Sprint(n)
 		return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 	}
 }

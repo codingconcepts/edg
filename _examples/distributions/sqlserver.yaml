@@ -11,6 +11,7 @@ up:
 
   - name: create_distributions
     query: |-
+      IF OBJECT_ID('distributions', 'U') IS NULL
       CREATE TABLE distributions (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         dist_type NVARCHAR(50) NOT NULL,

@@ -3,6 +3,7 @@ package env
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"fmt"
 	"strings"
 
@@ -42,6 +43,11 @@ func ReadRows(rows *sql.Rows) ([]map[string]any, error) {
 		return nil, fmt.Errorf("getting columns: %w", err)
 	}
 
+	columnTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, fmt.Errorf("getting column types: %w", err)
+	}
+
 	for i, c := range columns {
 		columns[i] = strings.ToLower(c)
 	}
@@ -61,7 +67,12 @@ func ReadRows(rows *sql.Rows) ([]map[string]any, error) {
 
 		result := make(map[string]any, len(columns))
 		for i, col := range columns {
-			result[col] = values[i]
+			switch v := values[i].(type) {
+			case []byte:
+				result[col] = normalizeBytes(v, columnTypes[i].DatabaseTypeName())
+			default:
+				result[col] = values[i]
+			}
 		}
 
 		results = append(results, result)
@@ -72,4 +83,20 @@ func ReadRows(rows *sql.Rows) ([]map[string]any, error) {
 	}
 
 	return results, nil
+}
+
+// normalizeBytes converts raw []byte values from database drivers into
+// portable Go types. UNIQUEIDENTIFIER columns get the wire-format bytes
+// (first 3 groups little-endian) decoded into a canonical UUID string.
+// All other []byte values are converted to string.
+func normalizeBytes(b []byte, dbTypeName string) any {
+	if len(b) == 16 && dbTypeName == "UNIQUEIDENTIFIER" {
+		return fmt.Sprintf("%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X",
+			binary.LittleEndian.Uint32(b[0:4]),
+			binary.LittleEndian.Uint16(b[4:6]),
+			binary.LittleEndian.Uint16(b[6:8]),
+			b[8], b[9],
+			b[10], b[11], b[12], b[13], b[14], b[15])
+	}
+	return string(b)
 }

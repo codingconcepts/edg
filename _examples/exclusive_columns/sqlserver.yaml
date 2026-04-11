@@ -12,6 +12,7 @@ up:
   - name: create_contact
     type: exec
     query: |-
+      IF OBJECT_ID('contact', 'U') IS NULL
       CREATE TABLE contact (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         name NVARCHAR(255) NOT NULL,
@@ -27,6 +28,7 @@ seed:
 
   - name: populate_contact
     type: exec_batch
+    batch_format: json
     count: contacts
     size: batch_size
     args:
@@ -36,10 +38,10 @@ seed:
       - cond(!arg(1), gen('phone'), nil)
     query: |-
       INSERT INTO contact (name, email, phone)
-      SELECT n.value, e.value, p.value
-      FROM OPENJSON('["' + REPLACE('$1', ',', '","') + '"]') n
-      JOIN OPENJSON('["' + REPLACE('$3', ',', '","') + '"]') e ON n.[key] = e.[key]
-      JOIN OPENJSON('["' + REPLACE('$4', ',', '","') + '"]') p ON n.[key] = p.[key]
+      SELECT n.value, NULLIF(e.value, 'null'), NULLIF(p.value, 'null')
+      FROM OPENJSON('$1') n
+      JOIN OPENJSON('$3') e ON n.[key] = e.[key]
+      JOIN OPENJSON('$4') p ON n.[key] = p.[key]
 
 deseed:
 

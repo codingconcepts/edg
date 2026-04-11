@@ -94,7 +94,7 @@ seed:
       INSERT INTO reading (sensor_id, value, recorded_at)
       SELECT
         $1::INT,
-        $2::DECIMAL + random()::FLOAT8 * ($3::DECIMAL - $2::DECIMAL),
+        $2::FLOAT8 + random()::FLOAT8 * ($3::FLOAT8 - $2::FLOAT8),
         now() - (s * INTERVAL '1 minute')
       FROM generate_series(1, $4) AS s
 

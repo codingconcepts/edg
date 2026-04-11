@@ -1,6 +1,6 @@
 # Populate
 
-A bulk data population example demonstrating `gen_batch` and `batch` functions to insert large volumes of data efficiently. Creates 1 billion customers and their accounts using batched inserts of 10K rows at a time.
+A bulk data population example demonstrating `gen_batch` and `batch` functions to insert large volumes of data efficiently. Creates 1 million customers and their accounts using batched inserts of 10K rows at a time.
 
 ## CockroachDB
 

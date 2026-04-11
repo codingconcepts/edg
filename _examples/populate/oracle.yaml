@@ -1,5 +1,5 @@
 globals:
-  customers: 1000000000 # 1 billion
+  customers: 1000000 # 1 million
   initial_balance: 10000
   batch_size: 100 # 100 rows per batch insert
 

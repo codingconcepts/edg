@@ -38,6 +38,7 @@ up:
 
   - name: create_warehouse
     query: |-
+      IF OBJECT_ID('warehouse', 'U') IS NULL
       CREATE TABLE warehouse (
         w_id INT NOT NULL,
         w_name NVARCHAR(10) NOT NULL,
@@ -53,6 +54,7 @@ up:
 
   - name: create_district
     query: |-
+      IF OBJECT_ID('district', 'U') IS NULL
       CREATE TABLE district (
         d_w_id INT NOT NULL,
         d_id INT NOT NULL,
@@ -70,6 +72,7 @@ up:
 
   - name: create_customer
     query: |-
+      IF OBJECT_ID('customer', 'U') IS NULL
       CREATE TABLE customer (
         c_w_id INT NOT NULL,
         c_d_id INT NOT NULL,
@@ -97,6 +100,7 @@ up:
 
   - name: create_history
     query: |-
+      IF OBJECT_ID('history', 'U') IS NULL
       CREATE TABLE history (
         h_id UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID(),
         h_c_id INT NOT NULL,
@@ -112,6 +116,7 @@ up:
 
   - name: create_oorder
     query: |-
+      IF OBJECT_ID('oorder', 'U') IS NULL
       CREATE TABLE oorder (
         o_w_id INT NOT NULL,
         o_d_id INT NOT NULL,
@@ -126,6 +131,7 @@ up:
 
   - name: create_new_order
     query: |-
+      IF OBJECT_ID('new_order', 'U') IS NULL
       CREATE TABLE new_order (
         no_w_id INT NOT NULL,
         no_d_id INT NOT NULL,
@@ -135,6 +141,7 @@ up:
 
   - name: create_order_line
     query: |-
+      IF OBJECT_ID('order_line', 'U') IS NULL
       CREATE TABLE order_line (
         ol_w_id INT NOT NULL,
         ol_d_id INT NOT NULL,
@@ -151,6 +158,7 @@ up:
 
   - name: create_item
     query: |-
+      IF OBJECT_ID('item', 'U') IS NULL
       CREATE TABLE item (
         i_id INT NOT NULL,
         i_im_id INT NOT NULL,
@@ -162,6 +170,7 @@ up:
 
   - name: create_stock
     query: |-
+      IF OBJECT_ID('stock', 'U') IS NULL
       CREATE TABLE stock (
         s_w_id INT NOT NULL,
         s_i_id INT NOT NULL,
@@ -207,17 +216,17 @@ seed:
       INSERT INTO item (i_id, i_im_id, i_name, i_price, i_data)
       SELECT
         s,
-        FLOOR(RAND(CHECKSUM(NEWID())) * 10000 + 1),
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000 + 1) AS INT),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 18 + 6)),
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 18 + 6) AS INT)),
         CAST(RAND(CHECKSUM(NEWID())) * 99 + 1 AS DECIMAL(5,2)),
         CASE WHEN RAND(CHECKSUM(NEWID())) < 0.1
           THEN CONCAT('ORIGINAL', SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-            FLOOR(RAND(CHECKSUM(NEWID())) * 16 + 18)))
+            CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 16 + 18) AS INT)))
           ELSE SUBSTRING(CONCAT(
             REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''),
             REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', '')), 1,
-            FLOOR(RAND(CHECKSUM(NEWID())) * 24 + 26))
+            CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 24 + 26) AS INT))
         END
       FROM seq
       OPTION (MAXRECURSION 0)
@@ -236,15 +245,15 @@ seed:
       SELECT
         s,
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 4 + 6)),
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 4 + 6) AS INT)),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10)),
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10)),
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10)),
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 2),
-        CONCAT(RIGHT(REPLICATE('0', 4) + CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS NVARCHAR), 4), '11111'),
+        CONCAT(RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS INT) AS NVARCHAR), 4), '11111'),
         RAND(CHECKSUM(NEWID())) / 5,
         300000
       FROM seq
@@ -265,15 +274,15 @@ seed:
       SELECT
         $1, d,
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 4 + 6)),
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 4 + 6) AS INT)),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10)),
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10)),
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10)),
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 2),
-        CONCAT(RIGHT(REPLICATE('0', 4) + CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS NVARCHAR), 4), '11111'),
+        CONCAT(RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS INT) AS NVARCHAR), 4), '11111'),
         RAND(CHECKSUM(NEWID())) / 5,
         30000,
         3001
@@ -303,29 +312,29 @@ seed:
       SELECT
         $1, d, c,
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 6)),
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 6) AS INT)),
         'OE',
         CONCAT(
-          CHOOSE(FLOOR(CASE WHEN c <= 1000 THEN c - 1 ELSE FLOOR(RAND(CHECKSUM(NEWID())) * 1000) END / 100) + 1,
+          CHOOSE(CAST(FLOOR(CASE WHEN c <= 1000 THEN c - 1 ELSE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) END / 100) AS INT) + 1,
             'BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'),
-          CHOOSE(FLOOR(CASE WHEN c <= 1000 THEN c - 1 ELSE FLOOR(RAND(CHECKSUM(NEWID())) * 1000) END / 10) % 10 + 1,
+          CHOOSE(CAST(FLOOR(CASE WHEN c <= 1000 THEN c - 1 ELSE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) END / 10) AS INT) % 10 + 1,
             'BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'),
-          CHOOSE(CASE WHEN c <= 1000 THEN c - 1 ELSE FLOOR(RAND(CHECKSUM(NEWID())) * 1000) END % 10 + 1,
+          CHOOSE(CAST(CASE WHEN c <= 1000 THEN c - 1 ELSE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) END % 10 AS INT) + 1,
             'BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING')
         ),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10)),
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10)),
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10)),
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 2),
-        CONCAT(RIGHT(REPLICATE('0', 4) + CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS NVARCHAR), 4), '11111'),
+        CONCAT(RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS INT) AS NVARCHAR), 4), '11111'),
         CONCAT(
-          RIGHT(REPLICATE('0', 4) + CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 9999) AS NVARCHAR), 4),
-          RIGHT(REPLICATE('0', 4) + CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 9999) AS NVARCHAR), 4),
-          RIGHT(REPLICATE('0', 4) + CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 9999) AS NVARCHAR), 4),
-          RIGHT(REPLICATE('0', 4) + CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 9999) AS NVARCHAR), 4)
+          RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 9999) AS INT) AS NVARCHAR), 4),
+          RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 9999) AS INT) AS NVARCHAR), 4),
+          RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 9999) AS INT) AS NVARCHAR), 4),
+          RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 9999) AS INT) AS NVARCHAR), 4)
         ),
         GETDATE(),
         CASE WHEN RAND(CHECKSUM(NEWID())) < 0.1 THEN 'BC' ELSE 'GC' END,
@@ -336,7 +345,7 @@ seed:
         1,
         0,
         SUBSTRING(REPLICATE(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 16), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 200 + 300))
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 200 + 300) AS INT))
       FROM d_seq
       CROSS JOIN c_seq
       OPTION (MAXRECURSION 0)
@@ -353,7 +362,7 @@ seed:
         GETDATE(),
         10,
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-          FLOOR(RAND(CHECKSUM(NEWID())) * 12 + 12))
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 12 + 12) AS INT))
       FROM customer c
       WHERE c.c_w_id = $1
 
@@ -377,10 +386,10 @@ seed:
         o_carrier_id, o_ol_cnt, o_all_local)
       SELECT
         $1, d, o,
-        FLOOR(RAND(CHECKSUM(NEWID())) * 3000 + 1),
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 3000 + 1) AS INT),
         GETDATE(),
-        CASE WHEN o <= 2100 THEN FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 1) ELSE NULL END,
-        FLOOR(RAND(CHECKSUM(NEWID())) * 11 + 5),
+        CASE WHEN o <= 2100 THEN CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 1) AS INT) ELSE NULL END,
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 11 + 5) AS INT),
         1
       FROM d_seq
       CROSS JOIN o_seq
@@ -423,7 +432,7 @@ seed:
       SELECT
         o.o_w_id, o.o_d_id, o.o_id,
         n,
-        FLOOR(RAND(CHECKSUM(NEWID())) * 100000 + 1),
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 100000 + 1) AS INT),
         o.o_w_id,
         CASE WHEN o.o_id <= 2100 THEN o.o_entry_d ELSE NULL END,
         5,
@@ -449,7 +458,7 @@ seed:
         s_ytd, s_order_cnt, s_remote_cnt, s_data)
       SELECT
         $1, i,
-        FLOOR(RAND(CHECKSUM(NEWID())) * 91 + 10),
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 91 + 10) AS INT),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24),
@@ -463,11 +472,11 @@ seed:
         0, 0, 0,
         CASE WHEN RAND(CHECKSUM(NEWID())) < 0.1
           THEN CONCAT('ORIGINAL', SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
-            FLOOR(RAND(CHECKSUM(NEWID())) * 16 + 18)))
+            CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 16 + 18) AS INT)))
           ELSE SUBSTRING(CONCAT(
             REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''),
             REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', '')), 1,
-            FLOOR(RAND(CHECKSUM(NEWID())) * 24 + 26))
+            CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 24 + 26) AS INT))
         END
       FROM seq
       OPTION (MAXRECURSION 0)

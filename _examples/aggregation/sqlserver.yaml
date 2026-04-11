@@ -11,6 +11,7 @@ up:
 
   - name: create_product
     query: |-
+      IF OBJECT_ID('product', 'U') IS NULL
       CREATE TABLE product (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         category NVARCHAR(50) NOT NULL,
@@ -20,6 +21,7 @@ up:
 
   - name: create_agg_snapshot
     query: |-
+      IF OBJECT_ID('agg_snapshot', 'U') IS NULL
       CREATE TABLE agg_snapshot (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         total_products INT NOT NULL,
@@ -44,9 +46,9 @@ seed:
       )
       INSERT INTO product (category, price, stock_qty)
       SELECT
-        CHOOSE(ABS(CHECKSUM(NEWID())) % 5 + 1, 'electronics', 'clothing', 'books', 'food', 'toys'),
+        CASE ABS(CHECKSUM(NEWID()) % 5) WHEN 0 THEN 'electronics' WHEN 1 THEN 'clothing' WHEN 2 THEN 'books' WHEN 3 THEN 'food' ELSE 'toys' END,
         CAST(RAND(CHECKSUM(NEWID())) * 499 + 1 AS DECIMAL(10,2)),
-        ABS(CHECKSUM(NEWID())) % 200 + 1
+        ABS(CHECKSUM(NEWID()) % 200) + 1
       FROM seq
       OPTION (MAXRECURSION 0)
 
@@ -80,7 +82,7 @@ run:
       SELECT id, category, price, stock_qty
       FROM product
       ORDER BY NEWID()
-      OFFSET 0 ROWS FETCH NEXT @p1 ROWS ONLY
+      OFFSET 0 ROWS FETCH NEXT CAST(@p1 AS INT) ROWS ONLY
 
   - name: record_snapshot
     type: exec

@@ -8,7 +8,7 @@
 #     --url "sqlserver://sa:Password123!@localhost:1433?database=populate&encrypt=disable"
 
 globals:
-  customers: 1000000000 # 1 billion
+  customers: 1000000 # 1 million
   initial_balance: 10000
   batch_size: 10000 # 10K rows per batch insert
 
@@ -16,6 +16,7 @@ up:
 
   - name: create_customer
     query: |-
+      IF OBJECT_ID('customer', 'U') IS NULL
       CREATE TABLE customer (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         email NVARCHAR(255) NOT NULL
@@ -23,6 +24,7 @@ up:
 
   - name: create_account
     query: |-
+      IF OBJECT_ID('account', 'U') IS NULL
       CREATE TABLE account (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         balance FLOAT NOT NULL,

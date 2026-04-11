@@ -11,6 +11,7 @@ up:
 
   - name: create_product
     query: |-
+      IF OBJECT_ID('product', 'U') IS NULL
       CREATE TABLE product (
         id INT PRIMARY KEY,
         name NVARCHAR(255) NOT NULL,
@@ -19,6 +20,7 @@ up:
 
   - name: create_review
     query: |-
+      IF OBJECT_ID('review', 'U') IS NULL
       CREATE TABLE review (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         product_id INT NOT NULL,

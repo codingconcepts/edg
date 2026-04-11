@@ -198,12 +198,12 @@ seed:
     args:
       - items
     query: |-
+      INSERT INTO item (i_id, i_im_id, i_name, i_price, i_data)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $1
       )
-      INSERT INTO item (i_id, i_im_id, i_name, i_price, i_data)
       SELECT
         s,
         FLOOR(RAND() * 10000 + 1),
@@ -219,13 +219,13 @@ seed:
     args:
       - warehouses
     query: |-
+      INSERT INTO warehouse (w_id, w_name, w_street_1, w_street_2, w_city,
+        w_state, w_zip, w_tax, w_ytd)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $1
       )
-      INSERT INTO warehouse (w_id, w_name, w_street_1, w_street_2, w_city,
-        w_state, w_zip, w_tax, w_ytd)
       SELECT
         s,
         SUBSTRING(MD5(RAND()), 1, FLOOR(RAND() * 4 + 6)),
@@ -243,13 +243,13 @@ seed:
       - ref_each('SELECT w_id FROM warehouse')
       - districts
     query: |-
+      INSERT INTO district (d_w_id, d_id, d_name, d_street_1, d_street_2,
+        d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id)
       WITH RECURSIVE seq AS (
         SELECT 1 AS d
         UNION ALL
         SELECT d + 1 FROM seq WHERE d < $2
       )
-      INSERT INTO district (d_w_id, d_id, d_name, d_street_1, d_street_2,
-        d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id)
       SELECT
         $1, d,
         SUBSTRING(MD5(RAND()), 1, FLOOR(RAND() * 4 + 6)),
@@ -269,6 +269,10 @@ seed:
       - districts
       - customers / districts
     query: |-
+      INSERT INTO customer (c_w_id, c_d_id, c_id, c_first, c_middle, c_last,
+        c_street_1, c_street_2, c_city, c_state, c_zip, c_phone,
+        c_since, c_credit, c_credit_lim, c_discount, c_balance,
+        c_ytd_payment, c_payment_cnt, c_delivery_cnt, c_data)
       WITH RECURSIVE d_seq AS (
         SELECT 1 AS d
         UNION ALL
@@ -279,10 +283,6 @@ seed:
         UNION ALL
         SELECT c + 1 FROM c_seq WHERE c < $3
       )
-      INSERT INTO customer (c_w_id, c_d_id, c_id, c_first, c_middle, c_last,
-        c_street_1, c_street_2, c_city, c_state, c_zip, c_phone,
-        c_since, c_credit, c_credit_lim, c_discount, c_balance,
-        c_ytd_payment, c_payment_cnt, c_delivery_cnt, c_data)
       SELECT
         $1, d, c,
         SUBSTRING(MD5(RAND()), 1, FLOOR(RAND() * 10 + 6)),
@@ -339,6 +339,8 @@ seed:
       - districts
       - orders / districts
     query: |-
+      INSERT INTO oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
+        o_carrier_id, o_ol_cnt, o_all_local)
       WITH RECURSIVE d_seq AS (
         SELECT 1 AS d
         UNION ALL
@@ -349,8 +351,6 @@ seed:
         UNION ALL
         SELECT o + 1 FROM o_seq WHERE o < $3
       )
-      INSERT INTO oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
-        o_carrier_id, o_ol_cnt, o_all_local)
       SELECT
         $1, d, o,
         FLOOR(RAND() * 3000 + 1),
@@ -367,6 +367,7 @@ seed:
       - districts
       - orders / districts
     query: |-
+      INSERT INTO new_order (no_w_id, no_d_id, no_o_id)
       WITH RECURSIVE d_seq AS (
         SELECT 1 AS d
         UNION ALL
@@ -377,7 +378,6 @@ seed:
         UNION ALL
         SELECT o + 1 FROM o_seq WHERE o < $3
       )
-      INSERT INTO new_order (no_w_id, no_d_id, no_o_id)
       SELECT $1, d, o
       FROM d_seq
       CROSS JOIN o_seq
@@ -386,14 +386,14 @@ seed:
     args:
       - ref_each('SELECT w_id FROM warehouse')
     query: |-
+      INSERT INTO order_line (ol_w_id, ol_d_id, ol_o_id, ol_number,
+        ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount,
+        ol_dist_info)
       WITH RECURSIVE n_seq AS (
         SELECT 1 AS n
         UNION ALL
         SELECT n + 1 FROM n_seq WHERE n < 15
       )
-      INSERT INTO order_line (ol_w_id, ol_d_id, ol_o_id, ol_number,
-        ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount,
-        ol_dist_info)
       SELECT
         o.o_w_id, o.o_d_id, o.o_id,
         n,
@@ -412,15 +412,15 @@ seed:
       - ref_each('SELECT w_id FROM warehouse')
       - stock
     query: |-
+      INSERT INTO stock (s_w_id, s_i_id, s_quantity,
+        s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05,
+        s_dist_06, s_dist_07, s_dist_08, s_dist_09, s_dist_10,
+        s_ytd, s_order_cnt, s_remote_cnt, s_data)
       WITH RECURSIVE seq AS (
         SELECT 1 AS i
         UNION ALL
         SELECT i + 1 FROM seq WHERE i < $2
       )
-      INSERT INTO stock (s_w_id, s_i_id, s_quantity,
-        s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05,
-        s_dist_06, s_dist_07, s_dist_08, s_dist_09, s_dist_10,
-        s_ytd, s_order_cnt, s_remote_cnt, s_data)
       SELECT
         $1, i,
         FLOOR(RAND() * 91 + 10),

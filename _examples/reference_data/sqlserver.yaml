@@ -17,6 +17,7 @@ up:
   - name: create_customer
     type: exec
     query: |-
+      IF OBJECT_ID('customer', 'U') IS NULL
       CREATE TABLE customer (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         email NVARCHAR(255) NOT NULL,
@@ -28,6 +29,7 @@ seed:
 
   - name: populate_customer
     type: exec_batch
+    batch_format: json
     count: customers
     size: 10
     args:
@@ -37,9 +39,9 @@ seed:
     query: |-
       INSERT INTO customer (email, region, city)
       SELECT j1.value, j2.value, j3.value
-      FROM OPENJSON('["' + REPLACE('$1', ',', '","') + '"]') j1
-      JOIN OPENJSON('["' + REPLACE('$2', ',', '","') + '"]') j2 ON j1.[key] = j2.[key]
-      JOIN OPENJSON('["' + REPLACE('$3', ',', '","') + '"]') j3 ON j1.[key] = j3.[key]
+      FROM OPENJSON('$1') j1
+      JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
+      JOIN OPENJSON('$3') j3 ON j1.[key] = j3.[key]
 
 deseed:
 

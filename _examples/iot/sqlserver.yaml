@@ -15,6 +15,7 @@ up:
 
   - name: create_device
     query: |-
+      IF OBJECT_ID('device', 'U') IS NULL
       CREATE TABLE device (
         id INT PRIMARY KEY,
         name NVARCHAR(255) NOT NULL,
@@ -25,6 +26,7 @@ up:
 
   - name: create_sensor
     query: |-
+      IF OBJECT_ID('sensor', 'U') IS NULL
       CREATE TABLE sensor (
         id INT PRIMARY KEY,
         device_id INT NOT NULL,
@@ -37,6 +39,7 @@ up:
 
   - name: create_reading
     query: |-
+      IF OBJECT_ID('reading', 'U') IS NULL
       CREATE TABLE reading (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         sensor_id INT NOT NULL,
@@ -47,6 +50,7 @@ up:
 
   - name: create_alert
     query: |-
+      IF OBJECT_ID('alert', 'U') IS NULL
       CREATE TABLE alert (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         sensor_id INT NOT NULL,
@@ -82,8 +86,8 @@ seed:
       SELECT
         s,
         CONCAT('device-', s),
-        CHOOSE(ABS(CHECKSUM(NEWID())) % 6 + 1, 'floor-1','floor-2','floor-3','roof','basement','warehouse'),
-        CHOOSE(ABS(CHECKSUM(NEWID())) % 4 + 1, 'temperature','pressure','humidity','vibration')
+        CASE ABS(CHECKSUM(NEWID()) % 6) WHEN 0 THEN 'floor-1' WHEN 1 THEN 'floor-2' WHEN 2 THEN 'floor-3' WHEN 3 THEN 'roof' WHEN 4 THEN 'basement' ELSE 'warehouse' END,
+        CASE ABS(CHECKSUM(NEWID()) % 4) WHEN 0 THEN 'temperature' WHEN 1 THEN 'pressure' WHEN 2 THEN 'humidity' ELSE 'vibration' END
       FROM seq
       OPTION (MAXRECURSION 0)
 
@@ -121,7 +125,7 @@ seed:
       INSERT INTO reading (sensor_id, value, recorded_at)
       SELECT
         $1,
-        $2 + RAND(CHECKSUM(NEWID())) * ($3 - $2),
+        CAST($2 AS DECIMAL(10,2)) + RAND(CHECKSUM(NEWID())) * (CAST($3 AS DECIMAL(10,2)) - CAST($2 AS DECIMAL(10,2))),
         DATEADD(MINUTE, -s, GETDATE())
       FROM seq
       OPTION (MAXRECURSION 0)
@@ -188,10 +192,10 @@ run:
     type: exec
     args:
       - ref_rand('fetch_sensors').id
-      - gen('number:1,10000')
+      - uniform_f(0.01, 100, 2)
     query: |-
       INSERT INTO reading (sensor_id, value)
-      VALUES (@p1, @p2 / 100.0)
+      VALUES (@p1, @p2)
 
   # Find recent readings that exceeded sensor thresholds.
   # Pattern: range scan on timestamp, JOIN with threshold comparison
@@ -243,7 +247,7 @@ run:
       JOIN sensor s ON s.id = r.sensor_id
       WHERE s.device_id = @p1
       ORDER BY r.recorded_at DESC
-      OFFSET @p3 ROWS FETCH NEXT @p2 ROWS ONLY
+      OFFSET CAST(@p3 AS INT) ROWS FETCH NEXT CAST(@p2 AS INT) ROWS ONLY
 
   # Adjust a sensor's upper threshold.
   # Pattern: UPDATE with gen for new value

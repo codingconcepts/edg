@@ -49,7 +49,7 @@ seed:
 
   - name: populate_account
     args:
-      - batch(customers / batch_size)
+      - batch(customers / batch_size, batch_size)
       - initial_balance
       - batch_size
     query: |-
@@ -57,7 +57,7 @@ seed:
       SELECT $2, c.id
       FROM customer c
       ORDER BY c.id
-      LIMIT $3 OFFSET $1 * $3
+      LIMIT $3 OFFSET $1
 
 deseed:
 

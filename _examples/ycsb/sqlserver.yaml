@@ -34,6 +34,7 @@ up:
 
   - name: create_usertable
     query: |-
+      IF OBJECT_ID('usertable', 'U') IS NULL
       CREATE TABLE usertable (
         ycsb_key VARCHAR(255) PRIMARY KEY,
         field0 VARCHAR(100) NOT NULL,
@@ -140,7 +141,7 @@ run:
       SELECT * FROM usertable
       WHERE ycsb_key >= @p1
       ORDER BY ycsb_key
-      OFFSET 0 ROWS FETCH NEXT @p2 ROWS ONLY
+      OFFSET 0 ROWS FETCH NEXT CAST(@p2 AS INT) ROWS ONLY
 
   # SQL Server does not support UPDATE...RETURNING, so read_modify_write
   # performs only the update. Pair with a read for the full RMW pattern.

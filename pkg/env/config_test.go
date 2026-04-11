@@ -61,7 +61,7 @@ func TestGenerateArgs_NoArgs(t *testing.T) {
 
 	q := &config.Query{}
 
-	argSets, err := env.GenerateArgs(q)
+	argSets, _, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestGenerateArgs_WithConst(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(q)
+	argSets, _, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestGenerateArgs_ClearsOneCacheAfter(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	if _, err := env.GenerateArgs(q); err != nil {
+	if _, _, err := env.GenerateArgs(q); err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
 
@@ -132,7 +132,7 @@ func TestGenerateArgs_ResetsUniqIndexAfter(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	if _, err := env.GenerateArgs(q); err != nil {
+	if _, _, err := env.GenerateArgs(q); err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
 
@@ -270,7 +270,7 @@ func TestGenerateArgs_MixedBatchAndScalar(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(q)
+	argSets, _, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -316,7 +316,7 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(q)
+	argSets, _, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -335,13 +335,13 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 
 	// First two batches should have 4 CSV values, last should have 2.
 	for _, args := range argSets[:2] {
-		csv := args[0].(string)
+		csv := string(args[0].(convert.RawSQL))
 		parts := strings.Split(csv, ",")
 		if len(parts) != 4 {
 			t.Errorf("expected 4 CSV values, got %d: %q", len(parts), csv)
 		}
 	}
-	lastCSV := argSets[2][0].(string)
+	lastCSV := string(argSets[2][0].(convert.RawSQL))
 	parts := strings.Split(lastCSV, ",")
 	if len(parts) != 2 {
 		t.Errorf("last batch: expected 2 CSV values, got %d: %q", len(parts), lastCSV)
@@ -354,8 +354,8 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 		"'books'":       "1.1",
 	}
 	for _, args := range argSets {
-		names := strings.Split(args[1].(string), ",")
-		markups := strings.Split(args[2].(string), ",")
+		names := strings.Split(string(args[1].(convert.RawSQL)), ",")
+		markups := strings.Split(string(args[2].(convert.RawSQL)), ",")
 		if len(names) != len(markups) {
 			t.Fatalf("name/markup length mismatch: %d vs %d", len(names), len(markups))
 		}
@@ -386,7 +386,7 @@ func TestGenerateArgs_BatchType_GlobalRefs(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(q)
+	argSets, _, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -398,13 +398,13 @@ func TestGenerateArgs_BatchType_GlobalRefs(t *testing.T) {
 
 	// First two batches: 3 values each.
 	for _, args := range argSets[:2] {
-		parts := strings.Split(args[0].(string), ",")
+		parts := strings.Split(string(args[0].(convert.RawSQL)), ",")
 		if len(parts) != 3 {
 			t.Errorf("expected 3 CSV values, got %d", len(parts))
 		}
 	}
 	// Last batch: 1 value.
-	parts := strings.Split(argSets[2][0].(string), ",")
+	parts := strings.Split(string(argSets[2][0].(convert.RawSQL)), ",")
 	if len(parts) != 1 {
 		t.Errorf("last batch: expected 1 CSV value, got %d", len(parts))
 	}
@@ -423,7 +423,7 @@ func TestGenerateArgs_BatchType_SizeDefaultsToCount(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(q)
+	argSets, _, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -433,7 +433,7 @@ func TestGenerateArgs_BatchType_SizeDefaultsToCount(t *testing.T) {
 		t.Fatalf("expected 1 batch, got %d", len(argSets))
 	}
 
-	parts := strings.Split(argSets[0][0].(string), ",")
+	parts := strings.Split(string(argSets[0][0].(convert.RawSQL)), ",")
 	if len(parts) != 5 {
 		t.Errorf("expected 5 CSV values, got %d", len(parts))
 	}

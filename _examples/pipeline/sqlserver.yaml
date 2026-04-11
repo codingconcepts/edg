@@ -17,6 +17,7 @@ up:
 
   - name: create_a
     query: |-
+      IF OBJECT_ID('a', 'U') IS NULL
       CREATE TABLE a (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         name NVARCHAR(255) NOT NULL
@@ -24,6 +25,7 @@ up:
 
   - name: create_b
     query: |-
+      IF OBJECT_ID('b', 'U') IS NULL
       CREATE TABLE b (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         a_id UNIQUEIDENTIFIER NOT NULL,
@@ -33,6 +35,7 @@ up:
 
   - name: create_c
     query: |-
+      IF OBJECT_ID('c', 'U') IS NULL
       CREATE TABLE c (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
         b_id UNIQUEIDENTIFIER NOT NULL,
@@ -55,7 +58,7 @@ seed:
       - batch_size
     query: |-
       INSERT INTO b (a_id, value)
-      SELECT TOP $2 a.id, ABS(CHECKSUM(NEWID())) % 100
+      SELECT TOP $2 a.id, ABS(CHECKSUM(NEWID()) % 100)
       FROM a
       ORDER BY NEWID()
 

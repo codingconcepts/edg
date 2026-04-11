@@ -209,23 +209,20 @@ func NewEnv(db *sql.DB, r *config.Request) (*Env, error) {
 }
 
 // GenerateArgs evaluates compiled arg expressions and returns one or more
-// arg sets. When a single arg evaluates to [][]any (from ref_each), each
-// inner slice becomes a separate arg set, causing the query to run once
-// per batch row. Otherwise a single arg set is returned.
-//
-// For batch queries (type: query_batch or exec_batch), args are evaluated
-// repeatedly per row, with values collected into comma-separated strings
-// per arg position.
-func (e *Env) GenerateArgs(q *config.Query) ([][]any, error) {
+// arg sets. The returned bool indicates whether batch expansion occurred
+// (from gen_batch/batch/ref_each/query_batch/exec_batch), signalling that
+// the caller should inline placeholders rather than using native bind params.
+func (e *Env) GenerateArgs(q *config.Query) ([][]any, bool, error) {
 	defer e.clearOneCache()
 	defer e.resetUniqIndex()
 
 	if q.Type == config.QueryTypeQueryBatch || q.Type == config.QueryTypeExecBatch {
-		return e.generateBatchArgs(q)
+		r, err := e.generateBatchArgs(q)
+		return r, true, err
 	}
 
 	if len(q.CompiledArgs) == 0 {
-		return [][]any{nil}, nil
+		return [][]any{nil}, false, nil
 	}
 
 	e.computedArgs = e.computedArgs[:0]
@@ -233,7 +230,7 @@ func (e *Env) GenerateArgs(q *config.Query) ([][]any, error) {
 	for _, cq := range q.CompiledArgs {
 		compiledArg, err := expr.Run(cq, e.env)
 		if err != nil {
-			return nil, fmt.Errorf("error running expr: %w", err)
+			return nil, false, fmt.Errorf("error running expr: %w", err)
 		}
 		completeArgs = append(completeArgs, compiledArg)
 		e.computedArgs = append(e.computedArgs, compiledArg)
@@ -255,10 +252,10 @@ func (e *Env) GenerateArgs(q *config.Query) ([][]any, error) {
 			row = append(row, completeArgs[i+1:]...)
 			result[b] = row
 		}
-		return result, nil
+		return result, true, nil
 	}
 
-	return [][]any{completeArgs}, nil
+	return [][]any{completeArgs}, false, nil
 }
 
 // generateBatchArgs handles type: query_batch/exec_batch queries. It evaluates each arg
@@ -297,6 +294,28 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 	batches := (count + size - 1) / size
 	result := make([][]any, batches)
 
+	useJSON := q.BatchFormat == "json"
+
+	// Determine the formatting function per arg position based on the
+	// SQL template. Placeholders inside quotes ('$N') are part of a
+	// string literal (e.g. string_to_array) and need unquoted values.
+	// Bare placeholders ($N, e.g. ARRAY[$N]) need SQL-quoted values.
+	// When batch_format is "json", all values use BatchFormatValue
+	// (raw text) since JSON escaping is handled by BatchJoinJSON.
+	formatters := make([]func(any) string, len(q.CompiledArgs))
+	for i := range q.CompiledArgs {
+		if useJSON {
+			formatters[i] = convert.BatchFormatValue
+		} else {
+			quoted := fmt.Sprintf("'$%d'", i+1)
+			if strings.Contains(q.Query, quoted) {
+				formatters[i] = convert.BatchFormatValue
+			} else {
+				formatters[i] = convert.SQLFormatValue
+			}
+		}
+	}
+
 	for b := range batches {
 		n := size
 		if remaining := count - b*size; remaining < size {
@@ -316,14 +335,18 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 				if err != nil {
 					return nil, fmt.Errorf("error running batch arg %d row %d: %w", i, b*size+row, err)
 				}
-				perArg[i][row] = convert.SQLFormatValue(v)
+				perArg[i][row] = formatters[i](v)
 				e.computedArgs = append(e.computedArgs, v)
 			}
 		}
 
 		args := make([]any, len(q.CompiledArgs))
 		for i, parts := range perArg {
-			args[i] = strings.Join(parts, ",")
+			if useJSON {
+				args[i] = convert.RawSQL(convert.BatchJoinJSON(parts))
+			} else {
+				args[i] = convert.RawSQL(strings.Join(parts, ","))
+			}
 		}
 		result[b] = args
 	}
@@ -362,7 +385,7 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 			slog.Info("running query", "section", section, "query", q.Name)
 		}
 
-		argSets, err := e.GenerateArgs(q)
+		argSets, batchExpanded, err := e.GenerateArgs(q)
 		if err != nil {
 			err = fmt.Errorf("building args for %s query %s: %w", section, q.Name, err)
 			e.sendResult(config.QueryResult{Name: q.Name, Section: section, Err: err})
@@ -371,10 +394,14 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 
 		queryStart := time.Now()
 
-		// Inline $N placeholders when the query is a batch type or
-		// when batch-expanded (multiple arg sets from gen_batch/batch/ref_each).
-		// Simple scalar queries always use native bind params.
-		shouldInline := q.IsBatch() || len(argSets) > 1
+		// Inline $N placeholders when batch expansion occurred
+		// (gen_batch/batch/ref_each/query_batch/exec_batch), when
+		// placeholders appear inside quoted strings (e.g.
+		// string_to_array('$1', ',')) where the driver can't see them,
+		// or when the query uses $N placeholders at all. The last case
+		// ensures cross-driver compatibility: only PostgreSQL/CockroachDB
+		// understand $N natively; MySQL, Oracle, and SQL Server do not.
+		shouldInline := batchExpanded || strings.Contains(q.Query, "$1")
 
 		for i, args := range argSets {
 			if verbose && len(argSets) > 1 {
@@ -385,7 +412,17 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 				inlined := q.Query
 				for j := len(args) - 1; j >= 0; j-- {
 					placeholder := fmt.Sprintf("$%d", j+1)
-					inlined = strings.ReplaceAll(inlined, placeholder, fmt.Sprintf("%v", args[j]))
+					formatted := convert.SQLFormatValue(args[j])
+					// For non-RawSQL values (strings, []byte), replace quoted
+					// placeholders '$N' as a unit first. SQLFormatValue already
+					// wraps these in quotes, so this avoids double-quoting.
+					// RawSQL values (batch CSVs) are unquoted by design and
+					// must preserve the surrounding quotes in the query.
+					if _, isRaw := args[j].(convert.RawSQL); !isRaw {
+						quotedPlaceholder := "'" + placeholder + "'"
+						inlined = strings.ReplaceAll(inlined, quotedPlaceholder, formatted)
+					}
+					inlined = strings.ReplaceAll(inlined, placeholder, formatted)
 				}
 
 				inlinedQuery := &config.Query{

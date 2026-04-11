@@ -64,7 +64,7 @@ func TestExpr(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(q)
+	argSets, _, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestBareArithmetic(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(q)
+	argSets, _, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestSeedArgsCompiled(t *testing.T) {
 		t.Fatalf("expected 1 compiled arg, got %d", len(seedQuery.CompiledArgs))
 	}
 
-	argSets, err := env.GenerateArgs(seedQuery)
+	argSets, _, err := env.GenerateArgs(seedQuery)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestExpressions(t *testing.T) {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(req.Run[0])
+	argSets, _, err := env.GenerateArgs(req.Run[0])
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestExpressions_WithArgs(t *testing.T) {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(req.Run[0])
+	argSets, _, err := env.GenerateArgs(req.Run[0])
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestGenerateArgs_Batch(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(q)
+	argSets, _, err := env.GenerateArgs(q)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -628,7 +628,7 @@ func TestReference_RefRand(t *testing.T) {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(req.Run[0])
+	argSets, _, err := env.GenerateArgs(req.Run[0])
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -680,9 +680,8 @@ func TestRunSection_SeedUsesBindParams(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Non-batch seed queries use bind params, same as run.
+	// $N placeholders are always inlined for cross-driver compatibility.
 	mock.ExpectExec("INSERT INTO items SELECT generate_series").
-		WithArgs(100).
 		WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
@@ -722,7 +721,6 @@ func TestRunSection_RunSectionPassesArgs(t *testing.T) {
 	defer db.Close()
 
 	mock.ExpectExec("INSERT INTO orders").
-		WithArgs(42).
 		WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
@@ -838,7 +836,7 @@ func TestArg_DependentColumn(t *testing.T) {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(req.Run[0])
+	argSets, _, err := env.GenerateArgs(req.Run[0])
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -864,7 +862,7 @@ func TestArg_OutOfRange(t *testing.T) {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
 
-	_, err = env.GenerateArgs(req.Run[0])
+	_, _, err = env.GenerateArgs(req.Run[0])
 	if err == nil {
 		t.Fatal("expected error for arg(0) with no prior args, got nil")
 	}
@@ -892,7 +890,7 @@ func TestArg_Batch(t *testing.T) {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(req.Seed[0])
+	argSets, _, err := env.GenerateArgs(req.Seed[0])
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -900,9 +898,9 @@ func TestArg_Batch(t *testing.T) {
 	// Single batch of 3 rows, each arg is a CSV string.
 	// sqlFormatValue wraps strings in quotes, so the full name
 	// is computed from raw values then formatted: 'First Last'.
-	firsts := strings.Split(argSets[0][0].(string), ",")
-	lasts := strings.Split(argSets[0][1].(string), ",")
-	fulls := strings.Split(argSets[0][2].(string), ",")
+	firsts := strings.Split(string(argSets[0][0].(convert.RawSQL)), ",")
+	lasts := strings.Split(string(argSets[0][1].(convert.RawSQL)), ",")
+	fulls := strings.Split(string(argSets[0][2].(convert.RawSQL)), ",")
 
 	for i := range 3 {
 		// Strip quotes added by sqlFormatValue.
@@ -931,7 +929,7 @@ func TestRow_ExpandsIntoArgs(t *testing.T) {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
 
-	argSets, err := env.GenerateArgs(req.Run[0])
+	argSets, _, err := env.GenerateArgs(req.Run[0])
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -977,7 +975,7 @@ func TestRow_UsedAcrossSections(t *testing.T) {
 			t.Errorf("query %s: expected 1 compiled arg, got %d", q.Name, len(q.CompiledArgs))
 		}
 
-		argSets, err := env.GenerateArgs(q)
+		argSets, _, err := env.GenerateArgs(q)
 		if err != nil {
 			t.Fatalf("GenerateArgs for %s failed: %v", q.Name, err)
 		}

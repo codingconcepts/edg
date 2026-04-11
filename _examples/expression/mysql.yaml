@@ -128,7 +128,7 @@ run:
     args:
       - 'join(keys({a: 1, b: 2, c: 3}), ",")'
       - 'join(map(values({a: 1, b: 2, c: 3}), string(#)), ",")'
-      - 'toJSON(groupBy(products, #.category))'
+      - 'join(keys(groupBy(products, #.category)), ",")'
     query: |-
       INSERT INTO expr_demo (label, result) VALUES
         ('keys', ?),
@@ -182,7 +182,7 @@ run:
       - toBase64("hello")
       - fromBase64("aGVsbG8=")
       - 'len(toPairs({x: 1, y: 2}))'
-      - 'toJSON(fromPairs([["x", 1], ["y", 2]]))'
+      - 'join(keys(fromPairs([["x", 1], ["y", 2]])), ",")'
     query: |-
       INSERT INTO expr_demo (label, result) VALUES
         ('type', ?),

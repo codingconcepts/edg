@@ -12,7 +12,7 @@
 #   user:password@tcp(host:port)/database?parseTime=true
 
 globals:
-  users: 10000
+  users: 1000
   posts_per_user: 5
   follows_per_user: 10
   tags: 50
@@ -113,12 +113,12 @@ seed:
     args:
       - users
     query: |-
+      INSERT INTO user_profile (username, display_name, bio)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $1
       )
-      INSERT INTO user_profile (username, display_name, bio)
       SELECT
         CONCAT('user_', s),
         SUBSTRING(MD5(RAND()), 1, 12),
@@ -129,12 +129,12 @@ seed:
     args:
       - tags
     query: |-
+      INSERT INTO tag (id, name)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $1
       )
-      INSERT INTO tag (id, name)
       SELECT s, CONCAT('tag-', s)
       FROM seq
 
@@ -142,12 +142,12 @@ seed:
     args:
       - posts_per_user
     query: |-
+      INSERT INTO post (author_id, body, like_count)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $1
       )
-      INSERT INTO post (author_id, body, like_count)
       SELECT
         u.id,
         SUBSTRING(CONCAT(MD5(RAND()), MD5(RAND())), 1, 100),
@@ -159,12 +159,12 @@ seed:
     args:
       - tags
     query: |-
+      INSERT IGNORE INTO post_tag (post_id, tag_id)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < 3
       )
-      INSERT IGNORE INTO post_tag (post_id, tag_id)
       SELECT p.id, FLOOR(RAND() * $1) + 1
       FROM post p
       CROSS JOIN seq
