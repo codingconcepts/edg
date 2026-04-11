@@ -10,15 +10,26 @@ globals:
 up:
 
   - name: create_distributions
+    type: exec
     query: |-
-      CREATE TABLE distributions (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        dist_type VARCHAR2(50) NOT NULL,
-        value NUMBER NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE distributions (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            dist_type VARCHAR2(50) NOT NULL,
+            value NUMBER NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
+
+  - name: clear_distributions
+    type: exec
+    query: TRUNCATE TABLE distributions
 
   - name: seed_uniform
     args:

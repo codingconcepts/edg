@@ -14,61 +14,115 @@ globals:
 up:
 
   - name: create_device
+    type: exec
     query: |-
-      CREATE TABLE device (
-        id NUMBER NOT NULL,
-        name VARCHAR2(255) NOT NULL,
-        location VARCHAR2(255) NOT NULL,
-        device_type VARCHAR2(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE device (
+            id NUMBER NOT NULL,
+            name VARCHAR2(255) NOT NULL,
+            location VARCHAR2(255) NOT NULL,
+            device_type VARCHAR2(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_sensor
+    type: exec
     query: |-
-      CREATE TABLE sensor (
-        id NUMBER NOT NULL,
-        device_id NUMBER NOT NULL,
-        metric_name VARCHAR2(255) NOT NULL,
-        unit VARCHAR2(20) NOT NULL,
-        min_threshold NUMBER(10,2) NOT NULL,
-        max_threshold NUMBER(10,2) NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE sensor (
+            id NUMBER NOT NULL,
+            device_id NUMBER NOT NULL,
+            metric_name VARCHAR2(255) NOT NULL,
+            unit VARCHAR2(20) NOT NULL,
+            min_threshold NUMBER(10,2) NOT NULL,
+            max_threshold NUMBER(10,2) NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_reading
+    type: exec
     query: |-
-      CREATE TABLE reading (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        sensor_id NUMBER NOT NULL,
-        value NUMBER(12,4) NOT NULL,
-        recorded_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE reading (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            sensor_id NUMBER NOT NULL,
+            value NUMBER(12,4) NOT NULL,
+            recorded_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_alert
+    type: exec
     query: |-
-      CREATE TABLE alert (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        sensor_id NUMBER NOT NULL,
-        reading_value NUMBER(12,4) NOT NULL,
-        threshold NUMBER(10,2) NOT NULL,
-        alert_type VARCHAR2(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE alert (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            sensor_id NUMBER NOT NULL,
+            reading_value NUMBER(12,4) NOT NULL,
+            threshold NUMBER(10,2) NOT NULL,
+            alert_type VARCHAR2(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_idx_reading_sensor_time
+    type: exec
     query: |-
-      CREATE INDEX idx_reading_sensor_time
-      ON reading (sensor_id, recorded_at DESC)
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_reading_sensor_time
+          ON reading (sensor_id, recorded_at DESC)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_idx_alert_sensor_time
+    type: exec
     query: |-
-      CREATE INDEX idx_alert_sensor_time
-      ON alert (sensor_id, created_at DESC)
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_alert_sensor_time
+          ON alert (sensor_id, created_at DESC)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
+
+  - name: clear_reading
+    type: exec
+    query: TRUNCATE TABLE reading
+
+  - name: clear_sensor
+    type: exec
+    query: TRUNCATE TABLE sensor
+
+  - name: clear_device
+    type: exec
+    query: TRUNCATE TABLE device
 
   - name: populate_device
     args:

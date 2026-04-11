@@ -1,28 +1,50 @@
 globals:
-  customers: 1000000 # 1 million
+  customers: 100000
   initial_balance: 10000
   batch_size: 100 # 100 rows per batch insert
 
 up:
 
   - name: create_customer
+    type: exec
     query: |-
-      CREATE TABLE customer (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        email VARCHAR2(320) NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE customer (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            email VARCHAR2(320) NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_account
+    type: exec
     query: |-
-      CREATE TABLE account (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        balance NUMBER NOT NULL,
-        customer_id NUMBER NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE account (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            balance NUMBER NOT NULL,
+            customer_id NUMBER NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
+
+  - name: clear_account
+    type: exec
+    query: TRUNCATE TABLE account
+
+  - name: clear_customer
+    type: exec
+    query: TRUNCATE TABLE customer
 
   - name: populate_customer
     args:

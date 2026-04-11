@@ -17,15 +17,25 @@ up:
   - name: create_customer
     type: exec
     query: |-
-      CREATE TABLE customer (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        email VARCHAR2(255) NOT NULL,
-        region VARCHAR2(50) NOT NULL,
-        city VARCHAR2(50) NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE customer (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            email VARCHAR2(255) NOT NULL,
+            region VARCHAR2(50) NOT NULL,
+            city VARCHAR2(50) NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
+
+  - name: clear_customer
+    type: exec
+    query: TRUNCATE TABLE customer
 
   - name: populate_customer
     type: exec_batch

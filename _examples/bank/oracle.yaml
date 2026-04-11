@@ -6,27 +6,52 @@ globals:
 up:
 
   - name: create_customer
+    type: exec
     query: |-
-      CREATE TABLE customer (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        email VARCHAR2(320) NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE customer (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            email VARCHAR2(320) NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_account
+    type: exec
     query: |-
-      CREATE TABLE account (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        balance NUMBER NOT NULL,
-        customer_id NUMBER NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE account (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            balance NUMBER NOT NULL,
+            customer_id NUMBER NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
 
+  - name: clear_account
+    type: exec
+    query: TRUNCATE TABLE account
+
+  - name: clear_customer
+    type: exec
+    query: TRUNCATE TABLE customer
+
   - name: populate_customer
+    type: exec_batch
+    count: customers
+    size: 100
     args:
-      - gen_batch(customers, batch_size, 'email')
+      - gen('email')
     query: |-
       INSERT INTO customer (email)
       SELECT column_value

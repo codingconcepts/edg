@@ -16,89 +16,179 @@ globals:
 up:
 
   - name: create_user_profile
+    type: exec
     query: |-
-      CREATE TABLE user_profile (
-        id RAW(16) DEFAULT SYS_GUID(),
-        username VARCHAR2(255) NOT NULL,
-        display_name VARCHAR2(255) NOT NULL,
-        bio VARCHAR2(500) DEFAULT '' NOT NULL,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE user_profile (
+            id RAW(16) DEFAULT SYS_GUID(),
+            username VARCHAR2(255) NOT NULL,
+            display_name VARCHAR2(255) NOT NULL,
+            bio VARCHAR2(500) DEFAULT '''' NOT NULL,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_post
+    type: exec
     query: |-
-      CREATE TABLE post (
-        id RAW(16) DEFAULT SYS_GUID(),
-        author_id RAW(16) NOT NULL,
-        body VARCHAR2(4000) NOT NULL,
-        like_count NUMBER DEFAULT 0 NOT NULL,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE post (
+            id RAW(16) DEFAULT SYS_GUID(),
+            author_id RAW(16) NOT NULL,
+            body VARCHAR2(4000) NOT NULL,
+            like_count NUMBER DEFAULT 0 NOT NULL,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_follow
+    type: exec
     query: |-
-      CREATE TABLE follow (
-        follower_id RAW(16) NOT NULL,
-        following_id RAW(16) NOT NULL,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (follower_id, following_id),
-        CHECK (follower_id != following_id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE follow (
+            follower_id RAW(16) NOT NULL,
+            following_id RAW(16) NOT NULL,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (follower_id, following_id),
+            CHECK (follower_id != following_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_post_like
+    type: exec
     query: |-
-      CREATE TABLE post_like (
-        post_id RAW(16) NOT NULL,
-        user_id RAW(16) NOT NULL,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (post_id, user_id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE post_like (
+            post_id RAW(16) NOT NULL,
+            user_id RAW(16) NOT NULL,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (post_id, user_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_comment
+    type: exec
     query: |-
-      CREATE TABLE comment_ (
-        id RAW(16) DEFAULT SYS_GUID(),
-        post_id RAW(16) NOT NULL,
-        author_id RAW(16) NOT NULL,
-        body VARCHAR2(4000) NOT NULL,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE comment_ (
+            id RAW(16) DEFAULT SYS_GUID(),
+            post_id RAW(16) NOT NULL,
+            author_id RAW(16) NOT NULL,
+            body VARCHAR2(4000) NOT NULL,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_tag
+    type: exec
     query: |-
-      CREATE TABLE tag (
-        id NUMBER NOT NULL,
-        name VARCHAR2(255) NOT NULL UNIQUE,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE tag (
+            id NUMBER NOT NULL,
+            name VARCHAR2(255) NOT NULL UNIQUE,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_post_tag
+    type: exec
     query: |-
-      CREATE TABLE post_tag (
-        post_id RAW(16) NOT NULL,
-        tag_id NUMBER NOT NULL,
-        PRIMARY KEY (post_id, tag_id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE post_tag (
+            post_id RAW(16) NOT NULL,
+            tag_id NUMBER NOT NULL,
+            PRIMARY KEY (post_id, tag_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_idx_post_author
+    type: exec
     query: |-
-      CREATE INDEX idx_post_author
-      ON post (author_id, created_at DESC)
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_post_author
+          ON post (author_id, created_at DESC)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_idx_follow_follower
+    type: exec
     query: |-
-      CREATE INDEX idx_follow_follower
-      ON follow (follower_id)
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_follow_follower
+          ON follow (follower_id)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_idx_comment_post
+    type: exec
     query: |-
-      CREATE INDEX idx_comment_post
-      ON comment_ (post_id, created_at DESC)
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_comment_post
+          ON comment_ (post_id, created_at DESC)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
+
+  - name: clear_post_tag
+    type: exec
+    query: TRUNCATE TABLE post_tag
+
+  - name: clear_follow
+    type: exec
+    query: TRUNCATE TABLE follow
+
+  - name: clear_post
+    type: exec
+    query: TRUNCATE TABLE post
+
+  - name: clear_tag
+    type: exec
+    query: TRUNCATE TABLE tag
+
+  - name: clear_user_profile
+    type: exec
+    query: TRUNCATE TABLE user_profile
 
   - name: populate_user_profile
     args:
@@ -139,9 +229,11 @@ seed:
     query: |-
       MERGE INTO post_tag pt
       USING (
-        SELECT p.id AS post_id, TRUNC(DBMS_RANDOM.VALUE * $1) + 1 AS tag_id
-        FROM post p
-        CROSS JOIN (SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= 3)
+        SELECT DISTINCT post_id, tag_id FROM (
+          SELECT p.id AS post_id, TRUNC(DBMS_RANDOM.VALUE * $1) + 1 AS tag_id
+          FROM post p
+          CROSS JOIN (SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= 3)
+        )
       ) src ON (pt.post_id = src.post_id AND pt.tag_id = src.tag_id)
       WHEN NOT MATCHED THEN
         INSERT (post_id, tag_id) VALUES (src.post_id, src.tag_id)
@@ -263,15 +355,15 @@ init:
 
   - name: fetch_users
     type: query
-    query: SELECT id, username, display_name FROM user_profile
+    query: SELECT RAWTOHEX(id) AS id, username, display_name FROM user_profile
 
   - name: fetch_posts
     type: query
-    query: SELECT id FROM post
+    query: SELECT RAWTOHEX(id) AS id FROM post
 
   - name: fetch_tags
     type: query
-    query: SELECT id, name FROM tag
+    query: SELECT RAWTOHEX(id) AS id, name FROM tag
 
 run_weights:
   fetch_feed: 30
@@ -295,7 +387,7 @@ run:
       FROM post p
       JOIN follow f ON f.following_id = p.author_id
       JOIN user_profile u ON u.id = p.author_id
-      WHERE f.follower_id = :1
+      WHERE f.follower_id = HEXTORAW(:1)
       ORDER BY p.created_at DESC
       FETCH FIRST 20 ROWS ONLY
 
@@ -307,7 +399,7 @@ run:
       - gen('sentence:10')
     query: |-
       INSERT INTO post (author_id, body)
-      VALUES (:1, :2)
+      VALUES (HEXTORAW(:1), :2)
 
   # Like a post (idempotent).
   - name: like_post
@@ -317,7 +409,7 @@ run:
       - ref_rand('fetch_users').id
     query: |-
       MERGE INTO post_like pl
-      USING (SELECT :1 AS post_id, :2 AS user_id FROM DUAL) src
+      USING (SELECT HEXTORAW(:1) AS post_id, HEXTORAW(:2) AS user_id FROM DUAL) src
       ON (pl.post_id = src.post_id AND pl.user_id = src.user_id)
       WHEN NOT MATCHED THEN
         INSERT (post_id, user_id) VALUES (src.post_id, src.user_id)
@@ -332,7 +424,7 @@ run:
       - ref_same('fetch_users').display_name
     query: |-
       INSERT INTO comment_ (post_id, author_id, body)
-      VALUES (:2, :1, :4 || ': ' || :3)
+      VALUES (HEXTORAW(:2), HEXTORAW(:1), :4 || ': ' || :3)
 
   # Follow another user (idempotent).
   - name: follow_user
@@ -342,7 +434,7 @@ run:
       - ref_diff('fetch_users').id
     query: |-
       MERGE INTO follow f
-      USING (SELECT :1 AS follower_id, :2 AS following_id FROM DUAL) src
+      USING (SELECT HEXTORAW(:1) AS follower_id, HEXTORAW(:2) AS following_id FROM DUAL) src
       ON (f.follower_id = src.follower_id AND f.following_id = src.following_id)
       WHEN NOT MATCHED THEN
         INSERT (follower_id, following_id) VALUES (src.follower_id, src.following_id)
@@ -368,6 +460,6 @@ run:
       FROM follow f1
       JOIN follow f2 ON f1.following_id = f2.following_id
       JOIN user_profile u ON u.id = f1.following_id
-      WHERE f1.follower_id = :1
-        AND f2.follower_id = :2
+      WHERE f1.follower_id = HEXTORAW(:1)
+        AND f2.follower_id = HEXTORAW(:2)
       FETCH FIRST 20 ROWS ONLY

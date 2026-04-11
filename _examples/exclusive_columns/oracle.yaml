@@ -12,24 +12,34 @@ up:
   - name: create_contact
     type: exec
     query: |-
-      CREATE TABLE contact (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        name VARCHAR2(255) NOT NULL,
-        email VARCHAR2(255),
-        phone VARCHAR2(50),
-        PRIMARY KEY (id),
-        CHECK (
-          (email IS NOT NULL AND phone IS NULL) OR
-          (email IS NULL AND phone IS NOT NULL)
-        )
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE contact (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            name VARCHAR2(255) NOT NULL,
+            email VARCHAR2(255),
+            phone VARCHAR2(50),
+            PRIMARY KEY (id),
+            CHECK (
+              (email IS NOT NULL AND phone IS NULL) OR
+              (email IS NULL AND phone IS NOT NULL)
+            )
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
+
+  - name: clear_contact
+    type: exec
+    query: TRUNCATE TABLE contact
 
   - name: populate_contact
     type: exec_batch
     count: contacts
-    size: batch_size
+    size: 100
     args:
       - gen('name')
       - bool()
@@ -37,10 +47,10 @@ seed:
       - cond(!arg(1), gen('phone'), nil)
     query: |-
       INSERT INTO contact (name, email, phone)
-      SELECT n.val, e.val, p.val
-      FROM (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))) n
-      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$3', ',', '","') || '"'))) e ON n.rn = e.rn
-      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$4', ',', '","') || '"'))) p ON n.rn = p.rn
+      SELECT n.val, NULLIF(e.val, 'NULL'), NULLIF(p.val, 'NULL')
+      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(255) PATH '.') n
+      JOIN XMLTABLE(('"' || REPLACE('$3', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(255) PATH '.') e ON n.rn = e.rn
+      JOIN XMLTABLE(('"' || REPLACE('$4', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(50) PATH '.') p ON n.rn = p.rn
 
 deseed:
 

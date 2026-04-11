@@ -49,163 +49,276 @@ globals:
 up:
 
   - name: create_warehouse
+    type: exec
     query: |-
-      CREATE TABLE warehouse (
-        w_id NUMBER(10) NOT NULL,
-        w_name VARCHAR2(10) NOT NULL,
-        w_street_1 VARCHAR2(20) NOT NULL,
-        w_street_2 VARCHAR2(20) NOT NULL,
-        w_city VARCHAR2(20) NOT NULL,
-        w_state CHAR(2) NOT NULL,
-        w_zip CHAR(9) NOT NULL,
-        w_tax NUMBER(4,4) NOT NULL,
-        w_ytd NUMBER(12,2) NOT NULL,
-        PRIMARY KEY (w_id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE warehouse (
+            w_id NUMBER(10) NOT NULL,
+            w_name VARCHAR2(10) NOT NULL,
+            w_street_1 VARCHAR2(20) NOT NULL,
+            w_street_2 VARCHAR2(20) NOT NULL,
+            w_city VARCHAR2(20) NOT NULL,
+            w_state CHAR(2) NOT NULL,
+            w_zip CHAR(9) NOT NULL,
+            w_tax NUMBER(4,4) NOT NULL,
+            w_ytd NUMBER(12,2) NOT NULL,
+            PRIMARY KEY (w_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_district
+    type: exec
     query: |-
-      CREATE TABLE district (
-        d_w_id NUMBER(10) NOT NULL,
-        d_id NUMBER(10) NOT NULL,
-        d_name VARCHAR2(10) NOT NULL,
-        d_street_1 VARCHAR2(20) NOT NULL,
-        d_street_2 VARCHAR2(20) NOT NULL,
-        d_city VARCHAR2(20) NOT NULL,
-        d_state CHAR(2) NOT NULL,
-        d_zip CHAR(9) NOT NULL,
-        d_tax NUMBER(4,4) NOT NULL,
-        d_ytd NUMBER(12,2) NOT NULL,
-        d_next_o_id NUMBER(10) NOT NULL,
-        PRIMARY KEY (d_w_id, d_id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE district (
+            d_w_id NUMBER(10) NOT NULL,
+            d_id NUMBER(10) NOT NULL,
+            d_name VARCHAR2(10) NOT NULL,
+            d_street_1 VARCHAR2(20) NOT NULL,
+            d_street_2 VARCHAR2(20) NOT NULL,
+            d_city VARCHAR2(20) NOT NULL,
+            d_state CHAR(2) NOT NULL,
+            d_zip CHAR(9) NOT NULL,
+            d_tax NUMBER(4,4) NOT NULL,
+            d_ytd NUMBER(12,2) NOT NULL,
+            d_next_o_id NUMBER(10) NOT NULL,
+            PRIMARY KEY (d_w_id, d_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_customer
+    type: exec
     query: |-
-      CREATE TABLE customer (
-        c_w_id NUMBER(10) NOT NULL,
-        c_d_id NUMBER(10) NOT NULL,
-        c_id NUMBER(10) NOT NULL,
-        c_first VARCHAR2(16) NOT NULL,
-        c_middle CHAR(2) NOT NULL,
-        c_last VARCHAR2(16) NOT NULL,
-        c_street_1 VARCHAR2(20) NOT NULL,
-        c_street_2 VARCHAR2(20) NOT NULL,
-        c_city VARCHAR2(20) NOT NULL,
-        c_state CHAR(2) NOT NULL,
-        c_zip CHAR(9) NOT NULL,
-        c_phone CHAR(16) NOT NULL,
-        c_since TIMESTAMP NOT NULL,
-        c_credit CHAR(2) NOT NULL,
-        c_credit_lim NUMBER(12,2) NOT NULL,
-        c_discount NUMBER(4,4) NOT NULL,
-        c_balance NUMBER(12,2) NOT NULL,
-        c_ytd_payment NUMBER(12,2) NOT NULL,
-        c_payment_cnt NUMBER(10) NOT NULL,
-        c_delivery_cnt NUMBER(10) NOT NULL,
-        c_data VARCHAR2(500) NOT NULL,
-        PRIMARY KEY (c_w_id, c_d_id, c_id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE customer (
+            c_w_id NUMBER(10) NOT NULL,
+            c_d_id NUMBER(10) NOT NULL,
+            c_id NUMBER(10) NOT NULL,
+            c_first VARCHAR2(16) NOT NULL,
+            c_middle CHAR(2) NOT NULL,
+            c_last VARCHAR2(16) NOT NULL,
+            c_street_1 VARCHAR2(20) NOT NULL,
+            c_street_2 VARCHAR2(20) NOT NULL,
+            c_city VARCHAR2(20) NOT NULL,
+            c_state CHAR(2) NOT NULL,
+            c_zip CHAR(9) NOT NULL,
+            c_phone CHAR(16) NOT NULL,
+            c_since TIMESTAMP NOT NULL,
+            c_credit CHAR(2) NOT NULL,
+            c_credit_lim NUMBER(12,2) NOT NULL,
+            c_discount NUMBER(4,4) NOT NULL,
+            c_balance NUMBER(12,2) NOT NULL,
+            c_ytd_payment NUMBER(12,2) NOT NULL,
+            c_payment_cnt NUMBER(10) NOT NULL,
+            c_delivery_cnt NUMBER(10) NOT NULL,
+            c_data VARCHAR2(500) NOT NULL,
+            PRIMARY KEY (c_w_id, c_d_id, c_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_history
+    type: exec
     query: |-
-      CREATE TABLE history (
-        h_id RAW(16) DEFAULT SYS_GUID() NOT NULL,
-        h_c_id NUMBER(10) NOT NULL,
-        h_c_d_id NUMBER(10) NOT NULL,
-        h_c_w_id NUMBER(10) NOT NULL,
-        h_d_id NUMBER(10) NOT NULL,
-        h_w_id NUMBER(10) NOT NULL,
-        h_date TIMESTAMP NOT NULL,
-        h_amount NUMBER(6,2) NOT NULL,
-        h_data VARCHAR2(24) NOT NULL,
-        PRIMARY KEY (h_id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE history (
+            h_id RAW(16) DEFAULT SYS_GUID() NOT NULL,
+            h_c_id NUMBER(10) NOT NULL,
+            h_c_d_id NUMBER(10) NOT NULL,
+            h_c_w_id NUMBER(10) NOT NULL,
+            h_d_id NUMBER(10) NOT NULL,
+            h_w_id NUMBER(10) NOT NULL,
+            h_date TIMESTAMP NOT NULL,
+            h_amount NUMBER(6,2) NOT NULL,
+            h_data VARCHAR2(24) NOT NULL,
+            PRIMARY KEY (h_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_oorder
+    type: exec
     query: |-
-      CREATE TABLE oorder (
-        o_w_id NUMBER(10) NOT NULL,
-        o_d_id NUMBER(10) NOT NULL,
-        o_id NUMBER(10) NOT NULL,
-        o_c_id NUMBER(10) NOT NULL,
-        o_entry_d TIMESTAMP NOT NULL,
-        o_carrier_id NUMBER(10),
-        o_ol_cnt NUMBER(10) NOT NULL,
-        o_all_local NUMBER(10) NOT NULL,
-        PRIMARY KEY (o_w_id, o_d_id, o_id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE oorder (
+            o_w_id NUMBER(10) NOT NULL,
+            o_d_id NUMBER(10) NOT NULL,
+            o_id NUMBER(10) NOT NULL,
+            o_c_id NUMBER(10) NOT NULL,
+            o_entry_d TIMESTAMP NOT NULL,
+            o_carrier_id NUMBER(10),
+            o_ol_cnt NUMBER(10) NOT NULL,
+            o_all_local NUMBER(10) NOT NULL,
+            PRIMARY KEY (o_w_id, o_d_id, o_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_new_order
+    type: exec
     query: |-
-      CREATE TABLE new_order (
-        no_w_id NUMBER(10) NOT NULL,
-        no_d_id NUMBER(10) NOT NULL,
-        no_o_id NUMBER(10) NOT NULL,
-        PRIMARY KEY (no_w_id, no_d_id, no_o_id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE new_order (
+            no_w_id NUMBER(10) NOT NULL,
+            no_d_id NUMBER(10) NOT NULL,
+            no_o_id NUMBER(10) NOT NULL,
+            PRIMARY KEY (no_w_id, no_d_id, no_o_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_order_line
+    type: exec
     query: |-
-      CREATE TABLE order_line (
-        ol_w_id NUMBER(10) NOT NULL,
-        ol_d_id NUMBER(10) NOT NULL,
-        ol_o_id NUMBER(10) NOT NULL,
-        ol_number NUMBER(10) NOT NULL,
-        ol_i_id NUMBER(10) NOT NULL,
-        ol_supply_w_id NUMBER(10) NOT NULL,
-        ol_delivery_d TIMESTAMP,
-        ol_quantity NUMBER(10) NOT NULL,
-        ol_amount NUMBER(12,2) NOT NULL,
-        ol_dist_info CHAR(24) NOT NULL,
-        PRIMARY KEY (ol_w_id, ol_d_id, ol_o_id, ol_number)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE order_line (
+            ol_w_id NUMBER(10) NOT NULL,
+            ol_d_id NUMBER(10) NOT NULL,
+            ol_o_id NUMBER(10) NOT NULL,
+            ol_number NUMBER(10) NOT NULL,
+            ol_i_id NUMBER(10) NOT NULL,
+            ol_supply_w_id NUMBER(10) NOT NULL,
+            ol_delivery_d TIMESTAMP,
+            ol_quantity NUMBER(10) NOT NULL,
+            ol_amount NUMBER(12,2) NOT NULL,
+            ol_dist_info CHAR(24) NOT NULL,
+            PRIMARY KEY (ol_w_id, ol_d_id, ol_o_id, ol_number)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_item
+    type: exec
     query: |-
-      CREATE TABLE item (
-        i_id NUMBER(10) NOT NULL,
-        i_im_id NUMBER(10) NOT NULL,
-        i_name VARCHAR2(24) NOT NULL,
-        i_price NUMBER(5,2) NOT NULL,
-        i_data VARCHAR2(50) NOT NULL,
-        PRIMARY KEY (i_id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE item (
+            i_id NUMBER(10) NOT NULL,
+            i_im_id NUMBER(10) NOT NULL,
+            i_name VARCHAR2(24) NOT NULL,
+            i_price NUMBER(5,2) NOT NULL,
+            i_data VARCHAR2(50) NOT NULL,
+            PRIMARY KEY (i_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_stock
+    type: exec
     query: |-
-      CREATE TABLE stock (
-        s_w_id NUMBER(10) NOT NULL,
-        s_i_id NUMBER(10) NOT NULL,
-        s_quantity NUMBER(10) NOT NULL,
-        s_dist_01 CHAR(24) NOT NULL,
-        s_dist_02 CHAR(24) NOT NULL,
-        s_dist_03 CHAR(24) NOT NULL,
-        s_dist_04 CHAR(24) NOT NULL,
-        s_dist_05 CHAR(24) NOT NULL,
-        s_dist_06 CHAR(24) NOT NULL,
-        s_dist_07 CHAR(24) NOT NULL,
-        s_dist_08 CHAR(24) NOT NULL,
-        s_dist_09 CHAR(24) NOT NULL,
-        s_dist_10 CHAR(24) NOT NULL,
-        s_ytd NUMBER(10) NOT NULL,
-        s_order_cnt NUMBER(10) NOT NULL,
-        s_remote_cnt NUMBER(10) NOT NULL,
-        s_data VARCHAR2(50) NOT NULL,
-        PRIMARY KEY (s_w_id, s_i_id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE stock (
+            s_w_id NUMBER(10) NOT NULL,
+            s_i_id NUMBER(10) NOT NULL,
+            s_quantity NUMBER(10) NOT NULL,
+            s_dist_01 CHAR(24) NOT NULL,
+            s_dist_02 CHAR(24) NOT NULL,
+            s_dist_03 CHAR(24) NOT NULL,
+            s_dist_04 CHAR(24) NOT NULL,
+            s_dist_05 CHAR(24) NOT NULL,
+            s_dist_06 CHAR(24) NOT NULL,
+            s_dist_07 CHAR(24) NOT NULL,
+            s_dist_08 CHAR(24) NOT NULL,
+            s_dist_09 CHAR(24) NOT NULL,
+            s_dist_10 CHAR(24) NOT NULL,
+            s_ytd NUMBER(10) NOT NULL,
+            s_order_cnt NUMBER(10) NOT NULL,
+            s_remote_cnt NUMBER(10) NOT NULL,
+            s_data VARCHAR2(50) NOT NULL,
+            PRIMARY KEY (s_w_id, s_i_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_idx_customer_name
+    type: exec
     query: |-
-      CREATE INDEX idx_customer_name
-      ON customer (c_w_id, c_d_id, c_last, c_first)
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_customer_name
+          ON customer (c_w_id, c_d_id, c_last, c_first)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_idx_oorder_customer
+    type: exec
     query: |-
-      CREATE INDEX idx_oorder_customer
-      ON oorder (o_w_id, o_d_id, o_c_id, o_id DESC)
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_oorder_customer
+          ON oorder (o_w_id, o_d_id, o_c_id, o_id DESC)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
+
+  - name: clear_order_line
+    type: exec
+    query: TRUNCATE TABLE order_line
+
+  - name: clear_new_order
+    type: exec
+    query: TRUNCATE TABLE new_order
+
+  - name: clear_oorder
+    type: exec
+    query: TRUNCATE TABLE oorder
+
+  - name: clear_history
+    type: exec
+    query: TRUNCATE TABLE history
+
+  - name: clear_stock
+    type: exec
+    query: TRUNCATE TABLE stock
+
+  - name: clear_customer
+    type: exec
+    query: TRUNCATE TABLE customer
+
+  - name: clear_district
+    type: exec
+    query: TRUNCATE TABLE district
+
+  - name: clear_warehouse
+    type: exec
+    query: TRUNCATE TABLE warehouse
+
+  - name: clear_item
+    type: exec
+    query: TRUNCATE TABLE item
 
   - name: populate_item
     args:

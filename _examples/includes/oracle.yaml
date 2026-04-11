@@ -13,9 +13,20 @@ up: !include shared/schema_oracle.yaml
 
 seed:
 
+  - name: clear_account
+    type: exec
+    query: TRUNCATE TABLE account
+
+  - name: clear_customer
+    type: exec
+    query: TRUNCATE TABLE customer
+
   - name: populate_customer
+    type: exec_batch
+    count: customers
+    size: 100
     args:
-      - gen_batch(customers, batch_size, 'email')
+      - gen('email')
     query: |-
       INSERT INTO customer (email)
       SELECT column_value

@@ -41,7 +41,7 @@ harness_mssql:
 harness_oracle:
 	go run ./cmd/harness -db oracle
 
-harness_all: harness_crdb harness_mysql harness_mssql
+harness_all: harness_crdb harness_mysql harness_mssql harness_oracle
 	echo "done"
 
 docs:

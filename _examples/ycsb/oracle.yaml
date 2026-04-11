@@ -30,22 +30,33 @@ globals:
 up:
 
   - name: create_usertable
+    type: exec
     query: |-
-      CREATE TABLE usertable (
-        ycsb_key VARCHAR2(255) PRIMARY KEY,
-        field0 VARCHAR2(100) NOT NULL,
-        field1 VARCHAR2(100) NOT NULL,
-        field2 VARCHAR2(100) NOT NULL,
-        field3 VARCHAR2(100) NOT NULL,
-        field4 VARCHAR2(100) NOT NULL,
-        field5 VARCHAR2(100) NOT NULL,
-        field6 VARCHAR2(100) NOT NULL,
-        field7 VARCHAR2(100) NOT NULL,
-        field8 VARCHAR2(100) NOT NULL,
-        field9 VARCHAR2(100) NOT NULL
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE usertable (
+            ycsb_key VARCHAR2(255) PRIMARY KEY,
+            field0 VARCHAR2(100) NOT NULL,
+            field1 VARCHAR2(100) NOT NULL,
+            field2 VARCHAR2(100) NOT NULL,
+            field3 VARCHAR2(100) NOT NULL,
+            field4 VARCHAR2(100) NOT NULL,
+            field5 VARCHAR2(100) NOT NULL,
+            field6 VARCHAR2(100) NOT NULL,
+            field7 VARCHAR2(100) NOT NULL,
+            field8 VARCHAR2(100) NOT NULL,
+            field9 VARCHAR2(100) NOT NULL
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
+
+  - name: clear_usertable
+    type: exec
+    query: TRUNCATE TABLE usertable
 
   - name: populate_usertable
     args:
@@ -56,16 +67,16 @@ seed:
         field4, field5, field6, field7, field8, field9)
       SELECT
         'user' || LPAD($1 * $2 + LEVEL - 1, 10, '0'),
-        LPAD('', 100, DBMS_RANDOM.STRING('x', 32)),
-        LPAD('', 100, DBMS_RANDOM.STRING('x', 32)),
-        LPAD('', 100, DBMS_RANDOM.STRING('x', 32)),
-        LPAD('', 100, DBMS_RANDOM.STRING('x', 32)),
-        LPAD('', 100, DBMS_RANDOM.STRING('x', 32)),
-        LPAD('', 100, DBMS_RANDOM.STRING('x', 32)),
-        LPAD('', 100, DBMS_RANDOM.STRING('x', 32)),
-        LPAD('', 100, DBMS_RANDOM.STRING('x', 32)),
-        LPAD('', 100, DBMS_RANDOM.STRING('x', 32)),
-        LPAD('', 100, DBMS_RANDOM.STRING('x', 32))
+        DBMS_RANDOM.STRING('x', 100),
+        DBMS_RANDOM.STRING('x', 100),
+        DBMS_RANDOM.STRING('x', 100),
+        DBMS_RANDOM.STRING('x', 100),
+        DBMS_RANDOM.STRING('x', 100),
+        DBMS_RANDOM.STRING('x', 100),
+        DBMS_RANDOM.STRING('x', 100),
+        DBMS_RANDOM.STRING('x', 100),
+        DBMS_RANDOM.STRING('x', 100),
+        DBMS_RANDOM.STRING('x', 100)
       FROM DUAL
       CONNECT BY LEVEL <= $2
 

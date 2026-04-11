@@ -25,6 +25,7 @@ type dbConfig struct {
 	yamlFile string
 	initCmds [][]string
 	timeout  time.Duration
+	cleanup  bool
 }
 
 var databases = map[string]dbConfig{
@@ -34,6 +35,7 @@ var databases = map[string]dbConfig{
 		compose:  "compose_crdb.yml",
 		yamlFile: "crdb.yaml",
 		timeout:  60 * time.Second,
+		cleanup:  true,
 	},
 	"mysql": {
 		driver:   "mysql",
@@ -41,6 +43,7 @@ var databases = map[string]dbConfig{
 		compose:  "compose_mysql.yml",
 		yamlFile: "mysql.yaml",
 		timeout:  60 * time.Second,
+		cleanup:  true,
 		initCmds: [][]string{
 			{"docker", "exec", "mysql", "mysql", "-uroot", "-ppassword", "-e", "SET GLOBAL cte_max_recursion_depth = 200000"},
 		},
@@ -51,6 +54,7 @@ var databases = map[string]dbConfig{
 		compose:  "compose_oracle.yml",
 		yamlFile: "oracle.yaml",
 		timeout:  10 * time.Minute,
+		cleanup:  false,
 	},
 	"mssql": {
 		driver:   "sqlserver",
@@ -58,6 +62,7 @@ var databases = map[string]dbConfig{
 		compose:  "compose_mssql.yml",
 		yamlFile: "mssql.yaml",
 		timeout:  60 * time.Second,
+		cleanup:  true,
 	},
 }
 
@@ -86,7 +91,10 @@ func main() {
 	if err := composeUp(composeFile); err != nil {
 		log.Fatalf("compose up: %v", err)
 	}
-	defer composeDown(composeFile)
+
+	if cfg.cleanup {
+		defer composeDown(composeFile)
+	}
 
 	for _, initCmd := range cfg.initCmds {
 		slog.Info("running init command", "cmd", strings.Join(initCmd, " "))

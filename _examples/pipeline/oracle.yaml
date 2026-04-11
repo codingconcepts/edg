@@ -16,36 +16,72 @@ globals:
 up:
 
   - name: create_a
+    type: exec
     query: |-
-      CREATE TABLE a (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        name VARCHAR2(255) NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE a (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            name VARCHAR2(255) NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_b
+    type: exec
     query: |-
-      CREATE TABLE b (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        a_id NUMBER NOT NULL,
-        value NUMBER NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE b (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            a_id NUMBER NOT NULL,
+            value NUMBER NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_c
+    type: exec
     query: |-
-      CREATE TABLE c (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        b_id NUMBER NOT NULL,
-        status VARCHAR2(20) DEFAULT 'new' NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE c (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            b_id NUMBER NOT NULL,
+            status VARCHAR2(20) DEFAULT ''new'' NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
 
+  - name: clear_c
+    type: exec
+    query: TRUNCATE TABLE c
+
+  - name: clear_b
+    type: exec
+    query: TRUNCATE TABLE b
+
+  - name: clear_a
+    type: exec
+    query: TRUNCATE TABLE a
+
   - name: populate_a
+    type: exec_batch
+    count: a_rows
+    size: 100
     args:
-      - gen_batch(a_rows, batch_size, 'word')
+      - gen('word')
     query: |-
       INSERT INTO a (name)
       SELECT column_value

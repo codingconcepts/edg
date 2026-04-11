@@ -16,94 +16,184 @@ globals:
 up:
 
   - name: create_tenant
+    type: exec
     query: |-
-      CREATE TABLE tenant (
-        id RAW(16) DEFAULT SYS_GUID(),
-        name VARCHAR2(255) NOT NULL,
-        plan VARCHAR2(20) DEFAULT 'free' NOT NULL,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE tenant (
+            id RAW(16) DEFAULT SYS_GUID(),
+            name VARCHAR2(255) NOT NULL,
+            plan VARCHAR2(20) DEFAULT ''free'' NOT NULL,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_app_user
+    type: exec
     query: |-
-      CREATE TABLE app_user (
-        id RAW(16) DEFAULT SYS_GUID(),
-        tenant_id RAW(16) NOT NULL,
-        email VARCHAR2(320) NOT NULL,
-        role VARCHAR2(20) DEFAULT 'member' NOT NULL,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE app_user (
+            id RAW(16) DEFAULT SYS_GUID(),
+            tenant_id RAW(16) NOT NULL,
+            email VARCHAR2(320) NOT NULL,
+            role VARCHAR2(20) DEFAULT ''member'' NOT NULL,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_project
+    type: exec
     query: |-
-      CREATE TABLE project (
-        id RAW(16) DEFAULT SYS_GUID(),
-        tenant_id RAW(16) NOT NULL,
-        name VARCHAR2(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE project (
+            id RAW(16) DEFAULT SYS_GUID(),
+            tenant_id RAW(16) NOT NULL,
+            name VARCHAR2(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_task
+    type: exec
     query: |-
-      CREATE TABLE task (
-        id RAW(16) DEFAULT SYS_GUID(),
-        project_id RAW(16) NOT NULL,
-        tenant_id RAW(16) NOT NULL,
-        title VARCHAR2(255) NOT NULL,
-        status VARCHAR2(20) DEFAULT 'open' NOT NULL,
-        assignee_id RAW(16),
-        deleted_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        updated_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE task (
+            id RAW(16) DEFAULT SYS_GUID(),
+            project_id RAW(16) NOT NULL,
+            tenant_id RAW(16) NOT NULL,
+            title VARCHAR2(255) NOT NULL,
+            status VARCHAR2(20) DEFAULT ''open'' NOT NULL,
+            assignee_id RAW(16),
+            deleted_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            updated_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_task_comment
+    type: exec
     query: |-
-      CREATE TABLE task_comment (
-        id RAW(16) DEFAULT SYS_GUID(),
-        task_id RAW(16) NOT NULL,
-        tenant_id RAW(16) NOT NULL,
-        author_id RAW(16) NOT NULL,
-        body VARCHAR2(4000) NOT NULL,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE task_comment (
+            id RAW(16) DEFAULT SYS_GUID(),
+            task_id RAW(16) NOT NULL,
+            tenant_id RAW(16) NOT NULL,
+            author_id RAW(16) NOT NULL,
+            body VARCHAR2(4000) NOT NULL,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_billing_usage
+    type: exec
     query: |-
-      CREATE TABLE billing_usage (
-        tenant_id RAW(16) NOT NULL,
-        api_calls NUMBER DEFAULT 0 NOT NULL,
-        storage_bytes NUMBER DEFAULT 0 NOT NULL,
-        updated_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (tenant_id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE billing_usage (
+            tenant_id RAW(16) NOT NULL,
+            api_calls NUMBER DEFAULT 0 NOT NULL,
+            storage_bytes NUMBER DEFAULT 0 NOT NULL,
+            updated_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (tenant_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_idx_task_tenant_status
+    type: exec
     query: |-
-      CREATE INDEX idx_task_tenant_status
-      ON task (tenant_id, status)
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_task_tenant_status
+          ON task (tenant_id, status)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_idx_task_project
+    type: exec
     query: |-
-      CREATE INDEX idx_task_project
-      ON task (project_id, status)
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_task_project
+          ON task (project_id, status)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_idx_app_user_tenant
+    type: exec
     query: |-
-      CREATE INDEX idx_app_user_tenant
-      ON app_user (tenant_id)
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_app_user_tenant
+          ON app_user (tenant_id)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_idx_task_comment_task
+    type: exec
     query: |-
-      CREATE INDEX idx_task_comment_task
-      ON task_comment (task_id, created_at DESC)
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_task_comment_task
+          ON task_comment (task_id, created_at DESC)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
+
+  - name: clear_task
+    type: exec
+    query: TRUNCATE TABLE task
+
+  - name: clear_project
+    type: exec
+    query: TRUNCATE TABLE project
+
+  - name: clear_billing_usage
+    type: exec
+    query: TRUNCATE TABLE billing_usage
+
+  - name: clear_app_user
+    type: exec
+    query: TRUNCATE TABLE app_user
+
+  - name: clear_tenant
+    type: exec
+    query: TRUNCATE TABLE tenant
 
   - name: populate_tenant
     args:
@@ -125,12 +215,12 @@ seed:
 
   - name: populate_app_user
     args:
-      - ref_each('SELECT id FROM tenant')
+      - ref_each('SELECT RAWTOHEX(id) AS id FROM tenant')
       - users_per_tenant
     query: |-
       INSERT INTO app_user (tenant_id, email, role)
       SELECT
-        '$1',
+        HEXTORAW('$1'),
         'user_' || LEVEL || '_' || SUBSTR('$1', 1, 8) || '@example.com',
         CASE WHEN LEVEL = 1 THEN 'admin'
              WHEN LEVEL <= 5 THEN 'manager'
@@ -141,29 +231,29 @@ seed:
 
   - name: populate_project
     args:
-      - ref_each('SELECT id FROM tenant')
+      - ref_each('SELECT RAWTOHEX(id) AS id FROM tenant')
       - projects_per_tenant
     query: |-
       INSERT INTO project (tenant_id, name)
       SELECT
-        '$1',
+        HEXTORAW('$1'),
         'project-' || LEVEL || '-' || SUBSTR('$1', 1, 8)
       FROM DUAL
       CONNECT BY LEVEL <= $2
 
   - name: populate_task
     args:
-      - ref_each('SELECT p.id AS project_id, p.tenant_id FROM project p')
+      - ref_each('SELECT RAWTOHEX(p.id) AS project_id, RAWTOHEX(p.tenant_id) AS tenant_id FROM project p')
       - tasks_per_project
     query: |-
       INSERT INTO task (project_id, tenant_id, title, status, assignee_id)
       SELECT
-        '$1',
-        '$2',
+        HEXTORAW('$1'),
+        HEXTORAW('$2'),
         'task-' || LEVEL || '-' || SUBSTR('$1', 1, 8),
         DECODE(TRUNC(DBMS_RANDOM.VALUE * 4) + 1,
           1,'open', 2,'in_progress', 3,'review', 4,'done'),
-        (SELECT id FROM (SELECT id FROM app_user WHERE tenant_id = '$2' ORDER BY DBMS_RANDOM.VALUE) WHERE ROWNUM = 1)
+        (SELECT id FROM (SELECT id FROM app_user WHERE tenant_id = HEXTORAW('$2') ORDER BY DBMS_RANDOM.VALUE) WHERE ROWNUM = 1)
       FROM DUAL
       CONNECT BY LEVEL <= $3
 
@@ -253,19 +343,19 @@ init:
 
   - name: fetch_tenants
     type: query
-    query: SELECT id FROM tenant
+    query: SELECT RAWTOHEX(id) AS id FROM tenant
 
   - name: fetch_users
     type: query
-    query: SELECT id, tenant_id FROM app_user
+    query: SELECT RAWTOHEX(id) AS id, RAWTOHEX(tenant_id) AS tenant_id FROM app_user
 
   - name: fetch_projects
     type: query
-    query: SELECT id, tenant_id FROM project
+    query: SELECT RAWTOHEX(id) AS id, RAWTOHEX(tenant_id) AS tenant_id FROM project
 
   - name: fetch_tasks
     type: query
-    query: SELECT id, tenant_id, project_id FROM task WHERE deleted_at IS NULL
+    query: SELECT RAWTOHEX(id) AS id, RAWTOHEX(tenant_id) AS tenant_id, RAWTOHEX(project_id) AS project_id FROM task WHERE deleted_at IS NULL
 
 run_weights:
   list_tasks: 30
@@ -289,7 +379,7 @@ run:
         u.email AS assignee_email
       FROM task t
       LEFT JOIN app_user u ON u.id = t.assignee_id
-      WHERE t.tenant_id = :1
+      WHERE t.tenant_id = HEXTORAW(:1)
         AND t.deleted_at IS NULL
         AND t.status = DECODE(:2, 1,'open', 2,'in_progress', 3,'review', 4,'done')
       ORDER BY t.updated_at DESC
@@ -305,10 +395,10 @@ run:
       - gen('sentence:5')
     query: |-
       INSERT INTO task (project_id, tenant_id, title, status, assignee_id)
-      SELECT :2, :1, :4, 'open', :3
+      SELECT HEXTORAW(:2), HEXTORAW(:1), :4, 'open', HEXTORAW(:3)
       FROM DUAL
       WHERE EXISTS (
-        SELECT 1 FROM project WHERE id = :2 AND tenant_id = :1
+        SELECT 1 FROM project WHERE id = HEXTORAW(:2) AND tenant_id = HEXTORAW(:1)
       )
 
   # Advance a task's status through the state machine.
@@ -325,7 +415,7 @@ run:
           ELSE status
         END,
         updated_at = SYSTIMESTAMP
-      WHERE id = :1 AND deleted_at IS NULL
+      WHERE id = HEXTORAW(:1) AND deleted_at IS NULL
 
   # Add a comment to a task.
   - name: add_comment
@@ -337,7 +427,7 @@ run:
       - gen('sentence:6')
     query: |-
       INSERT INTO task_comment (task_id, tenant_id, author_id, body)
-      VALUES (:3, :2, :1, :4)
+      VALUES (HEXTORAW(:3), HEXTORAW(:2), HEXTORAW(:1), :4)
 
   # Soft-delete a task.
   - name: soft_delete
@@ -347,7 +437,7 @@ run:
     query: |-
       UPDATE task
       SET deleted_at = SYSTIMESTAMP, updated_at = SYSTIMESTAMP
-      WHERE id = :1 AND deleted_at IS NULL
+      WHERE id = HEXTORAW(:1) AND deleted_at IS NULL
 
   # Per-tenant dashboard showing task counts by status per project.
   - name: tenant_dashboard
@@ -364,7 +454,7 @@ run:
         COUNT(*) AS total
       FROM task t
       JOIN project p ON p.id = t.project_id
-      WHERE t.tenant_id = :1 AND t.deleted_at IS NULL
+      WHERE t.tenant_id = HEXTORAW(:1) AND t.deleted_at IS NULL
       GROUP BY p.name
 
   # Cross-tenant admin overview of usage and task counts.

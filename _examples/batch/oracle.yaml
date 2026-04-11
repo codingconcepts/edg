@@ -16,24 +16,44 @@ up:
   - name: create_product
     type: exec
     query: |-
-      CREATE TABLE product (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        name VARCHAR2(255) NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE product (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            name VARCHAR2(255) NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_review
     type: exec
     query: |-
-      CREATE TABLE review (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        product_id NUMBER NOT NULL,
-        rating NUMBER NOT NULL,
-        body VARCHAR2(4000) NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE review (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            product_id NUMBER NOT NULL,
+            rating NUMBER NOT NULL,
+            body VARCHAR2(4000) NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
+
+  - name: clear_review
+    type: exec
+    query: TRUNCATE TABLE review
+
+  - name: clear_product
+    type: exec
+    query: TRUNCATE TABLE product
 
   - name: insert_products
     type: exec_batch
@@ -59,7 +79,7 @@ seed:
       - gen('loremipsumsentence:5')
     query: |-
       INSERT INTO review (product_id, rating, body)
-      SELECT p.val, r.val, b.val
+      SELECT TO_NUMBER(p.val), TO_NUMBER(r.val), b.val
       FROM (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))) p
       JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$2', ',', '","') || '"'))) r ON p.rn = r.rn
       JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$3', ',', '","') || '"'))) b ON p.rn = b.rn

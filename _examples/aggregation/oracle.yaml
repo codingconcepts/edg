@@ -10,30 +10,48 @@ globals:
 up:
 
   - name: create_product
+    type: exec
     query: |-
-      CREATE TABLE product (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        category VARCHAR2(50) NOT NULL,
-        price NUMBER(10,2) NOT NULL,
-        stock_qty NUMBER NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE product (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            category VARCHAR2(50) NOT NULL,
+            price NUMBER(10,2) NOT NULL,
+            stock_qty NUMBER NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_agg_snapshot
+    type: exec
     query: |-
-      CREATE TABLE agg_snapshot (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        total_products NUMBER NOT NULL,
-        total_value NUMBER(12,2) NOT NULL,
-        avg_price NUMBER(10,2) NOT NULL,
-        min_price NUMBER(10,2) NOT NULL,
-        max_price NUMBER(10,2) NOT NULL,
-        distinct_categories NUMBER NOT NULL,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE agg_snapshot (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            total_products NUMBER NOT NULL,
+            total_value NUMBER(12,2) NOT NULL,
+            avg_price NUMBER(10,2) NOT NULL,
+            min_price NUMBER(10,2) NOT NULL,
+            max_price NUMBER(10,2) NOT NULL,
+            distinct_categories NUMBER NOT NULL,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
+
+  - name: clear_product
+    type: exec
+    query: TRUNCATE TABLE product
 
   - name: populate_product
     args:

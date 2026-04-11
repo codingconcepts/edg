@@ -10,25 +10,43 @@ globals:
 up:
 
   - name: create_product
+    type: exec
     query: |-
-      CREATE TABLE product (
-        id NUMBER NOT NULL,
-        name VARCHAR2(255) NOT NULL,
-        price NUMBER(10,2) NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE product (
+            id NUMBER NOT NULL,
+            name VARCHAR2(255) NOT NULL,
+            price NUMBER(10,2) NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
   - name: create_review
+    type: exec
     query: |-
-      CREATE TABLE review (
-        id NUMBER GENERATED ALWAYS AS IDENTITY,
-        product_id NUMBER NOT NULL,
-        rating NUMBER NOT NULL CHECK (rating BETWEEN 1 AND 5),
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        PRIMARY KEY (id)
-      )
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE review (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            product_id NUMBER NOT NULL,
+            rating NUMBER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
 
 seed:
+
+  - name: clear_product
+    type: exec
+    query: TRUNCATE TABLE product
 
   - name: populate_product
     args:
@@ -99,5 +117,5 @@ run:
       - norm(4, 1, 1, 5)
     query: |-
       INSERT INTO review (product_id, rating)
-      SELECT TO_NUMBER(column_value), :2
-      FROM XMLTABLE(('"' || REPLACE(:1, ',', '","') || '"'))
+      SELECT TO_NUMBER(column_value), $2
+      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))
