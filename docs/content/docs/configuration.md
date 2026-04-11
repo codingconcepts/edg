@@ -210,7 +210,7 @@ The `query_batch` and `exec_batch` types use two additional fields to control ho
 
 Each arg expression is evaluated once per row. The results are collected into strings per arg position. For example, with `count: 1000` and `size: 100`, you get 10 batches, each containing 100 generated values.
 
-#### Default (CSV) format
+#### Postgres / CockroachDB
 
 By default, batch values are joined with commas. This works well with PostgreSQL/CockroachDB `string_to_array` and MySQL `JSON_TABLE`:
 
@@ -218,8 +218,8 @@ By default, batch values are joined with commas. This works well with PostgreSQL
 seed:
   - name: populate_users
     type: exec_batch
-    count: customers          # expression: uses the 'customers' global
-    size: batch_size          # expression: uses the 'batch_size' global
+    count: 1000
+    size: 100
     args:
       - gen('email')
     query: |-
@@ -227,7 +227,7 @@ seed:
       SELECT unnest(string_to_array('$1', ','))
 ```
 
-#### JSON format (`batch_format: json`)
+#### MySQL
 
 When `batch_format` is set to `json`, each arg position is serialized as a properly escaped JSON array (e.g. `["val1","val2","val3"]`). This is required for MSSQL, where the default CSV format can break `OPENJSON` if values contain commas or double quotes.
 
@@ -238,8 +238,8 @@ seed:
   - name: populate_contacts
     type: exec_batch
     batch_format: json
-    count: contacts
-    size: batch_size
+    count: 1000
+    size: 100
     args:
       - gen('name')
       - gen('email')
@@ -251,6 +251,34 @@ seed:
 ```
 
 Multiple OPENJSON calls are correlated using `[key]`, which is the zero-based array index. NULL values appear as JSON `null` and can be handled with `NULLIF(j.value, 'null')` if the target column is nullable.
+
+#### Oracle
+
+For Oracle, batch values are joined with commas and unpacked using `xmltable` with `tokenize`. Multiple columns are correlated by joining on `rowid`:
+
+```yaml
+seed:
+  - name: populate_users
+    type: exec_batch
+    count: 3
+    size: 3
+    args:
+      - gen('name')
+      - gen('email')
+    query: |-
+      INSERT INTO users (name, email)
+      SELECT x1.value, x2.value
+      FROM xmltable(
+             'for $s in tokenize($v, ",") return <r>{$s}</r>'
+             PASSING '$1' AS "v"
+             COLUMNS value VARCHAR2(255) PATH '.'
+           ) x1
+      JOIN xmltable(
+             'for $s in tokenize($v, ",") return <r>{$s}</r>'
+             PASSING '$2' AS "v"
+             COLUMNS value VARCHAR2(255) PATH '.'
+           ) x2 ON x1.rowid = x2.rowid
+```
 
 ### Wait
 
