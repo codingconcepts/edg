@@ -1,7 +1,7 @@
 ---
 name: edg-validate
 description: Validate an edg YAML config file, interpret errors, and suggest fixes.
-user_invocable: true
+user-invocable: true
 ---
 
 # edg Config Validator

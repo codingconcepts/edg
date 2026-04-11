@@ -9,7 +9,7 @@ edg ships with a set of [Claude Code](https://claude.ai/claude-code) skills; sla
 
 ## Setup
 
-The skills live in `.claude/skills/` in the edg repository. If you've cloned edg and are running Claude Code from the repo root, they're available automatically.
+The skills live in `.claude/skills/` in the edg repository. Each skill is a directory containing a `SKILL.md` file. If you've cloned edg and are running Claude Code from the repo root, they're available automatically.
 
 To use them in a separate project, copy the `.claude/skills/` directory into your project:
 

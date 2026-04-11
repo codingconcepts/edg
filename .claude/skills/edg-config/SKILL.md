@@ -1,7 +1,7 @@
 ---
 name: edg-config
 description: Generate or modify edg YAML workload configurations from a natural language description of the desired schema and workload.
-user_invocable: true
+user-invocable: true
 ---
 
 # edg Config Generator

@@ -1,7 +1,7 @@
 ---
 name: edg-expression
 description: Help compose edg expressions. Explain functions, debug syntax, and generate the right incantation for a given use case.
-user_invocable: true
+user-invocable: true
 ---
 
 # edg Expression Helper

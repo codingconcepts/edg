@@ -1,7 +1,7 @@
 ---
 name: edg-migrate
 description: Convert an edg YAML config from one database driver to another (e.g., pgx to mysql, mssql to oracle).
-user_invocable: true
+user-invocable: true
 ---
 
 # edg Config Migrator
