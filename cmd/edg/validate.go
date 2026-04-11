@@ -23,7 +23,7 @@ func validateCmd() *cobra.Command {
 				return err
 			}
 
-			if _, err := env.NewEnv(nil, req); err != nil {
+			if _, err := env.NewEnv(nil, "", req); err != nil {
 				return err
 			}
 

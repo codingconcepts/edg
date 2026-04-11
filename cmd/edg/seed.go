@@ -16,7 +16,7 @@ func seedCmd() *cobra.Command {
 			}
 			defer db.Close()
 
-			env, err := env.NewEnv(db, req)
+			env, err := env.NewEnv(db, flagDriver, req)
 			if err != nil {
 				return err
 			}

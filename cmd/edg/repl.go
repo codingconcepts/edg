@@ -26,7 +26,7 @@ func replCmd() *cobra.Command {
 				req = *r
 			}
 
-			env, err := env.NewEnv(nil, &req)
+			env, err := env.NewEnv(nil, "", &req)
 			if err != nil {
 				return err
 			}

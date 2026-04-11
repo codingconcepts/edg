@@ -37,7 +37,7 @@ else { "F" }`,
 		},
 	}
 
-	env, err := NewEnv(nil, req)
+	env, err := NewEnv(nil, "", req)
 	if err != nil {
 		t.Fatalf("NewEnv failed: %v", err)
 	}

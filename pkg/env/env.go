@@ -22,6 +22,7 @@ import (
 
 type Env struct {
 	db      *sql.DB
+	driver  string
 	request *config.Request
 
 	envMutex sync.RWMutex
@@ -43,19 +44,23 @@ type Env struct {
 
 	computedArgs []any
 
+	stmtCache map[*config.Query]*sql.Stmt
+
 	Results chan<- config.QueryResult
 }
 
-func NewEnv(db *sql.DB, r *config.Request) (*Env, error) {
+func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 	if err := r.Validate(); err != nil {
 		return nil, fmt.Errorf("config validation: %w", err)
 	}
 
 	env := Env{
 		db:        db,
+		driver:    driver,
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		nurandC:   map[int]int{},
+		stmtCache: map[*config.Query]*sql.Stmt{},
 		request:   r,
 	}
 
@@ -371,6 +376,22 @@ func (e *Env) RunQuery(ctx context.Context, q *config.Query, args ...any) error 
 	return nil
 }
 
+// RunQueryPrepared executes a query using a prepared statement.
+func (e *Env) RunQueryPrepared(ctx context.Context, stmt *sql.Stmt, q *config.Query, args ...any) error {
+	switch q.Type {
+	case config.QueryTypeExec:
+		if err := e.ExecStmt(ctx, stmt, q, args...); err != nil {
+			return fmt.Errorf("executing prepared exec %s: %w", q.Name, err)
+		}
+	case config.QueryTypeQuery, "":
+		if err := e.QueryStmt(ctx, stmt, q, args...); err != nil {
+			return fmt.Errorf("executing prepared query %s: %w", q.Name, err)
+		}
+	}
+
+	return nil
+}
+
 // runSection runs a list of queries. Args are inlined into the SQL
 // (string replacement of $N placeholders) when the query is a batch
 // type or when batch-expanded (multiple arg sets from gen_batch/batch/
@@ -394,6 +415,20 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 
 		queryStart := time.Now()
 
+		// Use a prepared statement when the user opted in and the query
+		// is not a batch type (batch queries change SQL text each time).
+		usePrepared := q.Prepared && !q.IsBatch() && !batchExpanded
+
+		var stmt *sql.Stmt
+		if usePrepared {
+			stmt, err = e.getOrPrepare(ctx, q)
+			if err != nil {
+				err = fmt.Errorf("preparing %s query %s: %w", section, q.Name, err)
+				e.sendResult(config.QueryResult{Name: q.Name, Section: section, Err: err})
+				return err
+			}
+		}
+
 		// Inline $N placeholders when batch expansion occurred
 		// (gen_batch/batch/ref_each/query_batch/exec_batch), when
 		// placeholders appear inside quoted strings (e.g.
@@ -401,7 +436,9 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 		// or when the query uses $N placeholders at all. The last case
 		// ensures cross-driver compatibility: only PostgreSQL/CockroachDB
 		// understand $N natively; MySQL, Oracle, and SQL Server do not.
-		shouldInline := batchExpanded || strings.Contains(q.Query, "$1")
+		// When using prepared statements, skip inlining so args go
+		// through the driver as native bind params.
+		shouldInline := !usePrepared && (batchExpanded || strings.Contains(q.Query, "$1"))
 
 		for i, args := range argSets {
 			if verbose && len(argSets) > 1 {
@@ -438,10 +475,18 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 				continue
 			}
 
-			if err := e.RunQuery(ctx, q, args...); err != nil {
-				err = fmt.Errorf("running %s query %s: %w", section, q.Name, err)
-				e.sendResult(config.QueryResult{Name: q.Name, Section: section, Latency: time.Since(queryStart), Err: err, Count: i})
-				return err
+			if usePrepared {
+				if err := e.RunQueryPrepared(ctx, stmt, q, args...); err != nil {
+					err = fmt.Errorf("running %s query %s: %w", section, q.Name, err)
+					e.sendResult(config.QueryResult{Name: q.Name, Section: section, Latency: time.Since(queryStart), Err: err, Count: i})
+					return err
+				}
+			} else {
+				if err := e.RunQuery(ctx, q, args...); err != nil {
+					err = fmt.Errorf("running %s query %s: %w", section, q.Name, err)
+					e.sendResult(config.QueryResult{Name: q.Name, Section: section, Latency: time.Since(queryStart), Err: err, Count: i})
+					return err
+				}
 			}
 		}
 
@@ -462,6 +507,55 @@ func (e *Env) sendResult(r config.QueryResult) {
 	if e.Results != nil {
 		e.Results <- r
 	}
+}
+
+// Close releases resources held by the Env, including any cached
+// prepared statements. Safe to call multiple times.
+func (e *Env) Close() {
+	for q, stmt := range e.stmtCache {
+		stmt.Close()
+		delete(e.stmtCache, q)
+	}
+}
+
+// getOrPrepare returns a cached prepared statement for q, creating
+// one if it doesn't exist yet. The query's $N placeholders are
+// translated to the driver's native format before preparing.
+func (e *Env) getOrPrepare(ctx context.Context, q *config.Query) (*sql.Stmt, error) {
+	if stmt, ok := e.stmtCache[q]; ok {
+		return stmt, nil
+	}
+	query := translatePlaceholders(q.Query, e.driver)
+	stmt, err := e.db.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("preparing statement %s: %w", q.Name, err)
+	}
+	e.stmtCache[q] = stmt
+	return stmt, nil
+}
+
+// translatePlaceholders rewrites $1, $2, ... placeholders to the
+// native format expected by the given driver. pgx and dsql use $N
+// natively, so the query is returned unchanged for those drivers.
+func translatePlaceholders(query, driver string) string {
+	switch driver {
+	case "mysql":
+		// $N -> ? (positional, unnumbered)
+		for i := 1; strings.Contains(query, fmt.Sprintf("$%d", i)); i++ {
+			query = strings.Replace(query, fmt.Sprintf("$%d", i), "?", 1)
+		}
+	case "oracle":
+		// $N -> :N
+		for i := 1; strings.Contains(query, fmt.Sprintf("$%d", i)); i++ {
+			query = strings.Replace(query, fmt.Sprintf("$%d", i), fmt.Sprintf(":%d", i), 1)
+		}
+	case "mssql":
+		// $N -> @pN
+		for i := 1; strings.Contains(query, fmt.Sprintf("$%d", i)); i++ {
+			query = strings.Replace(query, fmt.Sprintf("$%d", i), fmt.Sprintf("@p%d", i), 1)
+		}
+	}
+	return query
 }
 
 // Up runs the schema-up queries to create tables.

@@ -193,6 +193,66 @@ func newTestEnv(t *testing.T) *Env {
 	return env
 }
 
+func TestQueryStmt(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectPrepare("SELECT id, name FROM users").
+		ExpectQuery().
+		WithArgs(1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow(1, "alice"))
+
+	stmt, err := db.Prepare("SELECT id, name FROM users WHERE id = ?")
+	if err != nil {
+		t.Fatalf("preparing: %v", err)
+	}
+	defer stmt.Close()
+
+	env := newTestEnv(t)
+	q := &config.Query{Name: "users", Query: "SELECT id, name FROM users WHERE id = ?"}
+
+	if err := env.QueryStmt(context.Background(), stmt, q, 1); err != nil {
+		t.Fatalf("QueryStmt error: %v", err)
+	}
+
+	data, ok := env.env["users"].([]map[string]any)
+	if !ok {
+		t.Fatal("QueryStmt did not store results")
+	}
+	if len(data) != 1 || data[0]["name"] != "alice" {
+		t.Errorf("got %v, want [{id:1 name:alice}]", data)
+	}
+}
+
+func TestExecStmt(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectPrepare("INSERT INTO users").
+		ExpectExec().
+		WithArgs(1, "alice").
+		WillReturnResult(driver.ResultNoRows)
+
+	stmt, err := db.Prepare("INSERT INTO users VALUES (?, ?)")
+	if err != nil {
+		t.Fatalf("preparing: %v", err)
+	}
+	defer stmt.Close()
+
+	env := newTestEnv(t)
+	q := &config.Query{Name: "insert_user", Query: "INSERT INTO users VALUES (?, ?)"}
+
+	if err := env.ExecStmt(context.Background(), stmt, q, 1, "alice"); err != nil {
+		t.Fatalf("ExecStmt error: %v", err)
+	}
+}
+
 func TestQuery(t *testing.T) {
 	tests := []struct {
 		name        string

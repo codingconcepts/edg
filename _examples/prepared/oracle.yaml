@@ -1,0 +1,258 @@
+# Prepared statement workload for Oracle
+#
+# A multi-table e-commerce schema with complex joins and
+# aggregations to demonstrate where prepared statements
+# show a measurable performance advantage.
+#
+# Prepared queries always use $N placeholders. edg translates
+# them to the driver's native format (:N for Oracle) at prepare time.
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service_name
+
+globals:
+  customers: 200
+  products: 100
+  orders: 1000
+
+up:
+
+  - name: create_customer
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE customer (
+            id NUMBER PRIMARY KEY,
+            name VARCHAR2(255) NOT NULL,
+            region VARCHAR2(50) NOT NULL
+          )';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_product
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE product (
+            id NUMBER PRIMARY KEY,
+            name VARCHAR2(255) NOT NULL,
+            category VARCHAR2(50) NOT NULL,
+            price NUMBER(10,2) NOT NULL
+          )';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_purchase_order
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE purchase_order (
+            id NUMBER PRIMARY KEY,
+            customer_id NUMBER NOT NULL REFERENCES customer(id),
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            status VARCHAR2(50) NOT NULL
+          )';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_order_item
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE order_item (
+            id NUMBER PRIMARY KEY,
+            order_id NUMBER NOT NULL REFERENCES purchase_order(id),
+            product_id NUMBER NOT NULL REFERENCES product(id),
+            quantity NUMBER NOT NULL,
+            unit_price NUMBER(10,2) NOT NULL
+          )';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_idx_order_status
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'CREATE INDEX idx_order_status ON purchase_order(status)';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+seed:
+
+  - name: populate_customer
+    args:
+      - customers
+    query: |-
+      INSERT INTO customer (id, name, region)
+      SELECT
+        LEVEL,
+        'customer-' || TO_CHAR(LEVEL),
+        CASE MOD(LEVEL, 4)
+          WHEN 0 THEN 'north' WHEN 1 THEN 'south'
+          WHEN 2 THEN 'east' ELSE 'west'
+        END
+      FROM dual
+      CONNECT BY LEVEL <= $1
+
+  - name: populate_product
+    args:
+      - products
+    query: |-
+      INSERT INTO product (id, name, category, price)
+      SELECT
+        LEVEL,
+        'product-' || TO_CHAR(LEVEL),
+        CASE MOD(LEVEL, 5)
+          WHEN 0 THEN 'electronics' WHEN 1 THEN 'clothing'
+          WHEN 2 THEN 'food' WHEN 3 THEN 'books' ELSE 'toys'
+        END,
+        ROUND(DBMS_RANDOM.VALUE(1, 100), 2)
+      FROM dual
+      CONNECT BY LEVEL <= $1
+
+  - name: populate_purchase_order
+    args:
+      - customers
+      - orders
+    query: |-
+      INSERT INTO purchase_order (id, customer_id, created_at, status)
+      SELECT
+        LEVEL,
+        MOD(LEVEL - 1, $1) + 1,
+        SYSTIMESTAMP - NUMTODSINTERVAL(MOD(LEVEL, 365), 'DAY'),
+        CASE MOD(LEVEL, 3)
+          WHEN 0 THEN 'pending' WHEN 1 THEN 'shipped' ELSE 'delivered'
+        END
+      FROM dual
+      CONNECT BY LEVEL <= $2
+
+  - name: populate_order_item
+    args:
+      - products
+    query: |-
+      INSERT INTO order_item (id, order_id, product_id, quantity, unit_price)
+      SELECT
+        (po.id - 1) * 3 + nums.n AS id,
+        po.id AS order_id,
+        MOD(po.id * nums.n - 1, $1) + 1 AS product_id,
+        1 + MOD(po.id + nums.n, 10) AS quantity,
+        ROUND(DBMS_RANDOM.VALUE(1, 100), 2) AS unit_price
+      FROM purchase_order po
+      CROSS JOIN (SELECT 1 AS n FROM dual UNION ALL SELECT 2 FROM dual UNION ALL SELECT 3 FROM dual) nums
+
+deseed:
+
+  - name: delete_order_item
+    type: exec
+    query: DELETE FROM order_item
+
+  - name: delete_purchase_order
+    type: exec
+    query: DELETE FROM purchase_order
+
+  - name: delete_product
+    type: exec
+    query: DELETE FROM product
+
+  - name: delete_customer
+    type: exec
+    query: DELETE FROM customer
+
+down:
+
+  - name: drop_order_item
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE order_item';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_purchase_order
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE purchase_order';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_product
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE product';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_customer
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE customer';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+init:
+
+  - name: fetch_customers
+    type: query
+    query: SELECT id FROM customer
+
+run:
+
+  - name: order_details
+    type: query
+    prepared: true
+    args:
+      - ref_rand('fetch_customers').id
+    query: |-
+      SELECT c.name AS customer_name,
+             p.name AS product_name,
+             p.category,
+             oi.quantity,
+             oi.unit_price,
+             oi.quantity * oi.unit_price AS line_total,
+             po.status,
+             po.created_at
+      FROM order_item oi
+      JOIN purchase_order po ON po.id = oi.order_id
+      JOIN customer c ON c.id = po.customer_id
+      JOIN product p ON p.id = oi.product_id
+      WHERE c.id = $1
+      ORDER BY po.created_at DESC, line_total DESC
+      FETCH FIRST 20 ROWS ONLY
+
+  - name: category_revenue
+    type: query
+    prepared: true
+    args:
+      - set_rand(['pending','shipped','delivered'], [])
+      - uniform_f(100, 500, 2)
+    query: |-
+      SELECT p.category,
+             COUNT(DISTINCT c.id) AS unique_customers,
+             COUNT(DISTINCT po.id) AS order_count,
+             SUM(oi.quantity) AS total_units,
+             SUM(oi.quantity * oi.unit_price) AS total_revenue,
+             AVG(oi.quantity * oi.unit_price) AS avg_line_value
+      FROM order_item oi
+      JOIN purchase_order po ON po.id = oi.order_id
+      JOIN customer c ON c.id = po.customer_id
+      JOIN product p ON p.id = oi.product_id
+      WHERE po.status = $1
+      GROUP BY p.category
+      HAVING SUM(oi.quantity * oi.unit_price) > $2
+      ORDER BY total_revenue DESC

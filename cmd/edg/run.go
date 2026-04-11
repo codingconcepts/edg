@@ -67,10 +67,11 @@ func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config
 }
 
 func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *config.Request, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
-	initEnv, err := env.NewEnv(db, req)
+	initEnv, err := env.NewEnv(db, flagDriver, req)
 	if err != nil {
 		return nil, 0, err
 	}
+	defer initEnv.Close()
 	if err := initEnv.Init(ctx); err != nil {
 		return nil, 0, err
 	}
@@ -118,10 +119,11 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *confi
 }
 
 func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config.Request, duration time.Duration, workers int, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
-	initEnv, err := env.NewEnv(db, req)
+	initEnv, err := env.NewEnv(db, flagDriver, req)
 	if err != nil {
 		return nil, 0, err
 	}
+	defer initEnv.Close()
 	if err := initEnv.Init(ctx); err != nil {
 		return nil, 0, err
 	}
@@ -155,11 +157,12 @@ func startWorkers(ctx context.Context, numWorkers int, db *sql.DB, req *config.R
 
 	for i := range numWorkers {
 		wg.Go(func() {
-			workerEnv, err := env.NewEnv(db, req)
+			workerEnv, err := env.NewEnv(db, flagDriver, req)
 			if err != nil {
 				slog.Error("env error", "worker", i, "error", err)
 				return
 			}
+			defer workerEnv.Close()
 			workerEnv.InitFrom(initEnv)
 			workerEnv.Results = results
 

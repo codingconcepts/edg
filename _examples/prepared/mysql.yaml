@@ -1,0 +1,213 @@
+# Prepared statement workload for MySQL
+#
+# A multi-table e-commerce schema with complex joins and
+# aggregations to demonstrate where prepared statements
+# show a measurable performance advantage.
+#
+# Prepared queries always use $N placeholders. edg translates
+# them to the driver's native format (? for MySQL) at prepare time.
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
+globals:
+  customers: 200
+  products: 100
+  orders: 1000
+
+up:
+
+  - name: create_customer
+    query: |-
+      CREATE TABLE IF NOT EXISTS customer (
+        id INT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        region VARCHAR(50) NOT NULL
+      )
+
+  - name: create_product
+    query: |-
+      CREATE TABLE IF NOT EXISTS product (
+        id INT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        category VARCHAR(50) NOT NULL,
+        price DECIMAL(10,2) NOT NULL
+      )
+
+  - name: create_purchase_order
+    query: |-
+      CREATE TABLE IF NOT EXISTS purchase_order (
+        id INT PRIMARY KEY,
+        customer_id INT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(50) NOT NULL,
+        INDEX idx_order_status (status),
+        FOREIGN KEY (customer_id) REFERENCES customer(id)
+      )
+
+  - name: create_order_item
+    query: |-
+      CREATE TABLE IF NOT EXISTS order_item (
+        id INT PRIMARY KEY,
+        order_id INT NOT NULL,
+        product_id INT NOT NULL,
+        quantity INT NOT NULL,
+        unit_price DECIMAL(10,2) NOT NULL,
+        FOREIGN KEY (order_id) REFERENCES purchase_order(id),
+        FOREIGN KEY (product_id) REFERENCES product(id)
+      )
+
+seed:
+
+  - name: populate_customer
+    args:
+      - customers
+    query: |-
+      INSERT INTO customer (id, name, region)
+      WITH RECURSIVE seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
+      SELECT
+        s,
+        CONCAT('customer-', s),
+        ELT(1 + (s % 4), 'north', 'south', 'east', 'west')
+      FROM seq
+
+  - name: populate_product
+    args:
+      - products
+    query: |-
+      INSERT INTO product (id, name, category, price)
+      WITH RECURSIVE seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
+      SELECT
+        s,
+        CONCAT('product-', s),
+        ELT(1 + (s % 5), 'electronics', 'clothing', 'food', 'books', 'toys'),
+        CAST(RAND() * 99 + 1 AS DECIMAL(10,2))
+      FROM seq
+
+  - name: populate_purchase_order
+    args:
+      - customers
+      - orders
+    query: |-
+      INSERT INTO purchase_order (id, customer_id, created_at, status)
+      WITH RECURSIVE seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $2
+      )
+      SELECT
+        s,
+        ((s - 1) % $1) + 1,
+        DATE_SUB(NOW(), INTERVAL (s % 365) DAY),
+        ELT(1 + (s % 3), 'pending', 'shipped', 'delivered')
+      FROM seq
+
+  - name: populate_order_item
+    args:
+      - products
+    query: |-
+      INSERT INTO order_item (id, order_id, product_id, quantity, unit_price)
+      SELECT
+        (po.id - 1) * 3 + nums.n AS id,
+        po.id AS order_id,
+        ((po.id * nums.n - 1) % $1) + 1 AS product_id,
+        1 + ((po.id + nums.n) % 10) AS quantity,
+        CAST(RAND() * 99 + 1 AS DECIMAL(10,2))
+      FROM purchase_order po
+      CROSS JOIN (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3) AS nums
+
+deseed:
+
+  - name: delete_order_item
+    type: exec
+    query: DELETE FROM order_item
+
+  - name: delete_purchase_order
+    type: exec
+    query: DELETE FROM purchase_order
+
+  - name: delete_product
+    type: exec
+    query: DELETE FROM product
+
+  - name: delete_customer
+    type: exec
+    query: DELETE FROM customer
+
+down:
+
+  - name: drop_order_item
+    type: exec
+    query: DROP TABLE IF EXISTS order_item
+
+  - name: drop_purchase_order
+    type: exec
+    query: DROP TABLE IF EXISTS purchase_order
+
+  - name: drop_product
+    type: exec
+    query: DROP TABLE IF EXISTS product
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer
+
+init:
+
+  - name: fetch_customers
+    type: query
+    query: SELECT id FROM customer
+
+run:
+
+  - name: order_details
+    type: query
+    prepared: true
+    args:
+      - ref_rand('fetch_customers').id
+    query: |-
+      SELECT c.name AS customer_name,
+             p.name AS product_name,
+             p.category,
+             oi.quantity,
+             oi.unit_price,
+             oi.quantity * oi.unit_price AS line_total,
+             po.status,
+             po.created_at
+      FROM order_item oi
+      JOIN purchase_order po ON po.id = oi.order_id
+      JOIN customer c ON c.id = po.customer_id
+      JOIN product p ON p.id = oi.product_id
+      WHERE c.id = $1
+      ORDER BY po.created_at DESC, line_total DESC
+      LIMIT 20
+
+  - name: category_revenue
+    type: query
+    prepared: true
+    args:
+      - set_rand(['pending','shipped','delivered'], [])
+      - uniform_f(100, 500, 2)
+    query: |-
+      SELECT p.category,
+             COUNT(DISTINCT c.id) AS unique_customers,
+             COUNT(DISTINCT po.id) AS order_count,
+             SUM(oi.quantity) AS total_units,
+             SUM(oi.quantity * oi.unit_price) AS total_revenue,
+             AVG(oi.quantity * oi.unit_price) AS avg_line_value
+      FROM order_item oi
+      JOIN purchase_order po ON po.id = oi.order_id
+      JOIN customer c ON c.id = po.customer_id
+      JOIN product p ON p.id = oi.product_id
+      WHERE po.status = $1
+      GROUP BY p.category
+      HAVING SUM(oi.quantity * oi.unit_price) > $2
+      ORDER BY total_revenue DESC

@@ -37,7 +37,7 @@ func main() {
 			input := strings.Join(args, " ")
 
 			var req config.Request
-			env, err := env.NewEnv(nil, &req)
+			env, err := env.NewEnv(nil, "", &req)
 			if err != nil {
 				return err
 			}

@@ -349,6 +349,48 @@ JOIN OPENJSON('["a@x.com","b@y.com",...,"z@x.com"]') j2
   ON j1.[key] = j2.[key]
 ```
 
+### Prepared Statements
+
+Setting `prepared: true` on a `run` query causes the SQL statement to be prepared once per worker and reused across iterations. This reduces server-side parse overhead for high-throughput workloads by allowing the database to cache the query plan.
+
+```yaml
+run:
+  - name: lookup_product
+    type: query
+    prepared: true
+    args:
+      - ref_rand('fetch_products').id
+    query: |-
+      SELECT id, name, price FROM product WHERE id = $1
+
+  - name: update_price
+    type: exec
+    prepared: true
+    args:
+      - ref_rand('fetch_products').id
+      - uniform_f(1, 100, 2)
+    query: |-
+      UPDATE product SET price = $2 WHERE id = $1
+```
+
+Prepared statements work with both `query` and `exec` types. They are **not** used for batch types (`query_batch`, `exec_batch`) or queries that undergo batch expansion (via `gen_batch`, `batch`, or `ref_each`), since the SQL changes on each execution in those cases.
+
+Each worker maintains its own statement cache, so prepared statements are safe to use with any number of concurrent workers. Statements are prepared lazily on first use and automatically closed when the worker finishes.
+
+Prepared queries always use `$1`, `$2`, ... placeholders regardless of the target driver. edg automatically translates them to the driver's native format (`?` for mysql, `:N` for oracle, `@pN` for mssql) at prepare time.
+
+The benefit scales with query complexity. Simple point lookups show minimal improvement, but multi-table joins and aggregations can see significant gains. For example, a 4-table join with GROUP BY, HAVING, and multiple aggregates against CockroachDB:
+
+```
+QUERY                        AVG      p50      p95      p99
+category_revenue             5.671ms  5.362ms  7.351ms  11.393ms
+category_revenue_no_prepare  7.493ms  7.099ms  9.505ms  14.5ms
+order_details                3.353ms  3.151ms  4.453ms  7.839ms
+order_details_no_prepare     4.377ms  4.258ms  6.37ms   8.354ms
+```
+
+See [`_examples/prepared/`](https://github.com/codingconcepts/edg/tree/main/_examples/prepared) for complete working examples across all supported databases.
+
 ### Wait
 
 Queries can specify a `wait` duration (e.g. `wait: 18s`) to introduce a keying/think-time delay after execution. This only applies to queries in the `run` section and is ignored in other sections.

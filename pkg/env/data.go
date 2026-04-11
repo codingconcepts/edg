@@ -35,6 +35,31 @@ func (e *Env) Exec(ctx context.Context, db *sql.DB, q *config.Query, args ...any
 	return nil
 }
 
+func (e *Env) QueryStmt(ctx context.Context, stmt *sql.Stmt, q *config.Query, args ...any) error {
+	rows, err := stmt.QueryContext(ctx, args...)
+	if err != nil {
+		return fmt.Errorf("running prepared statement: %w", err)
+	}
+
+	data, err := ReadRows(rows)
+	if err != nil {
+		return fmt.Errorf("reading rows: %w", err)
+	}
+
+	e.SetEnv(q.Name, data)
+
+	return nil
+}
+
+func (e *Env) ExecStmt(ctx context.Context, stmt *sql.Stmt, q *config.Query, args ...any) error {
+	_, err := stmt.ExecContext(ctx, args...)
+	if err != nil {
+		return fmt.Errorf("running prepared statement: %w", err)
+	}
+
+	return nil
+}
+
 func ReadRows(rows *sql.Rows) ([]map[string]any, error) {
 	defer rows.Close()
 

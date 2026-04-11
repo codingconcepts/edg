@@ -30,10 +30,11 @@ func allCmd() *cobra.Command {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
 			defer cancel()
 
-			env, err := env.NewEnv(db, req)
+			env, err := env.NewEnv(db, flagDriver, req)
 			if err != nil {
 				return err
 			}
+			defer env.Close()
 
 			// Always run teardown, even if up/seed/run fails.
 			defer func() {

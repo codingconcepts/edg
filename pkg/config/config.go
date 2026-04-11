@@ -71,6 +71,7 @@ type QueryResult struct {
 type Query struct {
 	Name         string        `json:"name" yaml:"name"`
 	Type         QueryType     `json:"type" yaml:"type"`
+	Prepared     bool          `json:"prepared" yaml:"prepared"`
 	Wait         Duration      `json:"wait" yaml:"wait"`
 	Count        any           `json:"count" yaml:"count"`
 	Size         any           `json:"size" yaml:"size"`

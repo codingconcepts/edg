@@ -2,6 +2,7 @@ package env
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ func testEnv(data map[string][]map[string]any) *Env {
 	env := &Env{
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
+		stmtCache: map[*config.Query]*sql.Stmt{},
 		env:       map[string]any{},
 	}
 	for name, rows := range data {
@@ -148,7 +150,7 @@ func TestExpressions(t *testing.T) {
 		},
 	}
 
-	env, err := NewEnv(nil, req)
+	env, err := NewEnv(nil, "", req)
 	if err != nil {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
@@ -180,7 +182,7 @@ func TestExpressions_WithArgs(t *testing.T) {
 		},
 	}
 
-	env, err := NewEnv(nil, req)
+	env, err := NewEnv(nil, "", req)
 	if err != nil {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
@@ -206,7 +208,7 @@ func TestExpressions_InvalidBody(t *testing.T) {
 		},
 	}
 
-	_, err := NewEnv(nil, req)
+	_, err := NewEnv(nil, "", req)
 	if err == nil {
 		t.Fatal("expected error for invalid expression, got nil")
 	}
@@ -523,7 +525,7 @@ func TestNewEnv_GlobalShadowsBuiltin(t *testing.T) {
 		},
 	}
 
-	_, err := NewEnv(nil, req)
+	_, err := NewEnv(nil, "", req)
 	if err == nil {
 		t.Fatal("expected error when global shadows a built-in, got nil")
 	}
@@ -544,7 +546,7 @@ func TestReference_LoadedIntoEnv(t *testing.T) {
 		},
 	}
 
-	env, err := NewEnv(nil, req)
+	env, err := NewEnv(nil, "", req)
 	if err != nil {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
@@ -576,11 +578,11 @@ func TestReference_IndependentCopies(t *testing.T) {
 		},
 	}
 
-	env1, err := NewEnv(nil, req)
+	env1, err := NewEnv(nil, "", req)
 	if err != nil {
 		t.Fatalf("NewEnv env1 failed: %v", err)
 	}
-	env2, err := NewEnv(nil, req)
+	env2, err := NewEnv(nil, "", req)
 	if err != nil {
 		t.Fatalf("NewEnv env2 failed: %v", err)
 	}
@@ -598,7 +600,7 @@ func TestReference_IndependentCopies(t *testing.T) {
 func TestReference_NilIsNoOp(t *testing.T) {
 	req := &config.Request{}
 
-	env, err := NewEnv(nil, req)
+	env, err := NewEnv(nil, "", req)
 	if err != nil {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
@@ -623,7 +625,7 @@ func TestReference_RefRand(t *testing.T) {
 		},
 	}
 
-	env, err := NewEnv(nil, req)
+	env, err := NewEnv(nil, "", req)
 	if err != nil {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
@@ -831,7 +833,7 @@ func TestArg_DependentColumn(t *testing.T) {
 		},
 	}
 
-	env, err := NewEnv(nil, req)
+	env, err := NewEnv(nil, "", req)
 	if err != nil {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
@@ -857,7 +859,7 @@ func TestArg_OutOfRange(t *testing.T) {
 		},
 	}
 
-	env, err := NewEnv(nil, req)
+	env, err := NewEnv(nil, "", req)
 	if err != nil {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
@@ -885,7 +887,7 @@ func TestArg_Batch(t *testing.T) {
 		},
 	}
 
-	env, err := NewEnv(nil, req)
+	env, err := NewEnv(nil, "", req)
 	if err != nil {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
@@ -924,7 +926,7 @@ func TestRow_ExpandsIntoArgs(t *testing.T) {
 		},
 	}
 
-	env, err := NewEnv(nil, req)
+	env, err := NewEnv(nil, "", req)
 	if err != nil {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
@@ -964,7 +966,7 @@ func TestRow_UsedAcrossSections(t *testing.T) {
 		},
 	}
 
-	env, err := NewEnv(nil, req)
+	env, err := NewEnv(nil, "", req)
 	if err != nil {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
@@ -992,7 +994,7 @@ func TestRow_UnknownRowName(t *testing.T) {
 		},
 	}
 
-	_, err := NewEnv(nil, req)
+	_, err := NewEnv(nil, "", req)
 	if err == nil {
 		t.Fatal("expected error for unknown row name, got nil")
 	}
@@ -1008,9 +1010,285 @@ func TestRow_MutuallyExclusiveWithArgs(t *testing.T) {
 		},
 	}
 
-	_, err := NewEnv(nil, req)
+	_, err := NewEnv(nil, "", req)
 	if err == nil {
 		t.Fatal("expected error when both row and args are set, got nil")
+	}
+}
+
+func TestRunSection_PreparedExec(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectPrepare("INSERT INTO t").
+		ExpectExec().
+		WithArgs(42).
+		WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		stmtCache: map[*config.Query]*sql.Stmt{},
+		env:       map[string]any{"const": convert.Constant},
+		request:   &config.Request{},
+	}
+
+	q := &config.Query{
+		Name:     "insert_t",
+		Type:     config.QueryTypeExec,
+		Prepared: true,
+		Query:    "INSERT INTO t VALUES ($1)",
+		Args:     []string{"const(42)"},
+	}
+	if err := q.CompileArgs(env.env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun); err != nil {
+		t.Fatalf("runSection error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestRunSection_PreparedQuery(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectPrepare("SELECT id, name FROM t").
+		ExpectQuery().
+		WithArgs(1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow(1, "alice"))
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		stmtCache: map[*config.Query]*sql.Stmt{},
+		env:       map[string]any{"const": convert.Constant},
+		request:   &config.Request{},
+	}
+
+	q := &config.Query{
+		Name:     "lookup",
+		Type:     config.QueryTypeQuery,
+		Prepared: true,
+		Query:    "SELECT id, name FROM t WHERE id = $1",
+		Args:     []string{"const(1)"},
+	}
+	if err := q.CompileArgs(env.env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun); err != nil {
+		t.Fatalf("runSection error: %v", err)
+	}
+
+	data, ok := env.env["lookup"].([]map[string]any)
+	if !ok {
+		t.Fatal("prepared query did not store results")
+	}
+	if len(data) != 1 || data[0]["name"] != "alice" {
+		t.Errorf("got %v, want [{id:1 name:alice}]", data)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestRunSection_PreparedCachesStmt(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	// Expect a single Prepare, but two Exec calls.
+	prep := mock.ExpectPrepare("INSERT INTO t")
+	prep.ExpectExec().WithArgs(1).WillReturnResult(driver.ResultNoRows)
+	prep.ExpectExec().WithArgs(2).WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		stmtCache: map[*config.Query]*sql.Stmt{},
+		env:       map[string]any{"const": convert.Constant},
+		request:   &config.Request{},
+	}
+
+	q := &config.Query{
+		Name:     "insert_t",
+		Type:     config.QueryTypeExec,
+		Prepared: true,
+		Query:    "INSERT INTO t VALUES ($1)",
+		Args:     []string{"const(1)"},
+	}
+	if err := q.CompileArgs(env.env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun); err != nil {
+		t.Fatalf("first runSection error: %v", err)
+	}
+
+	// Change arg for second call, re-compile.
+	q.Args = []string{"const(2)"}
+	if err := q.CompileArgs(env.env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun); err != nil {
+		t.Fatalf("second runSection error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestRunSection_PreparedIgnoredForBatch(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	// Batch queries should NOT prepare. Expect a regular exec.
+	mock.ExpectExec("INSERT INTO t").WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		stmtCache: map[*config.Query]*sql.Stmt{},
+		env:       map[string]any{"const": convert.Constant},
+		request:   &config.Request{},
+	}
+
+	q := &config.Query{
+		Name:     "batch_insert",
+		Type:     config.QueryTypeExecBatch,
+		Prepared: true,
+		Count:    1,
+		Query:    "INSERT INTO t VALUES ($1)",
+		Args:     []string{"const(42)"},
+	}
+	if err := q.CompileArgs(env.env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun); err != nil {
+		t.Fatalf("runSection error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestEnvClose(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectPrepare("SELECT 1")
+	mock.ExpectClose()
+
+	q := &config.Query{Name: "test", Query: "SELECT 1"}
+	stmt, err := db.Prepare("SELECT 1")
+	if err != nil {
+		t.Fatalf("preparing: %v", err)
+	}
+
+	env := &Env{
+		stmtCache: map[*config.Query]*sql.Stmt{q: stmt},
+	}
+
+	env.Close()
+
+	if len(env.stmtCache) != 0 {
+		t.Errorf("Close() left %d cached statements", len(env.stmtCache))
+	}
+}
+
+func TestTranslatePlaceholders(t *testing.T) {
+	tests := []struct {
+		name   string
+		query  string
+		driver string
+		want   string
+	}{
+		{name: "pgx unchanged", query: "SELECT * FROM t WHERE id = $1", driver: "pgx", want: "SELECT * FROM t WHERE id = $1"},
+		{name: "dsql unchanged", query: "SELECT * FROM t WHERE id = $1", driver: "dsql", want: "SELECT * FROM t WHERE id = $1"},
+		{name: "empty driver unchanged", query: "SELECT * FROM t WHERE id = $1", driver: "", want: "SELECT * FROM t WHERE id = $1"},
+		{name: "mysql single", query: "SELECT * FROM t WHERE id = $1", driver: "mysql", want: "SELECT * FROM t WHERE id = ?"},
+		{name: "mysql multi", query: "UPDATE t SET a = $2 WHERE id = $1", driver: "mysql", want: "UPDATE t SET a = ? WHERE id = ?"},
+		{name: "oracle single", query: "SELECT * FROM t WHERE id = $1", driver: "oracle", want: "SELECT * FROM t WHERE id = :1"},
+		{name: "oracle multi", query: "UPDATE t SET a = $2 WHERE id = $1", driver: "oracle", want: "UPDATE t SET a = :2 WHERE id = :1"},
+		{name: "mssql single", query: "SELECT * FROM t WHERE id = $1", driver: "mssql", want: "SELECT * FROM t WHERE id = @p1"},
+		{name: "mssql multi", query: "UPDATE t SET a = $2 WHERE id = $1", driver: "mssql", want: "UPDATE t SET a = @p2 WHERE id = @p1"},
+		{name: "no placeholders", query: "SELECT 1", driver: "mysql", want: "SELECT 1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := translatePlaceholders(tt.query, tt.driver)
+			if got != tt.want {
+				t.Errorf("translatePlaceholders(%q, %q) = %q, want %q", tt.query, tt.driver, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunSection_PreparedTranslatesPlaceholders(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	// sqlmock sees the translated query (? for mysql).
+	mock.ExpectPrepare("INSERT INTO t").
+		ExpectExec().
+		WithArgs(42).
+		WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		driver:    "mysql",
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		stmtCache: map[*config.Query]*sql.Stmt{},
+		env:       map[string]any{"const": convert.Constant},
+		request:   &config.Request{},
+	}
+
+	q := &config.Query{
+		Name:     "insert_t",
+		Type:     config.QueryTypeExec,
+		Prepared: true,
+		Query:    "INSERT INTO t VALUES ($1)",
+		Args:     []string{"const(42)"},
+	}
+	if err := q.CompileArgs(env.env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun); err != nil {
+		t.Fatalf("runSection error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
 	}
 }
 

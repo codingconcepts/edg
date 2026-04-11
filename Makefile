@@ -45,7 +45,7 @@ harness_all: harness_crdb harness_mysql harness_mssql harness_oracle
 	echo "done"
 
 docs:
-	(cd docs && hugo server --disableFastRender)
+	(cd docs && hugo server --disableFastRender --openBrowser)
 
 teardown:
 	- docker ps -aq | xargs docker rm -f

@@ -267,7 +267,7 @@ func runIntegrationTests(t *testing.T, config []byte, queries map[string]string)
 	req := loadConfig(t, config)
 	ctx := context.Background()
 
-	env, err := NewEnv(db, req)
+	env, err := NewEnv(db, driverName, req)
 	if err != nil {
 		t.Fatalf("creating env: %v", err)
 	}
