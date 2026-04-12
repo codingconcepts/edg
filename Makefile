@@ -1,5 +1,23 @@
 .PHONY: docs
 
+validate_version:
+ifndef VERSION
+	$(error VERSION is undefined)
+endif
+
+docker_push: validate_version
+	@docker build --platform linux/amd64 \
+		--build-arg VERSION=${VERSION} \
+		-t codingconcepts/edg:linux_amd64_${VERSION} \
+		--push \
+		.
+
+	@docker build --platform linux/arm64 \
+		--build-arg VERSION=${VERSION} \
+		-t codingconcepts/edg:linux_arm64_${VERSION} \
+		--push \
+		.
+
 build:
 	go build .
 	mv ./edg ~/dev/bin

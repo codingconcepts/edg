@@ -169,26 +169,29 @@ func TestTemplate(t *testing.T) {
 
 func TestSQLFormatValue(t *testing.T) {
 	tests := []struct {
-		name  string
-		input any
-		want  string
+		name   string
+		input  any
+		driver string
+		want   string
 	}{
-		{"nil", nil, "NULL"},
-		{"int", 42, "42"},
-		{"int64", int64(9999999999), "9999999999"},
-		{"float64", 3.14, "3.14"},
-		{"string", "hello", "'hello'"},
-		{"string with quote", "it's", "'it''s'"},
-		{"bool", true, "'true'"},
-		{"uuid string", "550e8400-e29b-41d4-a716-446655440000", "'550e8400-e29b-41d4-a716-446655440000'"},
-		{"raw sql", RawSQL("NOW()"), "NOW()"},
-		{"bytes", []byte{0xDE, 0xAD, 0xBE, 0xEF}, "X'deadbeef'"},
-		{"empty bytes", []byte{}, "X''"},
+		{"nil", nil, "", "NULL"},
+		{"int", 42, "", "42"},
+		{"int64", int64(9999999999), "", "9999999999"},
+		{"float64", 3.14, "", "3.14"},
+		{"string", "hello", "", "'hello'"},
+		{"string with quote", "it's", "", "'it''s'"},
+		{"bool", true, "", "'true'"},
+		{"uuid string", "550e8400-e29b-41d4-a716-446655440000", "", "'550e8400-e29b-41d4-a716-446655440000'"},
+		{"raw sql", RawSQL("NOW()"), "", "NOW()"},
+		{"bytes", []byte{0xDE, 0xAD, 0xBE, 0xEF}, "", "X'deadbeef'"},
+		{"bytes mssql", []byte{0xDE, 0xAD, 0xBE, 0xEF}, "mssql", "0xdeadbeef"},
+		{"empty bytes", []byte{}, "", "X''"},
+		{"empty bytes mssql", []byte{}, "mssql", "0x"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := SQLFormatValue(tt.input); got != tt.want {
-				t.Errorf("SQLFormatValue(%v) = %q, want %q", tt.input, got, tt.want)
+			if got := SQLFormatValue(tt.input, tt.driver); got != tt.want {
+				t.Errorf("SQLFormatValue(%v, %q) = %q, want %q", tt.input, tt.driver, got, tt.want)
 			}
 		})
 	}

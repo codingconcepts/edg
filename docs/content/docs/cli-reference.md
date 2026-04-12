@@ -33,6 +33,7 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 | `--rng-seed` | | | PRNG seed for deterministic output (useful for regression testing) |
 | `--duration` | `-d` | `1m` | Benchmark duration (run and all commands) |
 | `--workers` | `-w` | `1` | Number of concurrent workers (run and all commands) |
+| `--license` | | | License key for enterprise drivers, or set `EDG_LICENSE` env var (see [Licensing](/docs/licensing/)) |
 | `--print-interval` | | `1s` | Progress reporting interval (run and all commands) |
 
 ## Example
@@ -93,6 +94,10 @@ edg all \
 AWS credentials are resolved from the standard chain (environment variables, `~/.aws/credentials`, IAM role, etc.). The region is parsed from the cluster endpoint automatically. Auth tokens are refreshed on every new connection, so long-running workloads work without interruption.
 
 DSQL uses PostgreSQL-compatible SQL, so use `$1`, `$2` placeholders in your queries.
+
+## Licensing
+
+The `pgx` and `mysql` drivers are free. Enterprise drivers (`oracle`, `mssql`, `dsql`) require a license key passed via `--license` or the `EDG_LICENSE` environment variable. The license is validated before connecting to the database. See the [Licensing](/docs/licensing/) page for full details.
 
 ## Validating Config
 

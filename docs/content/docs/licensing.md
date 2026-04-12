@@ -1,0 +1,64 @@
+---
+title: Licensing
+weight: 9
+---
+
+# Licensing
+
+edg is free to use for PostgreSQL/CockroachDB and MySQL workloads. Enterprise drivers require a paid license.
+
+## Free vs Enterprise Drivers
+
+| Driver | Flag Value | License Required |
+|---|---|---|
+| PostgreSQL / CockroachDB | `pgx` | No |
+| MySQL | `mysql` | No |
+| Oracle | `oracle` | Yes |
+| Microsoft SQL Server | `mssql` | Yes |
+| AWS Aurora DSQL | `dsql` | Yes |
+
+Commands that don't connect to a database (`repl`, `validate`, and bare expression evaluation) work without a license regardless of driver.
+
+## Obtaining a License
+
+Contact [lic@edg.run](mailto:lic@edg.run) to purchase a license key. A license includes:
+
+- **Licensed drivers** — each license covers one or more enterprise drivers (e.g. Oracle + MSSQL)
+- **Expiry date** — licenses are time-limited and must be renewed before they expire
+
+## Using a License
+
+Provide your license key via the `--license` flag or the `EDG_LICENSE` environment variable:
+
+```sh
+# Flag.
+edg all \
+  --driver oracle \
+  --license "your-license-key" \
+  --config workload.yaml \
+  --url "oracle://user:pass@localhost:1521/XEPDB1"
+
+# Environment variable.
+export EDG_LICENSE="your-license-key"
+
+edg all \
+  --driver oracle \
+  --config workload.yaml \
+  --url "oracle://user:pass@localhost:1521/XEPDB1"
+```
+
+The environment variable is checked when the `--license` flag is not set, so you can export it once and run multiple commands without repeating it.
+
+## License Validation
+
+When you use an enterprise driver, edg checks the license before connecting to the database. If validation fails you'll see one of these errors:
+
+| Error | Meaning |
+|---|---|
+| `driver "X" requires a license` | No license was provided. Set `--license` or `EDG_LICENSE`. |
+| `license expired on YYYY-MM-DD` | License has passed its expiry date. Contact [lic@edg.run](mailto:lic@edg.run) to renew. |
+| `license does not include driver "X"` | License is valid but doesn't cover this driver. |
+
+## How It Works
+
+Licenses are cryptographically signed using Ed25519. The public key is embedded in the edg binary, so verification is offline (no network calls are made).

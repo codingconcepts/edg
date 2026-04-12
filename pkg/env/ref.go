@@ -169,6 +169,11 @@ func (e *Env) refEach(query string) ([][]any, error) {
 		return nil, fmt.Errorf("ref_each: failed to get columns: %w", err)
 	}
 
+	columnTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, fmt.Errorf("ref_each: failed to get column types: %w", err)
+	}
+
 	var batches [][]any
 	for rows.Next() {
 		values := make([]any, len(columns))
@@ -180,7 +185,13 @@ func (e *Env) refEach(query string) ([][]any, error) {
 			return nil, fmt.Errorf("ref_each: failed to scan row: %w", err)
 		}
 		batch := make([]any, len(values))
-		copy(batch, values)
+		for i, v := range values {
+			if b, ok := v.([]byte); ok {
+				batch[i] = normalizeBytes(b, columnTypes[i].DatabaseTypeName())
+			} else {
+				batch[i] = v
+			}
+		}
 		batches = append(batches, batch)
 	}
 

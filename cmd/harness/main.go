@@ -57,7 +57,7 @@ var databases = map[string]dbConfig{
 		cleanup:  false,
 	},
 	"mssql": {
-		driver:   "sqlserver",
+		driver:   "mssql",
 		url:      "sqlserver://sa:P4ssw0rd@localhost:1433?database=master&encrypt=disable",
 		compose:  "compose_mssql.yml",
 		yamlFile: "mssql.yaml",

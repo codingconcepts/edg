@@ -20,6 +20,9 @@ var (
 	configFile  string
 	flagDriver  string
 	flagRngSeed uint64
+	flagLicense string
+
+	version string
 )
 
 func main() {
@@ -54,6 +57,7 @@ func main() {
 	root.PersistentFlags().StringVar(&flagURL, "url", "", "database connection URL (env: URL)")
 	root.PersistentFlags().StringVar(&configFile, "config", "", "workload YAML config file")
 	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql, mssql, dsql]")
+	root.PersistentFlags().StringVar(&flagLicense, "license", "", "license key for enterprise drivers (env: EDG_LICENSE)")
 	root.PersistentFlags().Uint64Var(&flagRngSeed, "rng-seed", 0, "PRNG seed for deterministic output")
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
@@ -63,7 +67,7 @@ func main() {
 		return nil
 	}
 
-	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd(), allCmd(), replCmd(), validateCmd())
+	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd(), allCmd(), replCmd(), validateCmd(), versionCmd())
 	root.SilenceUsage = true
 	root.SilenceErrors = true
 

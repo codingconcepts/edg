@@ -178,10 +178,10 @@ type RawSQL string
 // SQLFormatValue formats a value for safe inline substitution in SQL.
 // Strings are single-quoted with embedded quotes escaped ('→'');
 // numeric types are returned as-is; nil becomes NULL; RawSQL values
-// are returned unchanged; []byte values are hex-encoded as X'...'
-// (ANSI SQL hex string literal). The escaping is the same across
-// PostgreSQL, MySQL, and Oracle.
-func SQLFormatValue(v any) string {
+// are returned unchanged; []byte values are hex-encoded using the
+// driver-appropriate literal: 0x... for mssql, X'...' (ANSI SQL hex
+// string literal) for all others.
+func SQLFormatValue(v any, driver string) string {
 	if v == nil {
 		return "NULL"
 	}
@@ -191,7 +191,12 @@ func SQLFormatValue(v any) string {
 	case int, int64, float64:
 		return fmt.Sprint(v)
 	case []byte:
-		return "X'" + hex.EncodeToString(n) + "'"
+		switch driver {
+		case "mssql":
+			return "0x" + hex.EncodeToString(n)
+		default:
+			return "X'" + hex.EncodeToString(n) + "'"
+		}
 	default:
 		s := fmt.Sprint(n)
 		return "'" + strings.ReplaceAll(s, "'", "''") + "'"

@@ -349,7 +349,7 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 			if strings.Contains(q.Query, quoted) {
 				formatters[i] = convert.BatchFormatValue
 			} else {
-				formatters[i] = convert.SQLFormatValue
+				formatters[i] = func(v any) string { return convert.SQLFormatValue(v, e.driver) }
 			}
 		}
 	}
@@ -482,7 +482,7 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 				inlined := q.Query
 				for j := len(args) - 1; j >= 0; j-- {
 					placeholder := fmt.Sprintf("$%d", j+1)
-					formatted := convert.SQLFormatValue(args[j])
+					formatted := convert.SQLFormatValue(args[j], e.driver)
 					// For non-RawSQL values (strings, []byte), replace quoted
 					// placeholders '$N' as a unit first. SQLFormatValue already
 					// wraps these in quotes, so this avoids double-quoting.
