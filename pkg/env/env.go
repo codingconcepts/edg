@@ -74,8 +74,9 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		"avg":               env.aggAvg,          // Average a numeric field across all rows in a dataset.
 		"batch":             convert.Batch,       // Generate sequential batch indices [0, n) for batched execution.
 		"bit":               gen.GenBit,          // Random fixed-length bit string.
+		"blob":              gen.GenBlob,         // Random bytes as raw []byte for BLOB/BYTEA columns.
 		"bool":              gen.GenBool,         // Generate either a true or a false value.
-		"bytes":             gen.GenBytes,        // Random bytes as hex-encoded string.
+		"bytes":             gen.GenBytes,        // Random bytes as hex-encoded string (PostgreSQL/CockroachDB only).
 		"coalesce":          convert.Coalesce,    // First non-nil value from arguments.
 		"cond":              convert.Cond,        // Conditional: if predicate then trueVal else falseVal.
 		"const":             convert.Constant,    // Use a constant value.

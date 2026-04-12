@@ -1,0 +1,56 @@
+# Blob workload for MySQL
+#
+# Uses blob() for raw binary data via bind parameters.
+# The bytes() function is not supported on MySQL (it produces
+# a PostgreSQL/CockroachDB-specific \x hex literal).
+#
+# Requires MySQL 8.0+.
+#
+# Connection URL format:
+#   root:password@tcp(localhost:3306)/defaultdb?parseTime=true
+
+up:
+
+  - name: create_blob_test
+    query: |-
+      CREATE TABLE IF NOT EXISTS blob_test (
+        id CHAR(36) PRIMARY KEY,
+        label VARCHAR(255) NOT NULL,
+        data_blob BLOB NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+
+down:
+
+  - name: drop_blob_test
+    type: exec
+    query: DROP TABLE IF EXISTS blob_test
+
+init:
+
+  - name: fetch_blobs
+    type: query
+    query: SELECT id, label FROM blob_test ORDER BY RAND() LIMIT 100
+
+run:
+
+  # Insert raw binary data using blob().
+  - name: insert_blob
+    type: exec
+    args:
+      - uuid_v4()
+      - gen('word')
+      - blob(256)
+    query: |-
+      INSERT INTO blob_test (id, label, data_blob)
+      VALUES ($1, $2, $3)
+
+  # Read back a random row to verify round-trip.
+  - name: read_blob
+    type: query
+    args:
+      - ref_rand('fetch_blobs').id
+    query: |-
+      SELECT id, label, LENGTH(data_blob) AS blob_len
+      FROM blob_test
+      WHERE id = $1

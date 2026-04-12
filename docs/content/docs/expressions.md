@@ -18,8 +18,9 @@ Query arguments are written as expressions compiled at startup using [expr-lang/
 | `avg(name, field)` | `float64` | Average of a numeric field across all rows in a named dataset.<br><br>`avg('fetch_products', 'price')` -> `19.39` |
 | `batch(n)` | `[][]any` | Returns sequential integers `[0, n)` as batch arg sets,<br><br>`batch(3)` -> `[[0], [1], [2]]` |
 | `bit(n)` | `string` | Random fixed-length bit string of exactly `n` bits.<br><br>`bit(8)` -> `10110011` |
+| `blob(n)` | `[]byte` | Random `n` bytes as raw binary data. Works across all databases (PostgreSQL, MySQL, Oracle, MSSQL) via bind parameters. Use this for BLOB, BYTEA, VARBINARY, and RAW columns.<br><br>`blob(1024)` -> `(1024 random bytes)` |
 | `bool()` | `bool` | Random `true` or `false`. Useful as a coin flip with `cond()` and `arg()` for mutually exclusive columns.<br><br>`bool()` -> `true` |
-| `bytes(n)` | `string` | Random `n` bytes as a hex-encoded string with `\x` prefix.<br><br>`bytes(4)` -> `\x1a2b3c4d` |
+| `bytes(n)` | `string` | Random `n` bytes as a hex-encoded string with `\x` prefix. PostgreSQL/CockroachDB only. For cross-database binary data, use `blob(n)` instead.<br><br>`bytes(4)` -> `\x1a2b3c4d` |
 | `coalesce(v1, v2, ...)` | `any` | Returns the first non-nil value from arguments.<br><br>`coalesce(nil, 'default')` -> `default` |
 | `cond(predicate, trueVal, falseVal)` | `any` | Returns `trueVal` if `predicate` is true, `falseVal` otherwise.<br><br>`cond(true, 'yes', 'no')` -> `yes` |
 | `const(value)` | `any` | Returns the value as-is. Useful for literal constants.<br><br>`const(42)` -> `42` |
@@ -533,6 +534,9 @@ args:
   ##########
   # Binary #
   ##########
+
+  # Random 1KB blob as raw binary data (works across all databases).
+  - blob(1024)
 
   # Random 16 bytes as a hex-encoded CockroachDB/PostgreSQL BYTES literal.
   - bytes(16)

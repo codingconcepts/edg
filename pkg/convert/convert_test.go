@@ -167,6 +167,81 @@ func TestTemplate(t *testing.T) {
 	}
 }
 
+func TestSQLFormatValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		input any
+		want  string
+	}{
+		{"nil", nil, "NULL"},
+		{"int", 42, "42"},
+		{"int64", int64(9999999999), "9999999999"},
+		{"float64", 3.14, "3.14"},
+		{"string", "hello", "'hello'"},
+		{"string with quote", "it's", "'it''s'"},
+		{"bool", true, "'true'"},
+		{"uuid string", "550e8400-e29b-41d4-a716-446655440000", "'550e8400-e29b-41d4-a716-446655440000'"},
+		{"raw sql", RawSQL("NOW()"), "NOW()"},
+		{"bytes", []byte{0xDE, 0xAD, 0xBE, 0xEF}, "X'deadbeef'"},
+		{"empty bytes", []byte{}, "X''"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SQLFormatValue(tt.input); got != tt.want {
+				t.Errorf("SQLFormatValue(%v) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBatchFormatValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		input any
+		want  string
+	}{
+		{"nil", nil, "NULL"},
+		{"string", "hello", "hello"},
+		{"string with quote", "it's", "it''s"},
+		{"int", 42, "42"},
+		{"int64", int64(9999999999), "9999999999"},
+		{"float64", 3.14, "3.14"},
+		{"bool", true, "true"},
+		{"uuid string", "550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440000"},
+		{"bytes", []byte{0xCA, 0xFE}, "cafe"},
+		{"empty bytes", []byte{}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := BatchFormatValue(tt.input); got != tt.want {
+				t.Errorf("BatchFormatValue(%v) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBatchJoinJSON(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []string
+		want  string
+	}{
+		{"empty", []string{}, "[]"},
+		{"single value", []string{"hello"}, `["hello"]`},
+		{"multiple values", []string{"a", "b", "c"}, `["a","b","c"]`},
+		{"with NULL", []string{"a", "NULL", "c"}, `["a",null,"c"]`},
+		{"all NULL", []string{"NULL", "NULL"}, `[null,null]`},
+		{"with quotes", []string{`he said "hi"`, "ok"}, `["he said \"hi\"","ok"]`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := BatchJoinJSON(tt.input); got != tt.want {
+				t.Errorf("BatchJoinJSON(%v) = %s, want %s", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func BenchmarkToInt(b *testing.B) {
 	cases := []struct {
 		name  string

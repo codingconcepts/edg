@@ -1,6 +1,7 @@
 package convert
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -140,17 +141,16 @@ func Tmpl(format string, args ...any) string {
 // BatchFormatValue formats a value for use inside a batch CSV string
 // that will be placed within an already-quoted SQL context (e.g.
 // string_to_array('$1', ',')). Values are not wrapped in quotes;
-// embedded single quotes are escaped for SQL safety.
+// embedded single quotes are escaped for SQL safety. []byte values
+// are hex-encoded.
 func BatchFormatValue(v any) string {
 	if v == nil {
 		return "NULL"
 	}
-	var s string
 	if b, ok := v.([]byte); ok {
-		s = string(b)
-	} else {
-		s = fmt.Sprint(v)
+		return hex.EncodeToString(b)
 	}
+	s := fmt.Sprint(v)
 	return strings.ReplaceAll(s, "'", "''")
 }
 
@@ -178,8 +178,9 @@ type RawSQL string
 // SQLFormatValue formats a value for safe inline substitution in SQL.
 // Strings are single-quoted with embedded quotes escaped ('→'');
 // numeric types are returned as-is; nil becomes NULL; RawSQL values
-// are returned unchanged. The escaping is the same across PostgreSQL,
-// MySQL, and Oracle.
+// are returned unchanged; []byte values are hex-encoded as X'...'
+// (ANSI SQL hex string literal). The escaping is the same across
+// PostgreSQL, MySQL, and Oracle.
 func SQLFormatValue(v any) string {
 	if v == nil {
 		return "NULL"
@@ -190,7 +191,7 @@ func SQLFormatValue(v any) string {
 	case int, int64, float64:
 		return fmt.Sprint(v)
 	case []byte:
-		return "'" + strings.ReplaceAll(string(n), "'", "''") + "'"
+		return "X'" + hex.EncodeToString(n) + "'"
 	default:
 		s := fmt.Sprint(n)
 		return "'" + strings.ReplaceAll(s, "'", "''") + "'"

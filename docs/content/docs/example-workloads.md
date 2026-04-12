@@ -11,6 +11,7 @@ Complete workload configs you can run directly or use as starting points for you
 |---|---|
 | [Aggregation](https://github.com/codingconcepts/edg/tree/main/_examples/aggregation/) | Demonstrates aggregation functions (sum, avg, min, max, count, distinct) |
 | [Bank](https://github.com/codingconcepts/edg/tree/main/_examples/bank/) | Bank account operations for contention and correctness testing |
+| [Blob](https://github.com/codingconcepts/edg/tree/main/_examples/blob/) | Binary data with `blob()` (all databases) and `bytes()` (PostgreSQL/CockroachDB) |
 | [Batch](https://github.com/codingconcepts/edg/tree/main/_examples/batch/) | Demonstrates `query_batch` and `exec_batch` query types for batch inserts and updates |
 | [Distributions](https://github.com/codingconcepts/edg/tree/main/_examples/distributions/) | All five distribution functions (uniform, zipf, norm_f, exp_f, lognorm_f) |
 | [E-Commerce](https://github.com/codingconcepts/edg/tree/main/_examples/ecommerce/) | E-commerce with categories, products, customers, and orders |

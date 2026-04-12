@@ -241,6 +241,16 @@ func Bytes(n int) string {
 	return `\x` + hex.EncodeToString(b)
 }
 
+// Blob generates n random bytes and returns them as a raw []byte slice,
+// suitable for database BLOB/BYTEA columns via bind parameters.
+func Blob(n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = byte(Rng.IntN(256))
+	}
+	return b
+}
+
 // Bit generates a random fixed-length bit string of exactly n bits.
 func Bit(n int) string {
 	b := make([]byte, n)

@@ -1,0 +1,54 @@
+# Blob workload for SQL Server
+#
+# Uses blob() for raw binary data via bind parameters.
+# The bytes() function is not supported on SQL Server (it produces
+# a PostgreSQL/CockroachDB-specific \x hex literal).
+#
+# Connection URL format:
+#   sqlserver://sa:P4ssw0rd@localhost:1433?database=blob&encrypt=disable
+
+up:
+
+  - name: create_blob_test
+    query: |-
+      IF OBJECT_ID('blob_test', 'U') IS NULL
+      CREATE TABLE blob_test (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        label NVARCHAR(255) NOT NULL,
+        data_blob VARBINARY(MAX) NOT NULL,
+        created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+      )
+
+down:
+
+  - name: drop_blob_test
+    type: exec
+    query: DROP TABLE IF EXISTS blob_test
+
+init:
+
+  - name: fetch_blobs
+    type: query
+    query: SELECT TOP 100 id, label FROM blob_test
+
+run:
+
+  # Insert raw binary data using blob().
+  - name: insert_blob
+    type: exec
+    args:
+      - gen('word')
+      - blob(256)
+    query: |-
+      INSERT INTO blob_test (label, data_blob)
+      VALUES ($1, $2)
+
+  # Read back a random row to verify round-trip.
+  - name: read_blob
+    type: query
+    args:
+      - ref_rand('fetch_blobs').id
+    query: |-
+      SELECT id, label, DATALENGTH(data_blob) AS blob_len
+      FROM blob_test
+      WHERE id = $1

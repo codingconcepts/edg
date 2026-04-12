@@ -93,6 +93,39 @@ func TestReadRows(t *testing.T) {
 	}
 }
 
+func TestNormalizeBytes(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      []byte
+		dbType     string
+		expectType string
+	}{
+		{"BYTEA preserved", []byte{0xDE, 0xAD}, "BYTEA", "[]uint8"},
+		{"BLOB preserved", []byte{0xCA, 0xFE}, "BLOB", "[]uint8"},
+		{"BYTES preserved", []byte{0x01}, "BYTES", "[]uint8"},
+		{"BINARY preserved", []byte{0xFF}, "BINARY", "[]uint8"},
+		{"VARBINARY preserved", []byte{0xAB}, "VARBINARY", "[]uint8"},
+		{"RAW preserved", []byte{0x00}, "RAW", "[]uint8"},
+		{"IMAGE preserved", []byte{0x89}, "IMAGE", "[]uint8"},
+		{"TINYBLOB preserved", []byte{0x01}, "TINYBLOB", "[]uint8"},
+		{"MEDIUMBLOB preserved", []byte{0x01}, "MEDIUMBLOB", "[]uint8"},
+		{"LONGBLOB preserved", []byte{0x01}, "LONGBLOB", "[]uint8"},
+		{"LONG RAW preserved", []byte{0x01}, "LONG RAW", "[]uint8"},
+		{"VARCHAR becomes string", []byte("hello"), "VARCHAR", "string"},
+		{"TEXT becomes string", []byte("world"), "TEXT", "string"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeBytes(tt.input, tt.dbType)
+			got := fmt.Sprintf("%T", result)
+			if got != tt.expectType {
+				t.Errorf("normalizeBytes(%v, %q) type = %s, want %s", tt.input, tt.dbType, got, tt.expectType)
+			}
+		})
+	}
+}
+
 func buildMockRows(columns []string, rows [][]any) *sqlmock.Rows {
 	mockRows := sqlmock.NewRows(columns)
 	for _, r := range rows {

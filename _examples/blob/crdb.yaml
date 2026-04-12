@@ -1,0 +1,55 @@
+# Blob workload for CockroachDB/PostgreSQL
+#
+# Demonstrates both blob() (raw binary via bind params) and bytes()
+# (hex-encoded \x string literal). CockroachDB and PostgreSQL support
+# both approaches.
+#
+# Connection URL format:
+#   postgres://root@localhost:26257?sslmode=disable
+
+up:
+
+  - name: create_blob_test
+    query: |-
+      CREATE TABLE IF NOT EXISTS blob_test (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        label STRING NOT NULL,
+        data_blob BYTES NOT NULL,
+        data_bytes BYTES NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+down:
+
+  - name: drop_blob_test
+    type: exec
+    query: DROP TABLE IF EXISTS blob_test
+
+init:
+
+  - name: fetch_blobs
+    type: query
+    query: SELECT id, label FROM blob_test ORDER BY random() LIMIT 100
+
+run:
+
+  # Insert using blob() for raw binary and bytes() for hex-encoded literal.
+  - name: insert_blob
+    type: exec
+    args:
+      - gen('word')
+      - blob(256)
+      - bytes(256)
+    query: |-
+      INSERT INTO blob_test (label, data_blob, data_bytes)
+      VALUES ($1::STRING, $2::BYTES, $3::BYTES)
+
+  # Read back a random row to verify round-trip.
+  - name: read_blob
+    type: query
+    args:
+      - ref_rand('fetch_blobs').id
+    query: |-
+      SELECT id, label, length(data_blob) AS blob_len, length(data_bytes) AS bytes_len
+      FROM blob_test
+      WHERE id = $1::UUID

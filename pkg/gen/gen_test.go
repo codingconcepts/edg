@@ -439,6 +439,16 @@ func TestGenBytes(t *testing.T) {
 	}
 }
 
+func TestGenBlob(t *testing.T) {
+	result, err := GenBlob(16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 16 {
+		t.Fatalf("GenBlob(16) length = %d, want 16", len(result))
+	}
+}
+
 func TestGenBit(t *testing.T) {
 	result, err := GenBit(8)
 	if err != nil {

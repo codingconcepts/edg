@@ -329,6 +329,7 @@ func LognormRandF(rawMu, rawSigma, rawMin, rawMax, rawPrecision any) (float64, e
 
 // GenBytes generates n random bytes as a hex-encoded string prefixed
 // with \x, matching the CockroachDB/PostgreSQL BYTES literal format.
+// For cross-database binary data, use GenBlob instead.
 //
 //	bytes(16)
 func GenBytes(rawN any) (string, error) {
@@ -337,6 +338,18 @@ func GenBytes(rawN any) (string, error) {
 		return "", fmt.Errorf("bytes: %w", err)
 	}
 	return random.Bytes(n), nil
+}
+
+// GenBlob generates n random bytes as a raw []byte slice, suitable
+// for database BLOB/BYTEA columns via bind parameters.
+//
+//	blob(1024)
+func GenBlob(rawN any) ([]byte, error) {
+	n, err := convert.ToInt(rawN)
+	if err != nil {
+		return nil, fmt.Errorf("blob: %w", err)
+	}
+	return random.Blob(n), nil
 }
 
 // GenBit generates a random fixed-length bit string of exactly n bits.

@@ -113,15 +113,24 @@ func ReadRows(rows *sql.Rows) ([]map[string]any, error) {
 // normalizeBytes converts raw []byte values from database drivers into
 // portable Go types. UNIQUEIDENTIFIER columns get the wire-format bytes
 // (first 3 groups little-endian) decoded into a canonical UUID string.
-// All other []byte values are converted to string.
+// Binary/blob columns are preserved as []byte. All other []byte values
+// are converted to string.
 func normalizeBytes(b []byte, dbTypeName string) any {
-	if len(b) == 16 && dbTypeName == "UNIQUEIDENTIFIER" {
-		return fmt.Sprintf("%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X",
-			binary.LittleEndian.Uint32(b[0:4]),
-			binary.LittleEndian.Uint16(b[4:6]),
-			binary.LittleEndian.Uint16(b[6:8]),
-			b[8], b[9],
-			b[10], b[11], b[12], b[13], b[14], b[15])
+	switch dbTypeName {
+	case "UNIQUEIDENTIFIER":
+		if len(b) == 16 {
+			return fmt.Sprintf("%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X",
+				binary.LittleEndian.Uint32(b[0:4]),
+				binary.LittleEndian.Uint16(b[4:6]),
+				binary.LittleEndian.Uint16(b[6:8]),
+				b[8], b[9],
+				b[10], b[11], b[12], b[13], b[14], b[15])
+		}
+	case "BLOB", "BYTEA", "BYTES", "BINARY", "VARBINARY", "RAW",
+		"TINYBLOB", "MEDIUMBLOB", "LONGBLOB", "IMAGE", "LONG RAW":
+		dst := make([]byte, len(b))
+		copy(dst, b)
+		return dst
 	}
 	return string(b)
 }
