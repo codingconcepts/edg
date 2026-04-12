@@ -11,7 +11,7 @@ weight: 1
 go install github.com/codingconcepts/edg@latest
 ```
 
-### Dock
+### Docker
 
 Or pull the Docker image:
 
