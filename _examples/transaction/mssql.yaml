@@ -1,0 +1,127 @@
+# Transaction workload for SQL Server
+#
+# Demonstrates multi-statement transactions using the bank schema.
+# The make_transfer transaction reads two account balances, then
+# debits one and credits the other inside an explicit BEGIN/COMMIT.
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals:
+  customers: 10000
+  initial_balance: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_customer
+    query: |-
+      IF OBJECT_ID('customer', 'U') IS NULL
+      CREATE TABLE customer (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        email NVARCHAR(255) NOT NULL
+      )
+
+  - name: create_account
+    query: |-
+      IF OBJECT_ID('account', 'U') IS NULL
+      CREATE TABLE account (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        balance FLOAT NOT NULL,
+        customer_id UNIQUEIDENTIFIER NOT NULL,
+        FOREIGN KEY (customer_id) REFERENCES customer(id)
+      )
+
+seed:
+
+  - name: populate_customer
+    args:
+      - gen_batch(customers, batch_size, 'email')
+    query: |-
+      INSERT INTO customer (email)
+      SELECT value FROM STRING_SPLIT('$1', ',')
+
+  - name: populate_account
+    args:
+      - batch(customers / batch_size)
+      - initial_balance
+      - batch_size
+    query: |-
+      INSERT INTO account (balance, customer_id)
+      SELECT $2, c.id
+      FROM customer c
+      ORDER BY c.id
+      OFFSET $1 * $3 ROWS FETCH NEXT $3 ROWS ONLY
+
+deseed:
+
+  - name: delete_account
+    type: exec
+    query: DELETE FROM account
+
+  - name: delete_customer
+    type: exec
+    query: DELETE FROM customer
+
+down:
+
+  - name: drop_account
+    type: exec
+    query: DROP TABLE IF EXISTS account
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer
+
+init:
+
+  - name: fetch_accounts
+    type: query
+    query: SELECT id FROM account ORDER BY NEWID()
+
+run_weights:
+  check_balance: 50
+  make_transfer: 50
+
+run:
+
+  - name: check_balance
+    type: query
+    args:
+      - ref_rand('fetch_accounts').id
+    query: |-
+      SELECT balance FROM account WHERE id = $1
+
+  - transaction: make_transfer
+    queries:
+      - name: read_source
+        type: query
+        args:
+          - ref_diff('fetch_accounts').id
+        query: |-
+          SELECT id, balance FROM account WHERE id = $1
+
+      - name: read_target
+        type: query
+        args:
+          - ref_diff('fetch_accounts').id
+        query: |-
+          SELECT id, balance FROM account WHERE id = $1
+
+      - name: debit_source
+        type: exec
+        args:
+          - ref_same('read_source').id
+          - gen('number:1,100')
+        query: |-
+          UPDATE account SET balance = balance - CAST($2 AS FLOAT)
+          WHERE id = $1
+
+      - name: credit_target
+        type: exec
+        args:
+          - ref_same('read_target').id
+          - gen('number:1,100')
+        query: |-
+          UPDATE account SET balance = balance + CAST($2 AS FLOAT)
+          WHERE id = $1

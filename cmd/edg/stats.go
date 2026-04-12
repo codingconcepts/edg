@@ -11,10 +11,11 @@ import (
 )
 
 type queryStats struct {
-	count        int64
-	errors       int64
-	totalLatency time.Duration
-	latencies    []time.Duration
+	count         int64
+	errors        int64
+	totalLatency  time.Duration
+	latencies     []time.Duration
+	isTransaction bool
 }
 
 func printResults(results <-chan config.QueryResult, interval time.Duration, start time.Time, numWorkers int, totalDuration time.Duration) map[string]*queryStats {
@@ -34,6 +35,9 @@ func printResults(results <-chan config.QueryResult, interval time.Duration, sta
 				s = &queryStats{}
 				stats[r.Name] = s
 			}
+			if r.IsTransaction {
+				s.isTransaction = true
+			}
 			if r.Err != nil {
 				s.errors++
 			} else {
@@ -50,16 +54,21 @@ func printResults(results <-chan config.QueryResult, interval time.Duration, sta
 func printProgress(stats map[string]*queryStats, start time.Time, totalDuration time.Duration) {
 	elapsed := time.Since(start)
 
-	names := make([]string, 0, len(stats))
-	for name := range stats {
-		names = append(names, name)
+	var queryNames, txNames []string
+	for name, s := range stats {
+		if s.isTransaction {
+			txNames = append(txNames, name)
+		} else {
+			queryNames = append(queryNames, name)
+		}
 	}
-	slices.Sort(names)
+	slices.Sort(queryNames)
+	slices.Sort(txNames)
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "\n%s / %s\n", elapsed.Round(time.Second), totalDuration.Round(time.Second))
 	fmt.Fprintf(w, "QUERY\tCOUNT\tERRORS\tAVG\tp50\tp95\tp99\tQPS\n")
-	for _, name := range names {
+	for _, name := range queryNames {
 		s := stats[name]
 		var avg time.Duration
 		if s.count > 0 {
@@ -73,6 +82,24 @@ func printProgress(stats map[string]*queryStats, start time.Time, totalDuration 
 			p95.Round(time.Microsecond),
 			p99.Round(time.Microsecond),
 			qps)
+	}
+	if len(txNames) > 0 {
+		fmt.Fprintf(w, "\nTRANSACTION\tCOUNT\tERRORS\tAVG\tp50\tp95\tp99\tTPS\n")
+		for _, name := range txNames {
+			s := stats[name]
+			var avg time.Duration
+			if s.count > 0 {
+				avg = s.totalLatency / time.Duration(s.count)
+			}
+			p50, p95, p99 := percentiles(s.latencies)
+			tps := float64(s.count) / elapsed.Seconds()
+			fmt.Fprintf(w, "%s\t%d\t%d\t%s\t%s\t%s\t%s\t%.1f\n", name, s.count, s.errors,
+				avg.Round(time.Microsecond),
+				p50.Round(time.Microsecond),
+				p95.Round(time.Microsecond),
+				p99.Round(time.Microsecond),
+				tps)
+		}
 	}
 	w.Flush()
 }
@@ -80,16 +107,23 @@ func printProgress(stats map[string]*queryStats, start time.Time, totalDuration 
 func printSummary(stats map[string]*queryStats, start time.Time, numWorkers int) {
 	elapsed := time.Since(start)
 
-	names := make([]string, 0, len(stats))
-	for name := range stats {
-		names = append(names, name)
+	var queryNames, txNames []string
+	for name, s := range stats {
+		if s.isTransaction {
+			txNames = append(txNames, name)
+		} else {
+			queryNames = append(queryNames, name)
+		}
 	}
-	slices.Sort(names)
+	slices.Sort(queryNames)
+	slices.Sort(txNames)
 
 	var totalCount, totalErrors int64
 	for _, s := range stats {
-		totalCount += s.count
-		totalErrors += s.errors
+		if !s.isTransaction {
+			totalCount += s.count
+			totalErrors += s.errors
+		}
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -97,7 +131,7 @@ func printSummary(stats map[string]*queryStats, start time.Time, numWorkers int)
 	fmt.Fprintf(w, "Duration:\t%s\n", elapsed.Round(time.Millisecond))
 	fmt.Fprintf(w, "Workers:\t%d\n", numWorkers)
 	fmt.Fprintf(w, "\nQUERY\tCOUNT\tERRORS\tAVG\tp50\tp95\tp99\tQPS\n")
-	for _, name := range names {
+	for _, name := range queryNames {
 		s := stats[name]
 		var avg time.Duration
 		if s.count > 0 {
@@ -111,6 +145,24 @@ func printSummary(stats map[string]*queryStats, start time.Time, numWorkers int)
 			p95.Round(time.Microsecond),
 			p99.Round(time.Microsecond),
 			qps)
+	}
+	if len(txNames) > 0 {
+		fmt.Fprintf(w, "\nTRANSACTION\tCOUNT\tERRORS\tAVG\tp50\tp95\tp99\tTPS\n")
+		for _, name := range txNames {
+			s := stats[name]
+			var avg time.Duration
+			if s.count > 0 {
+				avg = s.totalLatency / time.Duration(s.count)
+			}
+			p50, p95, p99 := percentiles(s.latencies)
+			tps := float64(s.count) / elapsed.Seconds()
+			fmt.Fprintf(w, "%s\t%d\t%d\t%s\t%s\t%s\t%s\t%.1f\n", name, s.count, s.errors,
+				avg.Round(time.Microsecond),
+				p50.Round(time.Microsecond),
+				p95.Round(time.Microsecond),
+				p99.Round(time.Microsecond),
+				tps)
+		}
 	}
 	tpm := float64(totalCount) / elapsed.Minutes()
 	fmt.Fprintf(w, "\nTransactions:\t%d\n", totalCount)

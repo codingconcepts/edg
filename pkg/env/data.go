@@ -10,8 +10,14 @@ import (
 	"github.com/codingconcepts/edg/pkg/config"
 )
 
-func (e *Env) Query(ctx context.Context, db *sql.DB, q *config.Query, args ...any) error {
-	rows, err := db.QueryContext(ctx, q.Query, args...)
+// Executor abstracts *sql.DB and *sql.Tx for query execution.
+type Executor interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func (e *Env) Query(ctx context.Context, ex Executor, q *config.Query, args ...any) error {
+	rows, err := ex.QueryContext(ctx, q.Query, args...)
 	if err != nil {
 		return fmt.Errorf("running statement: %w", err)
 	}
@@ -26,8 +32,8 @@ func (e *Env) Query(ctx context.Context, db *sql.DB, q *config.Query, args ...an
 	return nil
 }
 
-func (e *Env) Exec(ctx context.Context, db *sql.DB, q *config.Query, args ...any) error {
-	_, err := db.ExecContext(ctx, q.Query, args...)
+func (e *Env) Exec(ctx context.Context, ex Executor, q *config.Query, args ...any) error {
+	_, err := ex.ExecContext(ctx, q.Query, args...)
 	if err != nil {
 		return fmt.Errorf("running statement: %w", err)
 	}

@@ -39,9 +39,8 @@ View the docs [here](https://edg.run/docs).
 
 ## Todos
 
-* Tidy up prepared statements; possible to close over?
+* Add a conditional element to transactions (one query might return a customer's balance but if it's zero (determined with expr), it won't continue)
 * Better error output
-* Multi-statement transactions - wrap multiple run queries in explicit BEGIN/COMMIT for realistic workload simulation (e.g., read-then-write patterns)
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences
 * Global sequencies (`seq_global(name, start, step)`) for all workers to share in a thread safe way
 * Prometheus metrics endpoint

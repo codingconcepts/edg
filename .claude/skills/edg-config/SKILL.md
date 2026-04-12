@@ -76,6 +76,26 @@ A complete edg YAML config with all applicable sections:
 - Use `gen_batch(total, batchSize, pattern)` for generating batched values
 - Use `batch(n)` for sequential indices
 
+### Transactions
+- Group related `run` queries into an explicit `BEGIN/COMMIT` block using the `transaction` key:
+  ```yaml
+  run:
+    - transaction: make_transfer
+      queries:
+        - name: read_source
+          type: query
+          args: [ref_rand('fetch_accounts').id]
+          query: SELECT balance FROM accounts WHERE id = $1
+        - name: debit_source
+          type: exec
+          args: [ref_same('fetch_accounts').id, 100]
+          query: UPDATE accounts SET balance = balance - $2 WHERE id = $1
+  ```
+- Batch types (`exec_batch`, `query_batch`) cannot be used inside a transaction
+- `prepared: true` cannot be used inside a transaction
+- Transactions appear in a separate TRANSACTION stats section alongside query stats
+- Use `run_weights` to weight transactions against standalone queries (reference by transaction name)
+
 ### Formatting
 - Use `|-` for multi-line SQL strings
 - Use `>-` for single-line SQL that wraps for readability

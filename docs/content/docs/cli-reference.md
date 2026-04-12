@@ -138,24 +138,38 @@ Pressing `Ctrl+C` during `run` or `all` cancels the workload gracefully. Workers
 During the run, progress is printed at the `--print-interval` (default: every second):
 
 ```
-5s elapsed
-QUERY       COUNT  ERRORS  AVG        p50        p95        p99        QPS
-get_user    4820   0       1.037ms    0.998ms    1.842ms    2.451ms    964.0
+59s / 1m0s
+QUERY          COUNT  ERRORS  AVG      p50      p95      p99      QPS
+check_balance  3907   0       2.545ms  2.326ms  3.991ms  6.314ms  66.2
+credit_target  3914   0       1.625ms  1.482ms  2.423ms  3.823ms  66.3
+debit_source   3914   0       2.25ms   2.1ms    3.468ms  5.036ms  66.3
+read_source    3915   0       1.976ms  1.792ms  3.031ms  4.452ms  66.4
+read_target    3914   0       2.721ms  2.511ms  4.164ms  6.507ms  66.3
+
+TRANSACTION    COUNT  ERRORS  AVG       p50       p95       p99       TPS
+make_transfer  3914   0       12.498ms  11.856ms  17.479ms  24.829ms  66.3
 ```
 
 After all workers complete, a final summary is printed:
 
 ```
 summary
-Duration:  1m0.001s
-Workers:   10
+Duration:  1m0.003s
+Workers:   1
 
-QUERY       COUNT   ERRORS  AVG        p50        p95        p99        QPS
-get_user    58241   0       1.028ms    0.991ms    1.804ms    2.389ms    970.7
+QUERY          COUNT  ERRORS  AVG      p50      p95      p99      QPS
+check_balance  3978   0       2.55ms   2.329ms  3.993ms  6.335ms  66.3
+credit_target  3976   0       1.628ms  1.484ms  2.429ms  3.892ms  66.3
+debit_source   3976   0       2.251ms  2.101ms  3.468ms  5.036ms  66.3
+read_source    3976   0       1.978ms  1.793ms  3.062ms  4.502ms  66.3
+read_target    3976   0       2.724ms  2.512ms  4.189ms  6.531ms  66.3
 
-Transactions:  58241
+TRANSACTION    COUNT  ERRORS  AVG       p50       p95       p99       TPS
+make_transfer  3975   1       12.504ms  11.871ms  17.523ms  24.829ms  66.2
+
+Transactions:  19882
 Errors:        0
-tpm:           3494460.0
+tpm:           19881.0
 ```
 
 | Metric | Description |

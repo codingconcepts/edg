@@ -149,32 +149,32 @@ func TestNewEnv_RejectsUnknownQueryType(t *testing.T) {
 	}{
 		{
 			name:    "valid exec",
-			req:     &config.Request{Run: []*config.Query{{Name: "q", Type: config.QueryTypeExec, Query: "SELECT 1"}}},
+			req:     &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: config.QueryTypeExec, Query: "SELECT 1"}}}},
 			wantErr: false,
 		},
 		{
 			name:    "valid query",
-			req:     &config.Request{Run: []*config.Query{{Name: "q", Type: config.QueryTypeQuery, Query: "SELECT 1"}}},
+			req:     &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: config.QueryTypeQuery, Query: "SELECT 1"}}}},
 			wantErr: false,
 		},
 		{
 			name:    "valid query_batch",
-			req:     &config.Request{Run: []*config.Query{{Name: "q", Type: config.QueryTypeQueryBatch, Query: "SELECT 1"}}},
+			req:     &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: config.QueryTypeQueryBatch, Query: "SELECT 1"}}}},
 			wantErr: false,
 		},
 		{
 			name:    "valid exec_batch",
-			req:     &config.Request{Run: []*config.Query{{Name: "q", Type: config.QueryTypeExecBatch, Query: "SELECT 1"}}},
+			req:     &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: config.QueryTypeExecBatch, Query: "SELECT 1"}}}},
 			wantErr: false,
 		},
 		{
 			name:    "empty defaults to query",
-			req:     &config.Request{Run: []*config.Query{{Name: "q", Type: "", Query: "SELECT 1"}}},
+			req:     &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: "", Query: "SELECT 1"}}}},
 			wantErr: false,
 		},
 		{
 			name:    "unknown type",
-			req:     &config.Request{Run: []*config.Query{{Name: "q", Type: "bogus", Query: "SELECT 1"}}},
+			req:     &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: "bogus", Query: "SELECT 1"}}}},
 			wantErr: true,
 		},
 	}

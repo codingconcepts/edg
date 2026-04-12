@@ -41,7 +41,7 @@ init:
 # Weighted transaction mix (optional).
 run_weights:
 
-# Workload queries.
+# Workload queries (standalone or grouped into transactions).
 run:
 
 # Post-run assertions for CI/CD (exit non-zero on failure).
@@ -187,7 +187,7 @@ seed:
 - **`up`** and **`down`** manage schema (CREATE/DROP).
 - **`seed`** and **`deseed`** manage data (INSERT/TRUNCATE).
 - **`init`** runs once per worker before the workload starts, typically to fetch reference data for use in `run` queries.
-- **`run`** contains the transactional workload queries executed in a loop.
+- **`run`** contains the workload queries executed in a loop. Queries can be standalone or grouped into [transactions](#transactions).
 
 ## Query Types
 
@@ -391,6 +391,86 @@ order_details_no_prepare     4.377ms  4.258ms  6.37ms   8.354ms
 
 See [`_examples/prepared/`](https://github.com/codingconcepts/edg/tree/main/_examples/prepared) for complete working examples across all supported databases.
 
+### Transactions
+
+The `run` section supports grouping multiple queries into an explicit database transaction. Queries inside a transaction block are wrapped in `BEGIN`/`COMMIT` and execute against the same database connection, so reads and writes within a transaction see each other's results.
+
+```yaml
+run:
+  - transaction: make_transfer
+    queries:
+      - name: read_source
+        type: query
+        args:
+          - ref_diff('fetch_accounts').id
+        query: SELECT id, balance FROM account WHERE id = $1::UUID
+
+      - name: read_target
+        type: query
+        args:
+          - ref_diff('fetch_accounts').id
+        query: SELECT id, balance FROM account WHERE id = $1::UUID
+
+      - name: debit_source
+        type: exec
+        args:
+          - ref_same('read_source').id
+          - gen('number:1,100')
+        query: UPDATE account SET balance = balance - $2::FLOAT WHERE id = $1::UUID
+
+      - name: credit_target
+        type: exec
+        args:
+          - ref_same('read_target').id
+          - gen('number:1,100')
+        query: UPDATE account SET balance = balance + $2::FLOAT WHERE id = $1::UUID
+```
+
+Transactions and standalone queries can coexist in the same `run` section:
+
+```yaml
+run:
+  - name: check_balance
+    type: query
+    args:
+      - ref_rand('fetch_accounts').id
+    query: SELECT balance FROM account WHERE id = $1::UUID
+
+  - transaction: make_transfer
+    queries:
+      - name: read_balance
+        type: query
+        args: [ref_diff('fetch_accounts').id]
+        query: SELECT id, balance FROM account WHERE id = $1::UUID
+      - name: update_balance
+        type: exec
+        args:
+          - ref_same('read_balance').id
+          - gen('number:1,100')
+        query: UPDATE account SET balance = balance - $2::FLOAT WHERE id = $1::UUID
+```
+
+#### When to use transactions
+
+Use transactions when your workload needs **read-then-write patterns** or **multi-statement atomicity**. For example:
+
+- Read an account balance, then debit it (the read and write must see consistent data).
+- Insert a row into two related tables that must either both succeed or both roll back.
+- Simulate realistic application behaviour where multiple queries happen inside a single database transaction.
+
+Use standalone queries when each operation is independent and doesn't need transactional guarantees.
+
+#### Constraints
+
+- **Batch types not allowed**: `query_batch` and `exec_batch` cannot be used inside a transaction.
+- **Prepared statements not allowed**: Queries inside a transaction cannot set `prepared: true`.
+- A transaction must contain at least one query.
+- Transaction names and standalone query names share the same namespace for `run_weights`.
+
+#### Error handling
+
+If any query inside a transaction fails, the transaction is rolled back. During the `run` phase, the error is logged and the worker continues to the next iteration (same as standalone query errors).
+
 ### Wait
 
 Queries can specify a `wait` duration (e.g. `wait: 18s`) to introduce a keying/think-time delay after execution. This only applies to queries in the `run` section and is ignored in other sections.
@@ -449,18 +529,36 @@ When a `query` or `query_batch` result is stored, all column names are lowercase
 
 ## Run Weights
 
-The optional `run_weights` map controls the transaction mix during workload execution. Each key is a query name from the `run` section, and the value is a relative weight. On each iteration, a single transaction is chosen by weighted random selection:
+The optional `run_weights` map controls the workload mix during execution. Each key is a run item name (either a standalone query name or a transaction name), and the value is a relative weight. On each iteration, a single item is chosen by weighted random selection:
 
 ```yaml
 run_weights:
-  new_order: 45
-  payment: 43
-  order_status: 4
-  delivery: 4
-  stock_level: 4
+  check_balance: 50
+  make_transfer: 50
+
+run:
+  - name: check_balance
+    type: query
+    args: [ref_rand('fetch_accounts').id]
+    query: SELECT balance FROM account WHERE id = $1::UUID
+
+  - transaction: make_transfer
+    queries:
+      - name: read_balance
+        type: query
+        args: [ref_diff('fetch_accounts').id]
+        query: SELECT id, balance FROM account WHERE id = $1::UUID
+      - name: debit
+        type: exec
+        args:
+          - ref_same('read_balance').id
+          - gen('number:1,100')
+        query: UPDATE account SET balance = balance - $2::FLOAT WHERE id = $1::UUID
 ```
 
-If `run_weights` is omitted, all `run` queries execute sequentially on each iteration.
+In this example, each iteration picks either the standalone `check_balance` query (50% of the time) or the entire `make_transfer` transaction (50% of the time). When a transaction is selected, all its queries run inside a single `BEGIN`/`COMMIT` block.
+
+If `run_weights` is omitted, all `run` items execute sequentially on each iteration.
 
 ## Expectations
 

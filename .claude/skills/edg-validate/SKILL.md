@@ -31,6 +31,7 @@ You validate edg YAML workload configurations by running `edg validate` and inte
    - **Missing dataset**: A `ref_*` call references a dataset that no `init` or `seed` query populates
    - **Invalid query type**: Using `query` when `exec` is needed, or vice versa
    - **Batch config errors**: Missing `count`/`size` for batch types, or using batch args with non-batch types
+   - **Transaction constraint violations**: Using `exec_batch`/`query_batch` or `prepared: true` inside a transaction, or an empty transaction with no queries
 
 5. **Apply fixes.** If the user asks, edit the config file to fix the issues and re-validate.
 
@@ -43,3 +44,6 @@ You validate edg YAML workload configurations by running `edg validate` and inte
 | Expected exec, got query | SELECT used with `type: exec` | Change to `type: query` |
 | Batch requires count | `exec_batch` without `count` field | Add `count` and `size` fields |
 | Expression compile error | Invalid expr-lang syntax | Check for missing quotes, unmatched parens, or invalid operators |
+| Cannot be a batch type inside a transaction | `exec_batch`/`query_batch` in transaction | Change to `exec`/`query` and move batching outside the transaction |
+| Cannot use prepared statements inside a transaction | `prepared: true` in transaction | Remove `prepared: true` from queries inside the transaction |
+| Must contain at least one query | Empty transaction | Add queries to the transaction or remove it |

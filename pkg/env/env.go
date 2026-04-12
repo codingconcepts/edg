@@ -186,7 +186,8 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 	}
 
 	// Expand row references into args before compilation.
-	allQueries := [][]*config.Query{r.Up, r.Seed, r.Deseed, r.Down, r.Init, r.Run}
+	runQueries := r.RunAllQueries()
+	allQueries := [][]*config.Query{r.Up, r.Seed, r.Deseed, r.Down, r.Init, runQueries}
 	for _, queries := range allQueries {
 		for _, query := range queries {
 			if query.Row != "" {
@@ -204,7 +205,7 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		{"deseed", r.Deseed},
 		{"down", r.Down},
 		{"init", r.Init},
-		{"run", r.Run},
+		{"run", runQueries},
 	} {
 		for i, query := range group.queries {
 			switch query.Type {
@@ -367,16 +368,16 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 	return result, nil
 }
 
-// RunQuery executes a query against the database via the appropriate
-// method (Query for reads, Exec for writes).
-func (e *Env) RunQuery(ctx context.Context, q *config.Query, args ...any) error {
+// RunQuery executes a query against the given executor via the
+// appropriate method (Query for reads, Exec for writes).
+func (e *Env) RunQuery(ctx context.Context, ex Executor, q *config.Query, args ...any) error {
 	switch q.Type {
 	case config.QueryTypeExec, config.QueryTypeExecBatch:
-		if err := e.Exec(ctx, e.db, q, args...); err != nil {
+		if err := e.Exec(ctx, ex, q, args...); err != nil {
 			return fmt.Errorf("executing exec %s: %w", q.Name, err)
 		}
 	case config.QueryTypeQuery, config.QueryTypeQueryBatch, "":
-		if err := e.Query(ctx, e.db, q, args...); err != nil {
+		if err := e.Query(ctx, ex, q, args...); err != nil {
 			return fmt.Errorf("executing query %s: %w", q.Name, err)
 		}
 	}
@@ -400,13 +401,13 @@ func (e *Env) RunQueryPrepared(ctx context.Context, stmt *sql.Stmt, q *config.Qu
 	return nil
 }
 
-// runSection runs a list of queries. Args are inlined into the SQL
-// (string replacement of $N placeholders) when the query is a batch
-// type or when batch-expanded (multiple arg sets from gen_batch/batch/
-// ref_each). This provides cross-driver placeholder compatibility and
-// avoids pgx-stdlib DECIMAL type issues. All other queries use native
-// driver bind params.
-func (e *Env) runSection(ctx context.Context, queries []*config.Query, section config.ConfigSection) error {
+// runSection runs a list of queries against the given executor. Args
+// are inlined into the SQL (string replacement of $N placeholders)
+// when the query is a batch type or when batch-expanded (multiple arg
+// sets from gen_batch/batch/ref_each). This provides cross-driver
+// placeholder compatibility and avoids pgx-stdlib DECIMAL type issues.
+// All other queries use native driver bind params.
+func (e *Env) runSection(ctx context.Context, queries []*config.Query, section config.ConfigSection, ex Executor) error {
 	verbose := section != config.ConfigSectionInit && section != config.ConfigSectionRun
 
 	for _, q := range queries {
@@ -475,7 +476,7 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 					Type:  q.Type,
 					Query: inlined,
 				}
-				if err := e.RunQuery(ctx, inlinedQuery); err != nil {
+				if err := e.RunQuery(ctx, ex, inlinedQuery); err != nil {
 					err = fmt.Errorf("running %s query %s: %w", section, q.Name, err)
 					e.sendResult(config.QueryResult{Name: q.Name, Section: section, Latency: time.Since(queryStart), Err: err, Count: i})
 					return err
@@ -490,7 +491,7 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 					return err
 				}
 			} else {
-				if err := e.RunQuery(ctx, q, args...); err != nil {
+				if err := e.RunQuery(ctx, ex, q, args...); err != nil {
 					err = fmt.Errorf("running %s query %s: %w", section, q.Name, err)
 					e.sendResult(config.QueryResult{Name: q.Name, Section: section, Latency: time.Since(queryStart), Err: err, Count: i})
 					return err
@@ -568,27 +569,27 @@ func translatePlaceholders(query, driver string) string {
 
 // Up runs the schema-up queries to create tables.
 func (e *Env) Up(ctx context.Context) error {
-	return e.runSection(ctx, e.request.Up, config.ConfigSectionUp)
+	return e.runSection(ctx, e.request.Up, config.ConfigSectionUp, e.db)
 }
 
 // Seed runs the seed queries to populate tables with data.
 func (e *Env) Seed(ctx context.Context) error {
-	return e.runSection(ctx, e.request.Seed, config.ConfigSectionSeed)
+	return e.runSection(ctx, e.request.Seed, config.ConfigSectionSeed, e.db)
 }
 
 // Deseed runs the deseed queries to delete data from tables.
 func (e *Env) Deseed(ctx context.Context) error {
-	return e.runSection(ctx, e.request.Deseed, config.ConfigSectionDeseed)
+	return e.runSection(ctx, e.request.Deseed, config.ConfigSectionDeseed, e.db)
 }
 
 // Down runs the schema-down queries to tear down tables.
 func (e *Env) Down(ctx context.Context) error {
-	return e.runSection(ctx, e.request.Down, config.ConfigSectionDown)
+	return e.runSection(ctx, e.request.Down, config.ConfigSectionDown, e.db)
 }
 
 // Init runs the init queries once (e.g. to seed reference data).
 func (e *Env) Init(ctx context.Context) error {
-	return e.runSection(ctx, e.request.Init, config.ConfigSectionInit)
+	return e.runSection(ctx, e.request.Init, config.ConfigSectionInit, e.db)
 }
 
 // InitFrom copies init query results from another Env, avoiding
@@ -615,38 +616,84 @@ func (e *Env) InitFrom(source *Env) {
 }
 
 // RunIteration executes one iteration of the run queries. When run_weights
-// is configured, a single transaction is chosen by weighted random
-// selection. Otherwise all run queries execute sequentially.
+// is configured, a single item is chosen by weighted random selection.
+// Otherwise all run items execute sequentially.
 func (e *Env) RunIteration(ctx context.Context) error {
 	if len(e.request.RunWeights) == 0 {
-		return e.runSection(ctx, e.request.Run, config.ConfigSectionRun)
+		return e.runRunItems(ctx, e.request.Run)
 	}
 
-	q := e.pickWeighted()
-	if q == nil {
-		return e.runSection(ctx, e.request.Run, config.ConfigSectionRun)
+	item := e.pickWeighted()
+	if item == nil {
+		return e.runRunItems(ctx, e.request.Run)
 	}
-	return e.runSection(ctx, []*config.Query{q}, config.ConfigSectionRun)
+	return e.runRunItems(ctx, []*config.RunItem{item})
 }
 
-// pickWeighted selects a single run query using the cumulative
-// weights from run_weights. Queries not listed in run_weights
+// runRunItems dispatches each run item as either a standalone query
+// or a multi-statement transaction.
+func (e *Env) runRunItems(ctx context.Context, items []*config.RunItem) error {
+	for _, item := range items {
+		switch {
+		case item.IsTransaction():
+			if err := e.runTransaction(ctx, item.Transaction); err != nil {
+				return err
+			}
+		default:
+			if err := e.runSection(ctx, []*config.Query{item.Query}, config.ConfigSectionRun, e.db); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// runTransaction wraps the queries of a Transaction in an explicit
+// BEGIN/COMMIT block. On error the transaction is rolled back.
+func (e *Env) runTransaction(ctx context.Context, tx *config.Transaction) error {
+	start := time.Now()
+
+	dbTx, err := e.db.BeginTx(ctx, nil)
+	if err != nil {
+		err = fmt.Errorf("beginning transaction %s: %w", tx.Name, err)
+		e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Err: err, IsTransaction: true})
+		return err
+	}
+
+	if err := e.runSection(ctx, tx.Queries, config.ConfigSectionRun, dbTx); err != nil {
+		_ = dbTx.Rollback()
+		e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Err: err, IsTransaction: true})
+		return err
+	}
+
+	if err := dbTx.Commit(); err != nil {
+		err = fmt.Errorf("committing transaction %s: %w", tx.Name, err)
+		e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Err: err, IsTransaction: true})
+		return err
+	}
+
+	e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Latency: time.Since(start), Count: 1, IsTransaction: true})
+	return nil
+}
+
+// pickWeighted selects a single run item using the cumulative
+// weights from run_weights. Items not listed in run_weights
 // are excluded.
-func (e *Env) pickWeighted() *config.Query {
+func (e *Env) pickWeighted() *config.RunItem {
 	type entry struct {
-		query      *config.Query
+		item       *config.RunItem
 		cumulative int
 	}
 
 	var entries []entry
 	total := 0
-	for _, q := range e.request.Run {
-		w, ok := e.request.RunWeights[q.Name]
+	for _, item := range e.request.Run {
+		w, ok := e.request.RunWeights[item.Name()]
 		if !ok {
 			continue
 		}
 		total += w
-		entries = append(entries, entry{query: q, cumulative: total})
+		entries = append(entries, entry{item: item, cumulative: total})
 	}
 
 	if total == 0 {
@@ -656,11 +703,11 @@ func (e *Env) pickWeighted() *config.Query {
 	r := random.Rng.IntN(total)
 	for _, e := range entries {
 		if r < e.cumulative {
-			return e.query
+			return e.item
 		}
 	}
 
-	return entries[len(entries)-1].query
+	return entries[len(entries)-1].item
 }
 
 // Eval compiles and runs an arbitrary expression against the env.

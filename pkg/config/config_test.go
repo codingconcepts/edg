@@ -304,11 +304,11 @@ run:
 	if len(req.Run) != 2 {
 		t.Fatalf("expected 2 run queries, got %d", len(req.Run))
 	}
-	if req.Run[0].Name != "check_balance" {
-		t.Errorf("run[0].name = %q, want %q", req.Run[0].Name, "check_balance")
+	if req.Run[0].Name() != "check_balance" {
+		t.Errorf("run[0].name = %q, want %q", req.Run[0].Name(), "check_balance")
 	}
-	if req.Run[1].Name != "make_transfer" {
-		t.Errorf("run[1].name = %q, want %q", req.Run[1].Name, "make_transfer")
+	if req.Run[1].Name() != "make_transfer" {
+		t.Errorf("run[1].name = %q, want %q", req.Run[1].Name(), "make_transfer")
 	}
 }
 

@@ -39,8 +39,18 @@ type Request struct {
 	Down         []*Query                    `json:"down" yaml:"down"`
 	Init         []*Query                    `json:"init" yaml:"init"`
 	RunWeights   map[string]int              `json:"run_weights" yaml:"run_weights"`
-	Run          []*Query                    `json:"run" yaml:"run"`
+	Run          []*RunItem                  `json:"run" yaml:"run"`
 	Expectations []string                    `json:"expectations" yaml:"expectations"`
+}
+
+// RunAllQueries returns a flat list of all queries in the run section,
+// including queries nested inside transactions.
+func (r *Request) RunAllQueries() []*Query {
+	var queries []*Query
+	for _, item := range r.Run {
+		queries = append(queries, item.AllQueries()...)
+	}
+	return queries
 }
 
 type QueryType string
@@ -61,11 +71,12 @@ const (
 )
 
 type QueryResult struct {
-	Name    string
-	Section ConfigSection
-	Latency time.Duration
-	Err     error
-	Count   int
+	Name          string
+	Section       ConfigSection
+	Latency       time.Duration
+	Err           error
+	Count         int
+	IsTransaction bool
 }
 
 type Query struct {
@@ -83,6 +94,69 @@ type Query struct {
 
 	CompiledCount *vm.Program `json:"-" yaml:"-"`
 	CompiledSize  *vm.Program `json:"-" yaml:"-"`
+}
+
+// Transaction groups multiple queries to run inside an explicit
+// BEGIN/COMMIT block.
+type Transaction struct {
+	Name    string   `json:"name" yaml:"transaction"`
+	Queries []*Query `json:"queries" yaml:"queries"`
+}
+
+// RunItem represents a single entry in the run section: either a
+// standalone query or a transaction containing multiple queries.
+type RunItem struct {
+	Query       *Query
+	Transaction *Transaction
+}
+
+func (ri *RunItem) UnmarshalYAML(node *yaml.Node) error {
+	// Probe for "transaction" key to distinguish from a plain query.
+	var probe struct {
+		Transaction string `yaml:"transaction"`
+	}
+	if err := node.Decode(&probe); err == nil && probe.Transaction != "" {
+		var tx Transaction
+		if err := node.Decode(&tx); err != nil {
+			return err
+		}
+		ri.Transaction = &tx
+		return nil
+	}
+
+	var q Query
+	if err := node.Decode(&q); err != nil {
+		return err
+	}
+	ri.Query = &q
+	return nil
+}
+
+// Name returns the name of the run item (query name or transaction name).
+func (ri *RunItem) Name() string {
+	if ri.Transaction != nil {
+		return ri.Transaction.Name
+	}
+	if ri.Query != nil {
+		return ri.Query.Name
+	}
+	return ""
+}
+
+// IsTransaction returns true when this run item is a transaction group.
+func (ri *RunItem) IsTransaction() bool {
+	return ri.Transaction != nil
+}
+
+// AllQueries returns all queries contained in this run item.
+func (ri *RunItem) AllQueries() []*Query {
+	if ri.Transaction != nil {
+		return ri.Transaction.Queries
+	}
+	if ri.Query != nil {
+		return []*Query{ri.Query}
+	}
+	return nil
 }
 
 func (q *Query) IsBatch() bool {
@@ -123,20 +197,20 @@ func (q *Query) CompileArgs(envMap map[string]any) error {
 // Validate checks the Request for structural issues that would cause
 // confusing runtime errors.
 func (r *Request) Validate() error {
-	// When run_weights is configured, every run query needs a name for selection.
+	// When run_weights is configured, every run item needs a name for selection.
 	if len(r.RunWeights) > 0 {
-		for i, q := range r.Run {
-			if q.Name == "" {
-				return fmt.Errorf("run query %d is missing a name (required when run_weights is set)", i)
+		for i, item := range r.Run {
+			if item.Name() == "" {
+				return fmt.Errorf("run item %d is missing a name (required when run_weights is set)", i)
 			}
 		}
 	}
 
-	// run_weights keys must match actual run query names.
+	// run_weights keys must match actual run item names.
 	if len(r.RunWeights) > 0 {
 		runNames := make(map[string]bool, len(r.Run))
-		for _, q := range r.Run {
-			runNames[q.Name] = true
+		for _, item := range r.Run {
+			runNames[item.Name()] = true
 		}
 		for name := range r.RunWeights {
 			if !runNames[name] {
@@ -146,6 +220,7 @@ func (r *Request) Validate() error {
 	}
 
 	// Validate row references: row name must exist, and row + args are mutually exclusive.
+	runQueries := r.RunAllQueries()
 	for _, group := range []struct {
 		name    string
 		queries []*Query
@@ -155,7 +230,7 @@ func (r *Request) Validate() error {
 		{"deseed", r.Deseed},
 		{"down", r.Down},
 		{"init", r.Init},
-		{"run", r.Run},
+		{"run", runQueries},
 	} {
 		for i, q := range group.queries {
 			if q.Row == "" {
@@ -180,7 +255,7 @@ func (r *Request) Validate() error {
 		{"deseed", r.Deseed},
 		{"down", r.Down},
 		{"init", r.Init},
-		{"run", r.Run},
+		{"run", runQueries},
 	} {
 		seen := make(map[string]bool)
 		for i, q := range group.queries {
@@ -191,6 +266,40 @@ func (r *Request) Validate() error {
 				return fmt.Errorf("duplicate query name %q in %s (query %d)", q.Name, group.name, i)
 			}
 			seen[q.Name] = true
+		}
+	}
+
+	// Check for duplicate names at the run-item level (transaction names
+	// and standalone query names share the same namespace for run_weights).
+	{
+		seen := make(map[string]bool)
+		for i, item := range r.Run {
+			name := item.Name()
+			if name == "" {
+				continue
+			}
+			if seen[name] {
+				return fmt.Errorf("duplicate name %q in run (item %d)", name, i)
+			}
+			seen[name] = true
+		}
+	}
+
+	// Validate transaction constraints.
+	for i, item := range r.Run {
+		if !item.IsTransaction() {
+			continue
+		}
+		if len(item.Transaction.Queries) == 0 {
+			return fmt.Errorf("run transaction %d (%s): must contain at least one query", i, item.Name())
+		}
+		for j, q := range item.Transaction.Queries {
+			if q.IsBatch() {
+				return fmt.Errorf("run transaction %d (%s): query %d (%s) cannot be a batch type inside a transaction", i, item.Name(), j, q.Name)
+			}
+			if q.Prepared {
+				return fmt.Errorf("run transaction %d (%s): query %d (%s) cannot use prepared statements inside a transaction", i, item.Name(), j, q.Name)
+			}
 		}
 	}
 

@@ -146,8 +146,8 @@ func TestExpressions(t *testing.T) {
 		Expressions: map[string]string{
 			"cust_per_district": "customers / districts",
 		},
-		Run: []*config.Query{
-			{Args: []string{"cust_per_district()"}},
+		Run: []*config.RunItem{
+			{Query: &config.Query{Args: []string{"cust_per_district()"}}},
 		},
 	}
 
@@ -156,7 +156,7 @@ func TestExpressions(t *testing.T) {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
 
-	argSets, _, err := env.GenerateArgs(req.Run[0])
+	argSets, _, err := env.GenerateArgs(req.Run[0].Query)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -178,8 +178,8 @@ func TestExpressions_WithArgs(t *testing.T) {
 		Expressions: map[string]string{
 			"divide": "customers / args[0]",
 		},
-		Run: []*config.Query{
-			{Args: []string{"divide(10)"}},
+		Run: []*config.RunItem{
+			{Query: &config.Query{Args: []string{"divide(10)"}}},
 		},
 	}
 
@@ -188,7 +188,7 @@ func TestExpressions_WithArgs(t *testing.T) {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
 
-	argSets, _, err := env.GenerateArgs(req.Run[0])
+	argSets, _, err := env.GenerateArgs(req.Run[0].Query)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -263,13 +263,13 @@ func TestSetEnv(t *testing.T) {
 }
 
 func TestPickWeighted(t *testing.T) {
-	queries := []*config.Query{
-		{Name: "heavy"},
-		{Name: "light"},
+	items := []*config.RunItem{
+		{Query: &config.Query{Name: "heavy"}},
+		{Query: &config.Query{Name: "light"}},
 	}
 	env := &Env{
 		request: &config.Request{
-			Run: queries,
+			Run: items,
 			RunWeights: map[string]int{
 				"heavy": 90,
 				"light": 10,
@@ -279,11 +279,11 @@ func TestPickWeighted(t *testing.T) {
 
 	counts := map[string]int{}
 	for range 1000 {
-		q := env.pickWeighted()
-		if q == nil {
+		item := env.pickWeighted()
+		if item == nil {
 			t.Fatal("pickWeighted returned nil")
 		}
-		counts[q.Name]++
+		counts[item.Name()]++
 	}
 
 	// With 90/10 weights over 1000 iterations, "heavy" should
@@ -299,20 +299,23 @@ func TestPickWeighted(t *testing.T) {
 func TestPickWeighted_NoWeights(t *testing.T) {
 	env := &Env{
 		request: &config.Request{
-			Run:        []*config.Query{{Name: "a"}},
+			Run:        []*config.RunItem{{Query: &config.Query{Name: "a"}}},
 			RunWeights: nil,
 		},
 	}
 
-	if q := env.pickWeighted(); q != nil {
-		t.Errorf("pickWeighted with no weights returned %v, want nil", q.Name)
+	if item := env.pickWeighted(); item != nil {
+		t.Errorf("pickWeighted with no weights returned %v, want nil", item.Name())
 	}
 }
 
 func TestPickWeighted_SkipsUnweightedQueries(t *testing.T) {
 	env := &Env{
 		request: &config.Request{
-			Run: []*config.Query{{Name: "weighted"}, {Name: "unweighted"}},
+			Run: []*config.RunItem{
+				{Query: &config.Query{Name: "weighted"}},
+				{Query: &config.Query{Name: "unweighted"}},
+			},
 			RunWeights: map[string]int{
 				"weighted": 100,
 			},
@@ -320,12 +323,12 @@ func TestPickWeighted_SkipsUnweightedQueries(t *testing.T) {
 	}
 
 	for range 100 {
-		q := env.pickWeighted()
-		if q == nil {
+		item := env.pickWeighted()
+		if item == nil {
 			t.Fatal("pickWeighted returned nil")
 		}
-		if q.Name != "weighted" {
-			t.Errorf("pickWeighted returned %q, want only 'weighted'", q.Name)
+		if item.Name() != "weighted" {
+			t.Errorf("pickWeighted returned %q, want only 'weighted'", item.Name())
 		}
 	}
 }
@@ -368,9 +371,9 @@ func TestRunIteration_NoWeights(t *testing.T) {
 		permCache: map[string]any{},
 		env:       map[string]any{},
 		request: &config.Request{
-			Run: []*config.Query{
-				{Name: "q1", Type: config.QueryTypeExec, Query: "INSERT INTO t1 VALUES (1)"},
-				{Name: "q2", Type: config.QueryTypeExec, Query: "INSERT INTO t2 VALUES (2)"},
+			Run: []*config.RunItem{
+				{Query: &config.Query{Name: "q1", Type: config.QueryTypeExec, Query: "INSERT INTO t1 VALUES (1)"}},
+				{Query: &config.Query{Name: "q2", Type: config.QueryTypeExec, Query: "INSERT INTO t2 VALUES (2)"}},
 			},
 		},
 	}
@@ -399,9 +402,9 @@ func TestRunIteration_WithWeights(t *testing.T) {
 		permCache: map[string]any{},
 		env:       map[string]any{},
 		request: &config.Request{
-			Run: []*config.Query{
-				{Name: "q1", Type: config.QueryTypeExec, Query: "INSERT INTO t1 VALUES (1)"},
-				{Name: "q2", Type: config.QueryTypeExec, Query: "INSERT INTO t2 VALUES (2)"},
+			Run: []*config.RunItem{
+				{Query: &config.Query{Name: "q1", Type: config.QueryTypeExec, Query: "INSERT INTO t1 VALUES (1)"}},
+				{Query: &config.Query{Name: "q2", Type: config.QueryTypeExec, Query: "INSERT INTO t2 VALUES (2)"}},
 			},
 			RunWeights: map[string]int{
 				"q1": 50,
@@ -621,8 +624,8 @@ func TestReference_RefRand(t *testing.T) {
 				{"name": "green"},
 			},
 		},
-		Run: []*config.Query{
-			{Args: []string{"ref_rand('colors').name"}},
+		Run: []*config.RunItem{
+			{Query: &config.Query{Args: []string{"ref_rand('colors').name"}}},
 		},
 	}
 
@@ -631,7 +634,7 @@ func TestReference_RefRand(t *testing.T) {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
 
-	argSets, _, err := env.GenerateArgs(req.Run[0])
+	argSets, _, err := env.GenerateArgs(req.Run[0].Query)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -668,7 +671,7 @@ func TestRunSection_Exec(t *testing.T) {
 		{Name: "create_t", Type: config.QueryTypeExec, Query: "CREATE TABLE t (id INT)"},
 	}
 
-	if err := env.runSection(context.Background(), queries, config.ConfigSectionUp); err != nil {
+	if err := env.runSection(context.Background(), queries, config.ConfigSectionUp, db); err != nil {
 		t.Fatalf("runSection error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -708,7 +711,7 @@ func TestRunSection_SeedUsesBindParams(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionSeed); err != nil {
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionSeed, db); err != nil {
 		t.Fatalf("runSection error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -746,7 +749,7 @@ func TestRunSection_RunSectionPassesArgs(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun); err != nil {
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
 		t.Fatalf("runSection error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -781,7 +784,7 @@ func TestRunSection_WaitRespectsContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
-	err = env.runSection(ctx, []*config.Query{q}, config.ConfigSectionRun)
+	err = env.runSection(ctx, []*config.Query{q}, config.ConfigSectionRun, db)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("runSection error = %v, want context.Canceled", err)
 	}
@@ -810,7 +813,7 @@ func TestRunSection_QueryStoresResults(t *testing.T) {
 		{Name: "items", Type: config.QueryTypeQuery, Query: "SELECT id FROM items"},
 	}
 
-	if err := env.runSection(context.Background(), queries, config.ConfigSectionInit); err != nil {
+	if err := env.runSection(context.Background(), queries, config.ConfigSectionInit, db); err != nil {
 		t.Fatalf("runSection error: %v", err)
 	}
 
@@ -825,12 +828,12 @@ func TestRunSection_QueryStoresResults(t *testing.T) {
 
 func TestArg_DependentColumn(t *testing.T) {
 	req := &config.Request{
-		Run: []*config.Query{
-			{Args: []string{
+		Run: []*config.RunItem{
+			{Query: &config.Query{Args: []string{
 				"gen('firstname')",
 				"gen('lastname')",
 				`arg(0) + " " + arg(1)`,
-			}},
+			}}},
 		},
 	}
 
@@ -839,7 +842,7 @@ func TestArg_DependentColumn(t *testing.T) {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
 
-	argSets, _, err := env.GenerateArgs(req.Run[0])
+	argSets, _, err := env.GenerateArgs(req.Run[0].Query)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -855,8 +858,8 @@ func TestArg_DependentColumn(t *testing.T) {
 
 func TestArg_OutOfRange(t *testing.T) {
 	req := &config.Request{
-		Run: []*config.Query{
-			{Args: []string{"arg(0)"}},
+		Run: []*config.RunItem{
+			{Query: &config.Query{Args: []string{"arg(0)"}}},
 		},
 	}
 
@@ -865,7 +868,7 @@ func TestArg_OutOfRange(t *testing.T) {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
 
-	_, _, err = env.GenerateArgs(req.Run[0])
+	_, _, err = env.GenerateArgs(req.Run[0].Query)
 	if err == nil {
 		t.Fatal("expected error for arg(0) with no prior args, got nil")
 	}
@@ -922,8 +925,8 @@ func TestRow_ExpandsIntoArgs(t *testing.T) {
 		Rows: map[string][]string{
 			"customer": {"gen('email')", "gen('name')"},
 		},
-		Run: []*config.Query{
-			{Name: "insert_customer", Row: "customer", Query: "INSERT INTO customer (email, name) VALUES ($1, $2)"},
+		Run: []*config.RunItem{
+			{Query: &config.Query{Name: "insert_customer", Row: "customer", Query: "INSERT INTO customer (email, name) VALUES ($1, $2)"}},
 		},
 	}
 
@@ -932,7 +935,7 @@ func TestRow_ExpandsIntoArgs(t *testing.T) {
 		t.Fatalf("NewEnv failed: %v", err)
 	}
 
-	argSets, _, err := env.GenerateArgs(req.Run[0])
+	argSets, _, err := env.GenerateArgs(req.Run[0].Query)
 	if err != nil {
 		t.Fatalf("GenerateArgs failed: %v", err)
 	}
@@ -962,8 +965,8 @@ func TestRow_UsedAcrossSections(t *testing.T) {
 		Seed: []*config.Query{
 			{Name: "seed_customer", Row: "customer", Query: "INSERT INTO customer (email) VALUES ($1)"},
 		},
-		Run: []*config.Query{
-			{Name: "insert_customer", Row: "customer", Query: "INSERT INTO customer (email) VALUES ($1)"},
+		Run: []*config.RunItem{
+			{Query: &config.Query{Name: "insert_customer", Row: "customer", Query: "INSERT INTO customer (email) VALUES ($1)"}},
 		},
 	}
 
@@ -973,7 +976,7 @@ func TestRow_UsedAcrossSections(t *testing.T) {
 	}
 
 	// Both queries should have compiled args from the row.
-	for _, q := range []*config.Query{req.Seed[0], req.Run[0]} {
+	for _, q := range []*config.Query{req.Seed[0], req.Run[0].Query} {
 		if len(q.CompiledArgs) != 1 {
 			t.Errorf("query %s: expected 1 compiled arg, got %d", q.Name, len(q.CompiledArgs))
 		}
@@ -990,8 +993,8 @@ func TestRow_UsedAcrossSections(t *testing.T) {
 
 func TestRow_UnknownRowName(t *testing.T) {
 	req := &config.Request{
-		Run: []*config.Query{
-			{Name: "bad", Row: "nonexistent"},
+		Run: []*config.RunItem{
+			{Query: &config.Query{Name: "bad", Row: "nonexistent"}},
 		},
 	}
 
@@ -1006,8 +1009,8 @@ func TestRow_MutuallyExclusiveWithArgs(t *testing.T) {
 		Rows: map[string][]string{
 			"customer": {"gen('email')"},
 		},
-		Run: []*config.Query{
-			{Name: "bad", Row: "customer", Args: []string{"gen('name')"}},
+		Run: []*config.RunItem{
+			{Query: &config.Query{Name: "bad", Row: "customer", Args: []string{"gen('name')"}}},
 		},
 	}
 
@@ -1049,7 +1052,7 @@ func TestRunSection_PreparedExec(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun); err != nil {
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
 		t.Fatalf("runSection error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -1089,7 +1092,7 @@ func TestRunSection_PreparedQuery(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun); err != nil {
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
 		t.Fatalf("runSection error: %v", err)
 	}
 
@@ -1137,7 +1140,7 @@ func TestRunSection_PreparedCachesStmt(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun); err != nil {
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
 		t.Fatalf("first runSection error: %v", err)
 	}
 
@@ -1147,7 +1150,7 @@ func TestRunSection_PreparedCachesStmt(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun); err != nil {
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
 		t.Fatalf("second runSection error: %v", err)
 	}
 
@@ -1187,7 +1190,7 @@ func TestRunSection_PreparedIgnoredForBatch(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun); err != nil {
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
 		t.Fatalf("runSection error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -1285,7 +1288,7 @@ func TestRunSection_PreparedTranslatesPlaceholders(t *testing.T) {
 		t.Fatalf("CompileArgs failed: %v", err)
 	}
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun); err != nil {
+	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
 		t.Fatalf("runSection error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -1304,16 +1307,16 @@ func BenchmarkPickWeighted(b *testing.B) {
 	}
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
-			queries := make([]*config.Query, tc.count)
+			items := make([]*config.RunItem, tc.count)
 			weights := make(map[string]int, tc.count)
 			for i := range tc.count {
 				name := fmt.Sprintf("q%d", i)
-				queries[i] = &config.Query{Name: name}
+				items[i] = &config.RunItem{Query: &config.Query{Name: name}}
 				weights[name] = i + 1
 			}
 			env := &Env{
 				request: &config.Request{
-					Run:        queries,
+					Run:        items,
 					RunWeights: weights,
 				},
 			}
