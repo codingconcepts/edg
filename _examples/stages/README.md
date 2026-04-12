@@ -22,8 +22,6 @@ This runs the workload with 1 worker for 10 seconds, then 10 workers for 30 seco
 
 ```sh
 docker compose -f _examples/compose_crdb.yml up -d
-docker exec -it node1 cockroach init --insecure
-docker exec -it node1 cockroach sql --insecure
 ```
 
 ### Run
@@ -49,7 +47,7 @@ docker compose -f _examples/compose_mysql.yml up -d
 go run ./cmd/edg all \
 --driver mysql \
 --config _examples/stages/mysql.yaml \
---url "root:password@tcp(localhost:3306)/stages?parseTime=true"
+--url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true"
 ```
 
 ## Oracle

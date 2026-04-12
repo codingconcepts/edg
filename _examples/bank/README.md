@@ -8,8 +8,6 @@ A simpler workload modelling bank account operations (balance checks, credits, t
 
 ```sh
 docker compose -f _examples/compose_crdb.yml up -d
-docker exec -it node1 cockroach init --insecure
-docker exec -it node1 cockroach sql --insecure
 ```
 
 ### Run
@@ -63,7 +61,7 @@ docker compose -f _examples/compose_mysql.yml up -d
 go run ./cmd/edg all \
 --driver mysql \
 --config _examples/bank/mysql.yaml \
---url "root:password@tcp(localhost:3306)/bank?parseTime=true"
+--url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true"
 ```
 
 ## Oracle

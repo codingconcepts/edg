@@ -13,8 +13,6 @@ Demonstrates `query_batch` and `exec_batch` query types. A `query_batch` inserts
 
 ```sh
 docker compose -f _examples/compose_crdb.yml up -d
-docker exec -it node1 cockroach init --insecure
-docker exec -it node1 cockroach sql --insecure
 ```
 
 ### Run
@@ -55,22 +53,22 @@ docker compose -f _examples/compose_mysql.yml up -d
 go run ./cmd/edg up \
 --driver mysql \
 --config _examples/batch/mysql.yaml \
---url "root:password@tcp(localhost:3306)/batch?parseTime=true"
+--url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true"
 
 go run ./cmd/edg seed \
 --driver mysql \
 --config _examples/batch/mysql.yaml \
---url "root:password@tcp(localhost:3306)/batch?parseTime=true"
+--url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true"
 
 go run ./cmd/edg deseed \
 --driver mysql \
 --config _examples/batch/mysql.yaml \
---url "root:password@tcp(localhost:3306)/batch?parseTime=true"
+--url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true"
 
 go run ./cmd/edg down \
 --driver mysql \
 --config _examples/batch/mysql.yaml \
---url "root:password@tcp(localhost:3306)/batch?parseTime=true"
+--url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true"
 ```
 
 ## Oracle

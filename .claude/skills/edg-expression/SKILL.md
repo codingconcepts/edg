@@ -72,6 +72,9 @@ You help users compose, debug, and understand edg expressions. edg uses [expr-la
 | `json_obj(k1, v1, ...)` | Build JSON object |
 | `json_arr(minN, maxN, pattern)` | Build JSON array |
 | `array(minN, maxN, pattern)` | PostgreSQL array literal |
+| `vector(dims, clusters, spread)` | pgvector literal with clustered unit vectors (uniform) |
+| `vector_zipf(dims, clusters, spread, s, v)` | pgvector literal with Zipfian centroid selection |
+| `vector_norm(dims, clusters, spread, mean, stddev)` | pgvector literal with normal centroid selection |
 
 ### Reference Data
 | Function | Scope | Description |

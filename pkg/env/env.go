@@ -40,6 +40,9 @@ type Env struct {
 	nurandCMutex sync.RWMutex
 	nurandC      map[int]int
 
+	vectorCentroidsMutex sync.RWMutex
+	vectorCentroids      map[string][][]float64
+
 	seqCounter int64
 
 	computedArgs []any
@@ -57,10 +60,11 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 	env := Env{
 		db:        db,
 		driver:    driver,
-		oneCache:  map[string]any{},
-		permCache: map[string]any{},
-		nurandC:   map[int]int{},
-		stmtCache: map[*config.Query]*sql.Stmt{},
+		oneCache:        map[string]any{},
+		permCache:       map[string]any{},
+		nurandC:         map[int]int{},
+		vectorCentroids: map[string][][]float64{},
+		stmtCache:       map[*config.Query]*sql.Stmt{},
 		request:   r,
 	}
 
@@ -126,6 +130,9 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		"uuid_v6":           gen.GenUUIDv6,         // Generate a Version 6 UUID (reordered timestamp).
 		"uuid_v7":           gen.GenUUIDv7,         // Generate a Version 7 UUID (Unix timestamp + random).
 		"varbit":            gen.GenVarBit,         // Random variable-length bit string.
+		"vector":            env.vector,            // pgvector-compatible clustered vector literal (uniform).
+		"vector_norm":       env.vectorNorm,        // pgvector vector with normal centroid selection.
+		"vector_zipf":       env.vectorZipf,        // pgvector vector with Zipfian centroid selection.
 		"weighted_sample_n": env.weightedSampleN,   // N weighted random field values (comma-separated).
 		"zipf":              gen.ZipfRand,          // Zipfian-distributed random integer in [0, max].
 	}

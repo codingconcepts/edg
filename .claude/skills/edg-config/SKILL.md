@@ -201,6 +201,7 @@ Apply these patterns based on the target driver.
 - **Timestamps**: `DEFAULT now()`
 - **Row generation in seed**: Use `generate_series(1, $1)` for bulk generation inside SQL
 - **Array columns**: Use `ARRAY[...]` type and `array(minN, maxN, pattern)` expression
+- **Vector columns**: Use `VECTOR(n)` type (pgvector) and `vector(dims, clusters, spread)` expression for clustered, unit-length vectors that support realistic similarity search
 - **Batch expansion**: Use `unnest(string_to_array('$1', ','))` to expand CSV args into rows
 - **Upsert**: `ON CONFLICT (col) DO UPDATE SET ...`
 - **Pagination**: `LIMIT $1 OFFSET $2`

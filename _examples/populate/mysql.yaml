@@ -5,7 +5,7 @@
 #
 # Example:
 #   edg up --driver mysql --config _examples/populate/mysql.yaml \
-#     --url "root:password@tcp(localhost:3306)/populate?parseTime=true"
+#     --url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true"
 
 globals:
   customers: 1000000 # 1 million

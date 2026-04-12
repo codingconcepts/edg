@@ -1,0 +1,113 @@
+globals:
+  articles: 1000
+  batch_size: 100
+
+up:
+
+  - name: create_article
+    query: |-
+      CREATE TABLE IF NOT EXISTS article (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title STRING NOT NULL,
+        embedding_uniform VECTOR(32) NOT NULL,
+        embedding_zipf VECTOR(32) NOT NULL,
+        embedding_norm VECTOR(32) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+  - name: create_uniform_index
+    query: |-
+      CREATE VECTOR INDEX IF NOT EXISTS idx_article_uniform
+      ON article (embedding_uniform)
+
+  - name: create_zipf_index
+    query: |-
+      CREATE VECTOR INDEX IF NOT EXISTS idx_article_zipf
+      ON article (embedding_zipf)
+
+  - name: create_norm_index
+    query: |-
+      CREATE VECTOR INDEX IF NOT EXISTS idx_article_norm
+      ON article (embedding_norm)
+
+seed:
+
+  - name: populate_article
+    type: exec_batch
+    count: articles
+    size: batch_size
+    args:
+      - gen('sentence:3')
+      - vector(32, 5, 0.1)
+      - vector_zipf(32, 5, 0.1, 2.0, 1.0)
+      - vector_norm(32, 5, 0.1, 2.0, 0.8)
+    query: |-
+      INSERT INTO article (title, embedding_uniform, embedding_zipf, embedding_norm)
+      SELECT t, u::VECTOR, z::VECTOR, n::VECTOR
+      FROM unnest(
+        ARRAY[$1],
+        ARRAY[$2],
+        ARRAY[$3],
+        ARRAY[$4]
+      ) AS t(t, u, z, n)
+
+deseed:
+
+  - name: truncate_article
+    type: exec
+    query: TRUNCATE TABLE article
+
+down:
+
+  - name: drop_article
+    type: exec
+    query: DROP TABLE IF EXISTS article
+
+init:
+
+  - name: fetch_articles
+    type: query
+    query: SELECT id FROM article
+
+run:
+
+  - name: insert_article
+    type: exec
+    args:
+      - gen('sentence:3')
+      - vector(32, 5, 0.1)
+      - vector_zipf(32, 5, 0.1, 2.0, 1.0)
+      - vector_norm(32, 5, 0.1, 2.0, 0.8)
+    query: |-
+      INSERT INTO article (title, embedding_uniform, embedding_zipf, embedding_norm)
+      VALUES ($1, $2::VECTOR, $3::VECTOR, $4::VECTOR)
+
+  - name: find_similar_uniform
+    type: query
+    args:
+      - vector(32, 5, 0.1)
+    query: |-
+      SELECT id, title, embedding_uniform <=> $1::VECTOR AS distance
+      FROM article
+      ORDER BY embedding_uniform <=> $1::VECTOR
+      LIMIT 10
+
+  - name: find_similar_zipf
+    type: query
+    args:
+      - vector_zipf(32, 5, 0.1, 2.0, 1.0)
+    query: |-
+      SELECT id, title, embedding_zipf <=> $1::VECTOR AS distance
+      FROM article
+      ORDER BY embedding_zipf <=> $1::VECTOR
+      LIMIT 10
+
+  - name: find_similar_norm
+    type: query
+    args:
+      - vector_norm(32, 5, 0.1, 2.0, 0.8)
+    query: |-
+      SELECT id, title, embedding_norm <=> $1::VECTOR AS distance
+      FROM article
+      ORDER BY embedding_norm <=> $1::VECTOR
+      LIMIT 10

@@ -35,7 +35,7 @@ docker compose -f _examples/compose_mysql.yml up -d
 go run ./cmd/edg all \
 --driver mysql \
 --config _examples/prepared/mysql.yaml \
---url "root:password@tcp(localhost:3306)/bank?parseTime=true"
+--url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true"
 ```
 
 ## Oracle

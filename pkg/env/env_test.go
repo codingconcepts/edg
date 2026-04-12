@@ -18,10 +18,11 @@ import (
 
 func testEnv(data map[string][]map[string]any) *Env {
 	env := &Env{
-		oneCache:  map[string]any{},
-		permCache: map[string]any{},
-		stmtCache: map[*config.Query]*sql.Stmt{},
-		env:       map[string]any{},
+		oneCache:        map[string]any{},
+		permCache:       map[string]any{},
+		vectorCentroids: map[string][][]float64{},
+		stmtCache:       map[*config.Query]*sql.Stmt{},
+		env:             map[string]any{},
 	}
 	for name, rows := range data {
 		env.env[name] = rows

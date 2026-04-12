@@ -1,0 +1,80 @@
+# Vector workload for MySQL
+#
+# MySQL lacks native vector support, so embeddings are stored as TEXT.
+# The vector() expression still generates valid vector literals.
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
+globals:
+  articles: 1000
+  batch_size: 100
+
+up:
+
+  - name: create_article
+    query: |-
+      CREATE TABLE IF NOT EXISTS article (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        title VARCHAR(500) NOT NULL,
+        embedding_uniform TEXT NOT NULL,
+        embedding_zipf TEXT NOT NULL,
+        embedding_norm TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+
+seed:
+
+  - name: populate_article
+    type: exec_batch
+    count: articles
+    size: batch_size
+    args:
+      - gen('sentence:3')
+      - vector(32, 5, 0.1)
+      - vector_zipf(32, 5, 0.1, 2.0, 1.0)
+      - vector_norm(32, 5, 0.1, 2.0, 0.8)
+    query: |-
+      INSERT INTO article (title, embedding_uniform, embedding_zipf, embedding_norm)
+      SELECT j1.val, j2.val, j3.val, j4.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(500) PATH '$', rn FOR ORDINALITY)
+      ) j1
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$2', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val TEXT PATH '$', rn FOR ORDINALITY)
+      ) j2 ON j1.rn = j2.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$3', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val TEXT PATH '$', rn FOR ORDINALITY)
+      ) j3 ON j1.rn = j3.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$4', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val TEXT PATH '$', rn FOR ORDINALITY)
+      ) j4 ON j1.rn = j4.rn
+
+deseed:
+
+  - name: delete_article
+    type: exec
+    query: DELETE FROM article
+
+down:
+
+  - name: drop_article
+    type: exec
+    query: DROP TABLE IF EXISTS article
+
+run:
+
+  - name: insert_article
+    type: exec
+    args:
+      - gen('sentence:3')
+      - vector(32, 5, 0.1)
+      - vector_zipf(32, 5, 0.1, 2.0, 1.0)
+      - vector_norm(32, 5, 0.1, 2.0, 0.8)
+    query: |-
+      INSERT INTO article (title, embedding_uniform, embedding_zipf, embedding_norm)
+      VALUES (?, ?, ?, ?)

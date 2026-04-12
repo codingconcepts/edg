@@ -1,0 +1,70 @@
+# Vector workload for SQL Server
+#
+# Embeddings are stored as NVARCHAR. SQL Server lacks native vector
+# support, so similarity search is not demonstrated here.
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals:
+  articles: 1000
+  batch_size: 100
+
+up:
+
+  - name: create_article
+    query: |-
+      IF OBJECT_ID('article', 'U') IS NULL
+      CREATE TABLE article (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        title NVARCHAR(500) NOT NULL,
+        embedding_uniform NVARCHAR(MAX) NOT NULL,
+        embedding_zipf NVARCHAR(MAX) NOT NULL,
+        embedding_norm NVARCHAR(MAX) NOT NULL,
+        created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+      )
+
+seed:
+
+  - name: populate_article
+    type: exec_batch
+    batch_format: json
+    count: articles
+    size: batch_size
+    args:
+      - gen('sentence:3')
+      - vector(32, 5, 0.1)
+      - vector_zipf(32, 5, 0.1, 2.0, 1.0)
+      - vector_norm(32, 5, 0.1, 2.0, 0.8)
+    query: |-
+      INSERT INTO article (title, embedding_uniform, embedding_zipf, embedding_norm)
+      SELECT j1.value, j2.value, j3.value, j4.value
+      FROM OPENJSON('$1') j1
+      JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
+      JOIN OPENJSON('$3') j3 ON j1.[key] = j3.[key]
+      JOIN OPENJSON('$4') j4 ON j1.[key] = j4.[key]
+
+deseed:
+
+  - name: delete_article
+    type: exec
+    query: DELETE FROM article
+
+down:
+
+  - name: drop_article
+    type: exec
+    query: DROP TABLE IF EXISTS article
+
+run:
+
+  - name: insert_article
+    type: exec
+    args:
+      - gen('sentence:3')
+      - vector(32, 5, 0.1)
+      - vector_zipf(32, 5, 0.1, 2.0, 1.0)
+      - vector_norm(32, 5, 0.1, 2.0, 0.8)
+    query: |-
+      INSERT INTO article (title, embedding_uniform, embedding_zipf, embedding_norm)
+      VALUES (@p1, @p2, @p3, @p4)

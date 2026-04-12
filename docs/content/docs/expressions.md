@@ -74,6 +74,9 @@ Query arguments are written as expressions compiled at startup using [expr-lang/
 | `uuid_v6()` | `string` | Generates a Version 6 UUID (reordered timestamp).<br><br>`uuid_v6()` -> `1ef21d2f-6ba7-6810-9dad-00c04fd430c8` |
 | `uuid_v7()` | `string` | Generates a Version 7 UUID (Unix timestamp + random, sortable).<br><br>`uuid_v7()` -> `018ef4c9-7f3a-7b3c-8d1a-2b4c5d6e7f8a` |
 | `varbit(n)` | `string` | Random variable-length bit string of 1 to `n` bits.<br><br>`varbit(8)` -> `10110` |
+| `vector(dims, clusters, spread)` | `string` | pgvector-compatible vector literal with uniform centroid selection. Generates clustered, unit-length vectors for realistic similarity search. `dims` is the number of dimensions, `clusters` is the number of cluster centroids, and `spread` controls intra-cluster noise (Gaussian σ).<br><br>`vector(4, 3, 0.1)` -> `[0.512340,-0.234567,0.678901,0.456789]` |
+| `vector_norm(dims, clusters, spread, mean, stddev)` | `string` | Like `vector` but picks centroids using a normal distribution over cluster indices. `mean` is the center cluster index, `stddev` controls spread.<br><br>`vector_norm(32, 5, 0.1, 2.0, 0.8)` |
+| `vector_zipf(dims, clusters, spread, s, v)` | `string` | Like `vector` but picks centroids using a Zipfian distribution. Cluster 0 is the "hottest", with frequency dropping off according to `s` (skew) and `v` (>= 1). Simulates real-world data where some categories have far more embeddings.<br><br>`vector_zipf(32, 5, 0.1, 2.0, 1.0)` |
 | `weighted_sample_n(name, field, weightField, minN, maxN)` | `string` | Picks N unique rows using weighted selection, returns a comma-separated string.<br><br>`weighted_sample_n('products', 'name', 'stock', 2, 3)` -> `Widget,Pen` |
 | `zipf(s, v, max)` | `int` | Zipfian-distributed random integer in [0, max].<br><br>`zipf(2.0, 1.0, 999)` -> `3` |
 
@@ -90,6 +93,7 @@ Several functions maintain state. Understanding when that state resets is import
 | `ref_rand(name)` | None | Fresh random row on every call |
 | `ref_same(name)` | Per-query | Picks a row on first call within a query; all subsequent `ref_same` calls for the same dataset within that query return the same row. **Cleared before the next query.** |
 | `seq(start, step)` | Per-worker | Counter starts at 0 for each worker and increments on every call. Two workers both calling `seq(1, 1)` will produce the same sequence independently -- values are **not globally unique**. |
+| `vector` / `vector_zipf` / `vector_norm` | Per-worker | Cluster centroids are generated on first call (keyed by dims+clusters) and reused for the worker's lifetime. Each call picks a centroid (uniform, Zipfian, or normal) and adds noise. |
 
 ## User-Defined Expressions
 
@@ -491,6 +495,22 @@ args:
 
   # PostgreSQL/CockroachDB array literal with 2-5 random email addresses.
   - array(2, 5, 'email')
+
+  ###########
+  # Vectors #
+  ###########
+
+  # pgvector-compatible 384-dimensional vector with 5 clusters and tight spread.
+  - vector(384, 5, 0.1)
+
+  # Smaller 32-dimensional vector for testing. Higher spread = more cluster overlap.
+  - vector(32, 3, 0.3)
+
+  # Zipfian centroid selection: cluster 0 is the "hottest", realistic skew.
+  - vector_zipf(384, 10, 0.1, 2.0, 1.0)
+
+  # Normal centroid selection: cluster 2 is most common, bell curve falloff.
+  - vector_norm(384, 5, 0.1, 2.0, 0.8)
 
   ##############
   # Geographic #

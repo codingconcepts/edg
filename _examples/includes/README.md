@@ -69,8 +69,6 @@ Nested includes are supported (an included file can itself use `!include`). Circ
 
 ```sh
 docker compose -f _examples/compose_crdb.yml up -d
-docker exec -it node1 cockroach init --insecure
-docker exec -it node1 cockroach sql --insecure
 ```
 
 ### Run
@@ -96,7 +94,7 @@ docker compose -f _examples/compose_mysql.yml up -d
 go run ./cmd/edg all \
 --driver mysql \
 --config _examples/includes/mysql.yaml \
---url "root:password@tcp(localhost:3306)/includes?parseTime=true"
+--url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true"
 ```
 
 ## Oracle

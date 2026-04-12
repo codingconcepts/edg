@@ -1,0 +1,85 @@
+# Vector workload for Oracle
+#
+# Embeddings are stored as VARCHAR2. For native vector support,
+# use Oracle 23ai's VECTOR type and replace VARCHAR2(4000) with VECTOR(32).
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  articles: 1000
+  batch_size: 100
+
+up:
+
+  - name: create_article
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE article (
+            id NUMBER GENERATED ALWAYS AS IDENTITY,
+            title VARCHAR2(500) NOT NULL,
+            embedding_uniform VARCHAR2(4000) NOT NULL,
+            embedding_zipf VARCHAR2(4000) NOT NULL,
+            embedding_norm VARCHAR2(4000) NOT NULL,
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+seed:
+
+  - name: clear_article
+    type: exec
+    query: TRUNCATE TABLE article
+
+  - name: populate_article
+    type: exec_batch
+    count: articles
+    size: 100
+    args:
+      - gen('sentence:3')
+      - vector(32, 5, 0.1)
+      - vector_zipf(32, 5, 0.1, 2.0, 1.0)
+      - vector_norm(32, 5, 0.1, 2.0, 0.8)
+    query: |-
+      INSERT INTO article (title, embedding_uniform, embedding_zipf, embedding_norm)
+      SELECT t.val, u.val, z.val, n.val
+      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(500) PATH '.') t
+      JOIN XMLTABLE(('"' || REPLACE('$2', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(4000) PATH '.') u ON t.rn = u.rn
+      JOIN XMLTABLE(('"' || REPLACE('$3', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(4000) PATH '.') z ON t.rn = z.rn
+      JOIN XMLTABLE(('"' || REPLACE('$4', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(4000) PATH '.') n ON t.rn = n.rn
+
+deseed:
+
+  - name: truncate_article
+    type: exec
+    query: TRUNCATE TABLE article
+
+down:
+
+  - name: drop_article
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE article CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+run:
+
+  - name: insert_article
+    type: exec
+    args:
+      - gen('sentence:3')
+      - vector(32, 5, 0.1)
+      - vector_zipf(32, 5, 0.1, 2.0, 1.0)
+      - vector_norm(32, 5, 0.1, 2.0, 0.8)
+    query: |-
+      INSERT INTO article (title, embedding_uniform, embedding_zipf, embedding_norm)
+      VALUES ($1, $2, $3, $4)
