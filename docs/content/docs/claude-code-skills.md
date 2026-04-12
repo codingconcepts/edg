@@ -1,11 +1,11 @@
 ---
-title: Claude Code Skills
+title: Agent Skills
 weight: 9
 ---
 
-# Claude Code Skills
+# Agent Skills
 
-edg ships with a set of [Claude Code](https://claude.ai/claude-code) skills; slash commands that help you generate, validate, debug, and migrate workload configs without leaving your terminal.
+edg ships with a set of [Agent Skills](https://claude.ai/claude-code); slash commands that help you generate, validate, debug, and migrate workload configs without leaving your terminal.
 
 ## Setup
 
