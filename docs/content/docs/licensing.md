@@ -17,7 +17,7 @@ edg is free to use for PostgreSQL/CockroachDB and MySQL workloads. Enterprise dr
 | Microsoft SQL Server | `mssql` | Yes |
 | AWS Aurora DSQL | `dsql` | Yes |
 
-Commands that don't connect to a database (`repl`, `validate`, and bare expression evaluation) work without a license regardless of driver.
+Commands that don't connect to a database (`repl`, `validate config`, and bare expression evaluation) work without a license regardless of driver.
 
 ## Obtaining a License
 
@@ -58,6 +58,42 @@ When you use an enterprise driver, edg checks the license before connecting to t
 | `driver "X" requires a license` | No license was provided. Set `--license` or `EDG_LICENSE`. |
 | `license expired on YYYY-MM-DD` | License has passed its expiry date. Contact [lic@edg.run](mailto:lic@edg.run) to renew. |
 | `license does not include driver "X"` | License is valid but doesn't cover this driver. |
+
+## Checking Your License
+
+Use `validate license` to verify a license key and inspect its details without connecting to a database:
+
+```sh
+edg validate license --driver oracle --license "your-license-key"
+```
+
+```
+License info:
+  ID:         acme-corp
+  Email:      admin@acme.com
+  Drivers:    [oracle mssql]
+  Issued at:  2025-01-15
+  Expires at: 2026-01-15
+License is valid for driver "oracle".
+```
+
+If you pass a free driver like `pgx` or `mysql`, the output confirms no license is needed:
+
+```sh
+edg validate license --driver pgx --license "your-license-key"
+```
+
+```
+License info:
+  ID:         acme-corp
+  Email:      admin@acme.com
+  Drivers:    [oracle mssql]
+  Issued at:  2025-01-15
+  Expires at: 2026-01-15
+Driver "pgx" does not require a license.
+```
+
+This prints the license holder, licensed drivers, issue/expiry dates, and whether the license covers the requested `--driver`. Useful for troubleshooting license issues or confirming a renewal was applied.
 
 ## How It Works
 

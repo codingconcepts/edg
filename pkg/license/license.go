@@ -22,45 +22,49 @@ type License struct {
 	IssuedAt  time.Time `json:"issued_at"`
 }
 
-// envelope is the wire format before final base64 encoding.
-type envelope struct {
-	Payload   string `json:"payload"`
-	Signature string `json:"signature"`
+// licenseWire is the compact wire format for serialization.
+type licenseWire struct {
+	I string   `json:"i"` // ID
+	E string   `json:"e"` // Email
+	D []string `json:"d"` // Drivers
+	X int64    `json:"x"` // ExpiresAt (unix seconds)
+	A int64    `json:"a"` // IssuedAt (unix seconds)
 }
+
+const ed25519SigSize = 64
 
 // Verify decodes a license string, verifies the Ed25519 signature against
 // the public key, and returns the parsed License.
 func Verify(publicKey ed25519.PublicKey, licenseStr string) (*License, error) {
-	envBytes, err := base64.StdEncoding.DecodeString(licenseStr)
+	raw, err := base64.RawURLEncoding.DecodeString(licenseStr)
 	if err != nil {
 		return nil, fmt.Errorf("decoding license: %w", err)
 	}
 
-	var env envelope
-	if err := json.Unmarshal(envBytes, &env); err != nil {
-		return nil, fmt.Errorf("parsing license envelope: %w", err)
+	if len(raw) <= ed25519SigSize {
+		return nil, errors.New("license too short")
 	}
 
-	payloadBytes, err := base64.StdEncoding.DecodeString(env.Payload)
-	if err != nil {
-		return nil, fmt.Errorf("decoding payload: %w", err)
-	}
+	payloadBytes := raw[:len(raw)-ed25519SigSize]
+	sig := raw[len(raw)-ed25519SigSize:]
 
-	sigBytes, err := base64.StdEncoding.DecodeString(env.Signature)
-	if err != nil {
-		return nil, fmt.Errorf("decoding signature: %w", err)
-	}
-
-	if !ed25519.Verify(publicKey, payloadBytes, sigBytes) {
+	if !ed25519.Verify(publicKey, payloadBytes, sig) {
 		return nil, errors.New("invalid license signature")
 	}
 
-	var lic License
-	if err := json.Unmarshal(payloadBytes, &lic); err != nil {
+	var w licenseWire
+	if err := json.Unmarshal(payloadBytes, &w); err != nil {
 		return nil, fmt.Errorf("parsing license payload: %w", err)
 	}
 
-	return &lic, nil
+	lic := &License{
+		ID:        w.I,
+		Email:     w.E,
+		Drivers:   w.D,
+		ExpiresAt: time.Unix(w.X, 0).UTC(),
+		IssuedAt:  time.Unix(w.A, 0).UTC(),
+	}
+	return lic, nil
 }
 
 // HasDriver reports whether the license includes the named driver.

@@ -17,7 +17,8 @@ weight: 3
 | `down` | Tear down schema (drop tables) |
 | `all` | Run up, seed, run, deseed, and down in sequence |
 | `repl` | Interactive expression evaluator |
-| `validate` | Validate a config file without connecting to a database |
+| `validate config` | Validate a config file without connecting to a database |
+| `validate license` | Validate a license key and print its details |
 
 Running `edg` with an expression (no subcommand) evaluates it and prints the result. Bare words are treated as [gofakeit](https://github.com/brianvoe/gofakeit) patterns, so `edg email` is equivalent to `edg "gen('email')"`. For expressions with parentheses or special characters, quote the argument.
 
@@ -101,10 +102,10 @@ The `pgx` and `mysql` drivers are free. Enterprise drivers (`oracle`, `mssql`, `
 
 ## Validating Config
 
-The `validate` command parses a config file and checks it for errors without connecting to a database. It catches YAML syntax errors, invalid expressions, unknown function calls, duplicate query names, shadowed built-ins, and invalid query types.
+The `validate config` command parses a config file and checks it for errors without connecting to a database. It catches YAML syntax errors, invalid expressions, unknown function calls, duplicate query names, shadowed built-ins, and invalid query types.
 
 ```sh
-edg validate --config _examples/tpcc/crdb.yaml
+edg validate config --config _examples/tpcc/crdb.yaml
 ```
 
 ```
@@ -112,6 +113,63 @@ config is valid
 ```
 
 This is useful for catching mistakes before deploying a workload or as a CI check.
+
+## Validating a License
+
+The `validate license` command checks whether a license key is valid for a given driver and prints the license details.
+
+```sh
+edg validate license --driver oracle --license "your-license-key"
+```
+
+```
+License info:
+  ID:         acme-corp
+  Email:      admin@acme.com
+  Drivers:    [oracle mssql]
+  Issued at:  2025-01-15
+  Expires at: 2026-01-15
+License is valid for driver "oracle".
+```
+
+If the driver doesn't require a license, the output tells you:
+
+```sh
+edg validate license --driver pgx --license "your-license-key"
+```
+
+```
+License info:
+  ID:         acme-corp
+  Email:      admin@acme.com
+  Drivers:    [oracle mssql]
+  Issued at:  2025-01-15
+  Expires at: 2026-01-15
+Driver "pgx" does not require a license.
+```
+
+If the license is expired or doesn't cover the requested driver, you'll see an error:
+
+```sh
+edg validate license --driver dsql --license "your-license-key"
+```
+
+```
+License info:
+  ID:         acme-corp
+  Email:      admin@acme.com
+  Drivers:    [oracle mssql]
+  Issued at:  2025-01-15
+  Expires at: 2026-01-15
+Error: license does not include driver "dsql" (licensed: [oracle mssql])
+```
+
+The `EDG_LICENSE` environment variable is also accepted:
+
+```sh
+export EDG_LICENSE="your-license-key"
+edg validate license --driver oracle
+```
 
 ## Run Behaviour
 
