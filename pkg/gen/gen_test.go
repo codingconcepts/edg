@@ -571,6 +571,22 @@ func TestGenTimez_InvalidInput(t *testing.T) {
 	}
 }
 
+func TestValidatePattern(t *testing.T) {
+	valid := []string{"email", "number:1,100", "firstname", "sentence:5", "lastname"}
+	for _, p := range valid {
+		if err := ValidatePattern(p); err != nil {
+			t.Errorf("ValidatePattern(%q) unexpected error: %v", p, err)
+		}
+	}
+
+	invalid := []string{"notafunction", "emaill", "nope:1,2"}
+	for _, p := range invalid {
+		if err := ValidatePattern(p); err == nil {
+			t.Errorf("ValidatePattern(%q) expected error, got nil", p)
+		}
+	}
+}
+
 func BenchmarkGenBatch(b *testing.B) {
 	cases := []struct {
 		name  string

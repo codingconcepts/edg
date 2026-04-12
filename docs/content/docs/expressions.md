@@ -635,3 +635,519 @@ args:
   - gen('number:1,10')        # $2 = quantity (e.g. 3)
   - arg(0) * float(arg(1))    # $3 = total (e.g. 89.97)
 ```
+
+## Available gofakeit Patterns
+
+These patterns can be used with `gen()`, `gen_batch()`, `json_arr()`, and `array()`. Patterns are case-insensitive. Parameters are separated from the function name by `:` and from each other by `,`.
+
+```yaml
+# No parameters
+- gen('email')
+
+# With parameters
+- gen('number:1,100')
+
+# In a batch
+- gen_batch(1000, 100, 'email')
+
+# In a JSON array
+- json_arr(1, 5, 'firstname')
+
+# In a PostgreSQL/CockroachDB array
+- array(2, 4, 'word')
+```
+
+Patterns are validated at config load time. A typo like `gen('emial')` produces a clear error instead of silently returning the literal string `{emial}`.
+
+### Person
+
+| Pattern | Description | Example |
+|---|---|---|
+| `name` | Full name (first and last) | `Markus Moen` |
+| `firstname` | Given name | `Markus` |
+| `middlename` | Middle name | `James` |
+| `lastname` | Family name | `Moen` |
+| `nameprefix` | Title or honorific (Mr., Mrs., Dr.) | `Mr.` |
+| `namesuffix` | Suffix (Jr., Sr., III) | `Jr.` |
+| `gender` | Gender classification | `male` |
+| `age` | Age in years | `32` |
+| `ssn` | US Social Security Number | `296-28-1925` |
+| `ethnicity` | Cultural or ethnic background | `Caucasian` |
+| `bio` | Random biography | `I'm a developer from NY...` |
+| `person` | Full personal details (name, contact, etc.) | `{first_name: Jessica, last_name: Hills, gender: female, age: 51, ssn: 961445393, ...}` |
+
+### Contact
+
+| Pattern | Description | Example |
+|---|---|---|
+| `email` | Email address | `markusmoen@pagac.net` |
+| `phone` | Phone number | `6136459211` |
+| `phoneformatted` | Formatted phone number | `(613) 645-9211` |
+| `username` | Account username | `markus.moen` |
+
+### Address
+
+| Pattern | Description | Example |
+|---|---|---|
+| `address` | Full address (street, city, state, zip, country) | `{street: 37802 Port Streetborough, city: Chesapeake, state: North Carolina, zip: 18508, country: Andorra}` |
+| `city` | City name | `Mardarville` |
+| `state` | State name | `Idaho` |
+| `stateabr` | 2-letter state abbreviation | `ID` |
+| `street` | Full street (number + name + suffix) | `364 East Parkway` |
+| `streetname` | Street name | `View` |
+| `streetnumber` | Street number | `364` |
+| `streetprefix` | Directional prefix (N, E, SW) | `East` |
+| `streetsuffix` | Street type (Ave, St, Blvd) | `Parkway` |
+| `country` | Country name | `United States` |
+| `countryabr` | 2-letter country code | `US` |
+| `zip` | Postal code | `83201` |
+| `latitude` | Latitude coordinate | `41.7886` |
+| `longitude` | Longitude coordinate | `-112.0591` |
+| `latituderange:0,90` | Latitude in range (default 0–90) | `52.31` |
+| `longituderange:0,180` | Longitude in range (default 0–180) | `73.45` |
+| `unit` | Building unit (apt, suite) | `Apt 204` |
+| `timezone` | Timezone name | `America/New_York` |
+| `timezoneabv` | 3-letter timezone abbreviation | `EST` |
+| `timezonefull` | Full timezone name | `Eastern Standard Time` |
+| `timezoneoffset` | UTC offset | `-5` |
+| `timezoneregion` | Timezone region | `America` |
+
+### Internet
+
+| Pattern | Description | Example |
+|---|---|---|
+| `url` | Web URL | `https://www.example.com/path` |
+| `urlslug:3` | URL-safe slug (N words, default 3) | `modern-web-design` |
+| `domainname` | Domain name | `example.com` |
+| `domainsuffix` | Domain suffix | `.com` |
+| `ipv4address` | IPv4 address | `192.168.1.42` |
+| `ipv6address` | IPv6 address | `2001:db8::1` |
+| `macaddress` | MAC address | `00:1A:2B:3C:4D:5E` |
+| `httpmethod` | HTTP method | `GET` |
+| `httpstatuscode` | HTTP status code | `404` |
+| `httpstatuscodesimple` | Common HTTP status code | `200` |
+| `httpversion` | HTTP version | `1.1` |
+| `inputname` | HTML input element name | `first_name` |
+| `useragent` | Browser user agent string | `Mozilla/5.0 ...` |
+| `chromeuseragent` | Chrome user agent | `Mozilla/5.0 ... Chrome/...` |
+| `firefoxuseragent` | Firefox user agent | `Mozilla/5.0 ... Firefox/...` |
+| `operauseragent` | Opera user agent | `Mozilla/5.0 ... OPR/...` |
+| `safariuseragent` | Safari user agent | `Mozilla/5.0 ... Safari/...` |
+| `apiuseragent` | API client user agent | `curl/7.68.0` |
+
+### Finance
+
+| Pattern | Description | Example |
+|---|---|---|
+| `achaccount` | ACH bank account number | `586981958265` |
+| `achrouting` | 9-digit ACH routing number | `071000013` |
+| `bankname` | Bank name | `Chase` |
+| `banktype` | Bank type | `Commercial` |
+| `bitcoinaddress` | Bitcoin address | `1A1zP1eP5QGefi2D...` |
+| `bitcoinprivatekey` | Bitcoin private key | `5HueCGU8rMjxEXx...` |
+| `creditcard` | Full credit card details | `{type: UnionPay, number: 6376121963702920, exp: 10/29, cvv: 505}` |
+| `creditcardcvv` | Credit card CVV | `513` |
+| `creditcardexp` | Credit card expiry | `02/28` |
+| `creditcardnumber` | Credit card number (default: any type) | `4111111111111111` |
+| `creditcardtype` | Credit card type | `Visa` |
+| `currency` | Currency details | `{short: ZAR, long: South Africa Rand}` |
+| `currencylong` | Full currency name | `United States Dollar` |
+| `currencyshort` | 3-letter currency code | `USD` |
+| `cusip` | CUSIP security identifier | `38259P508` |
+| `ein` | Employer Identification Number | `12-3456789` |
+| `isin` | ISIN security identifier | `US38259P5081` |
+| `price:0,1000` | Price in range (default 0–1000) | `42.99` |
+
+### Company
+
+| Pattern | Description | Example |
+|---|---|---|
+| `company` | Company name | `Acme Corp` |
+| `companysuffix` | Company suffix (Inc., LLC) | `Inc.` |
+| `bs` | Business buzzword phrase | `synergize scalable mindshare` |
+| `buzzword` | Business buzzword | `synergize` |
+| `blurb` | Company description | `We provide scalable...` |
+| `slogan` | Company slogan | `Think different.` |
+| `job` | Job details | `{company: Google, title: Contractor, descriptor: District, level: Assurance}` |
+| `jobdescriptor` | Job descriptor | `Senior` |
+| `joblevel` | Job level | `Manager` |
+| `jobtitle` | Job title | `Software Engineer` |
+
+### Product
+
+| Pattern | Description | Example |
+|---|---|---|
+| `product` | Product details | `{name: Water Dispenser, price: 91.59, material: cardboard, upc: 058601249007, ...}` |
+| `productaudience` | Target audience | `Professionals` |
+| `productbenefit` | Key product benefit | `Time-saving` |
+| `productcategory` | Product category | `Electronics` |
+| `productdescription` | Product description | `High-quality wireless...` |
+| `productdimension` | Product dimensions | `10x5x3 inches` |
+| `productfeature` | Product feature | `Waterproof` |
+| `productisbn` | ISBN identifier | `978-3-16-148410-0` |
+| `productmaterial` | Product material | `Stainless Steel` |
+| `productname` | Product name | `Ergonomic Keyboard` |
+| `productsuffix` | Product model suffix | `Pro` |
+| `productupc` | UPC barcode | `012345678905` |
+| `productusecase` | Product use case | `Office productivity` |
+
+### Numbers
+
+| Pattern | Description | Example |
+|---|---|---|
+| `bool` | true or false | `true` |
+| `number:1,100` | Integer in range (default full int32 range) | `42` |
+| `int` | Random signed integer | `8294723` |
+| `int8` | Signed 8-bit integer (−128 to 127) | `42` |
+| `int16` | Signed 16-bit integer | `8294` |
+| `int32` | Signed 32-bit integer | `829472389` |
+| `int64` | Signed 64-bit integer | `8294723891234` |
+| `uint` | Unsigned integer | `4294967` |
+| `uint8` | Unsigned 8-bit integer (0–255) | `200` |
+| `uint16` | Unsigned 16-bit integer (0–65535) | `50000` |
+| `uint32` | Unsigned 32-bit integer | `2948293` |
+| `uint64` | Unsigned 64-bit integer | `394857239482` |
+| `intn:100` | Integer in [0, N) | `73` |
+| `uintn:100` | Unsigned integer in [0, N) | `42` |
+| `intrange:1,100` | Signed integer in range | `67` |
+| `uintrange:0,1000` | Unsigned integer in range | `512` |
+| `float32` | 32-bit float | `3.14` |
+| `float32range:1,10` | 32-bit float in range | `7.23` |
+| `float64` | 64-bit float | `3.141592653` |
+| `float64range:0,1` | 64-bit float in range | `0.7312` |
+| `digit` | Single digit (0–9) | `7` |
+| `digitn:6` | String of N digits | `482910` |
+| `hexuint:8` | Hex unsigned integer (N hex chars) | `4a3f2b1c` |
+| `dice:2,[6,6]` | Dice roll (count, sides per die) | `[4, 2]` |
+| `flipacoin` | Coin toss | `Heads` |
+
+### Text
+
+| Pattern | Description | Example |
+|---|---|---|
+| `letter` | Single ASCII letter | `g` |
+| `lettern:8` | String of N letters | `abcqwzml` |
+| `vowel` | Single vowel | `e` |
+| `word` | Random word | `themselves` |
+| `sentence:5` | Sentence with N words (default 5) | `The quick brown fox jumped.` |
+| `paragraph:3,5,12,\n` | Paragraph (sentences, words, paragraphs, separator) | *(multi-sentence text)* |
+| `phrase` | Short phrase | `a quiet afternoon` |
+| `phrasenoun` | Noun phrase | `the old house` |
+| `phraseverb` | Verb phrase | `runs quickly` |
+| `phraseadverb` | Adverb phrase | `very carefully` |
+| `phrasepreposition` | Prepositional phrase | `in the garden` |
+| `question` | Question sentence | `Where did you go?` |
+| `quote` | Quoted text | `"To be or not to be"` |
+| `comment` | Comment or remark | `This is great work!` |
+| `loremipsumword` | Lorem Ipsum word | `lorem` |
+| `loremipsumsentence:5` | Lorem Ipsum sentence (N words) | `Lorem ipsum dolor sit amet.` |
+| `loremipsumparagraph:2,5,1,\n` | Lorem Ipsum paragraph | *(multi-sentence Lorem Ipsum)* |
+| `hipsterword` | Hipster vocabulary word | `artisan` |
+| `hipstersentence:5` | Hipster sentence (N words) | `Artisan cold-pressed vegan...` |
+| `hipsterparagraph:2,5,1,\n` | Hipster paragraph | *(multi-sentence hipster text)* |
+| `markdown` | Markdown-formatted text | *(formatted markdown)* |
+
+### String Manipulation
+
+| Pattern | Description | Example |
+|---|---|---|
+| `generate:{firstname} {lastname}` | Generate from template | `Alice Smith` |
+| `lexify:???` | Replace `?` with random letters | `kqb` |
+| `numerify:###` | Replace `#` with random digits | `482` |
+| `regex:[A-Z]{3}-[0-9]{4}` | String matching regex | `ABK-7291` |
+| `uuid` | RFC 4122 v4 UUID | `550e8400-e29b-41d4-a716-446655440000` |
+| `id` | Short URL-safe base32 identifier | `01hzxq5v8k` |
+
+### Date & Time
+
+| Pattern | Description | Example |
+|---|---|---|
+| `date:RFC3339` | Date in specified format | `2023-07-15T14:32:07Z` |
+| `daterange:2020-01-01,2025-12-31,yyyy-MM-dd` | Date in range with format | `2023-07-15` |
+| `futuredate` | Date in the future | `2027-03-21T10:00:00Z` |
+| `pastdate` | Date in the past | `2019-11-05T08:30:00Z` |
+| `time:HH:mm:ss` | Time in format (default HH:mm:ss) | `14:32:07` |
+| `timerange:08:00:00,17:00:00,HH:mm:ss` | Time in range with format | `12:45:23` |
+| `year` | Year | `2023` |
+| `month` | Month number (1–12) | `7` |
+| `monthstring` | Month name | `July` |
+| `day` | Day of month | `15` |
+| `weekday` | Weekday name | `Wednesday` |
+| `hour` | Hour (0–23) | `14` |
+| `minute` | Minute (0–59) | `32` |
+| `second` | Second (0–59) | `7` |
+| `nanosecond` | Nanosecond | `196519854` |
+
+### Color
+
+| Pattern | Description | Example |
+|---|---|---|
+| `color` | Color name | `MediumSlateBlue` |
+| `hexcolor` | Hex color code | `#1a2b3c` |
+| `rgbcolor` | RGB color values | `[52, 152, 219]` |
+| `safecolor` | Web-safe color name | `fuchsia` |
+| `nicecolors` | Curated color palette | `[#e8d5b7, #0e2430, ...]` |
+
+### Food & Drink
+
+| Pattern | Description | Example |
+|---|---|---|
+| `breakfast` | Breakfast food | `Scrambled eggs` |
+| `lunch` | Lunch food | `Caesar salad` |
+| `dinner` | Dinner food | `Grilled salmon` |
+| `snack` | Snack item | `Trail mix` |
+| `dessert` | Dessert item | `Chocolate cake` |
+| `drink` | Drink | `Lemonade` |
+| `fruit` | Fruit | `Apple` |
+| `vegetable` | Vegetable | `Broccoli` |
+| `beername` | Beer name | `Duvel` |
+| `beerstyle` | Beer style | `IPA` |
+| `beeralcohol` | Beer alcohol content | `5.2%` |
+| `beeribu` | Beer bitterness (IBU) | `40` |
+| `beerblg` | Beer gravity (BLG) | `12.5` |
+| `beerhop` | Beer hop variety | `Cascade` |
+| `beermalt` | Beer malt type | `Pale Ale` |
+| `beeryeast` | Beer yeast strain | `Safale US-05` |
+
+### Animals
+
+| Pattern | Description | Example |
+|---|---|---|
+| `animal` | Animal name | `Lion` |
+| `animaltype` | Animal type (mammal, bird, etc.) | `mammal` |
+| `bird` | Bird species | `Eagle` |
+| `cat` | Cat breed | `Siamese` |
+| `dog` | Dog breed | `Labrador` |
+| `farmanimal` | Farm animal | `Cow` |
+| `petname` | Pet name | `Buddy` |
+
+### Vehicle
+
+| Pattern | Description | Example |
+|---|---|---|
+| `car` | Car details | `{type: Passenger car heavy, fuel: Ethanol, transmission: Automatic, brand: Alfa Romeo, model: Lancer, year: 2014}` |
+| `carmaker` | Car manufacturer | `Toyota` |
+| `carmodel` | Car model | `Camry` |
+| `cartype` | Car type | `Sedan` |
+| `carfueltype` | Fuel type | `Electric` |
+| `cartransmissiontype` | Transmission type | `Automatic` |
+
+### Airline
+
+| Pattern | Description | Example |
+|---|---|---|
+| `airlineairport` | Airport name | `Heathrow Airport` |
+| `airlineairportiata` | IATA airport code | `LHR` |
+| `airlineairplane` | Aircraft model | `Boeing 737` |
+| `airlineaircrafttype` | Aircraft category | `Narrow-body` |
+| `airlineflightnumber` | Flight number | `BA142` |
+| `airlinerecordlocator` | Booking reference | `XJDF42` |
+| `airlineseat` | Seat assignment | `14A` |
+
+### Entertainment
+
+| Pattern | Description | Example |
+|---|---|---|
+| `booktitle` | Book title | `The Great Gatsby` |
+| `bookauthor` | Book author | `F. Scott Fitzgerald` |
+| `bookgenre` | Book genre | `Fiction` |
+| `book` | Book details | `{title: Sons and Lovers, author: James Joyce, genre: Saga}` |
+| `moviename` | Movie title | `The Matrix` |
+| `moviegenre` | Movie genre | `Sci-Fi` |
+| `movie` | Movie details | `{name: Sherlock Jr., genre: Music}` |
+| `songname` | Song title | `Bohemian Rhapsody` |
+| `songartist` | Song artist | `Queen` |
+| `songgenre` | Song genre | `Rock` |
+| `song` | Song details | `{name: Agora Hills, artist: Olivia Newton-John, genre: Country}` |
+| `gamertag` | Gaming username | `xX_Slayer_Xx` |
+| `celebrityactor` | Celebrity actor | `Tom Hanks` |
+| `celebritybusiness` | Business celebrity | `Elon Musk` |
+| `celebritysport` | Sports celebrity | `Serena Williams` |
+| `hobby` | Hobby or pastime | `Photography` |
+
+### Language
+
+| Pattern | Description | Example |
+|---|---|---|
+| `language` | Language name | `English` |
+| `languageabbreviation` | Language abbreviation | `en` |
+| `languagebcp` | BCP 47 language tag | `en-US` |
+| `programminglanguage` | Programming language | `Go` |
+
+### Grammar
+
+| Pattern | Description | Example |
+|---|---|---|
+| `adjective` | General adjective | `bright` |
+| `adjectivedemonstrative` | Demonstrative adjective (this, that) | `this` |
+| `adjectivedescriptive` | Descriptive adjective | `beautiful` |
+| `adjectiveindefinite` | Indefinite adjective | `some` |
+| `adjectiveinterrogative` | Interrogative adjective | `which` |
+| `adjectivepossessive` | Possessive adjective | `our` |
+| `adjectiveproper` | Proper adjective | `American` |
+| `adjectivequantitative` | Quantitative adjective | `several` |
+| `adverb` | General adverb | `quickly` |
+| `adverbdegree` | Degree adverb | `very` |
+| `adverbfrequencydefinite` | Definite frequency adverb | `daily` |
+| `adverbfrequencyindefinite` | Indefinite frequency adverb | `often` |
+| `adverbmanner` | Manner adverb | `carefully` |
+| `adverbplace` | Place adverb | `here` |
+| `adverbtimedefinite` | Definite time adverb | `yesterday` |
+| `adverbtimeindefinite` | Indefinite time adverb | `soon` |
+| `connective` | Connective word | `however` |
+| `connectivecasual` | Causal connective | `because` |
+| `connectivecomparative` | Comparative connective | `similarly` |
+| `connectivecomplaint` | Complaint connective | `unfortunately` |
+| `connectiveexamplify` | Example connective | `for instance` |
+| `connectivelisting` | Listing connective | `firstly` |
+| `connectivetime` | Time connective | `meanwhile` |
+| `interjection` | Interjection | `wow` |
+| `noun` | General noun | `table` |
+| `nounabstract` | Abstract noun | `freedom` |
+| `nouncollectiveanimal` | Animal collective noun | `flock` |
+| `nouncollectivepeople` | People collective noun | `crowd` |
+| `nouncollectivething` | Thing collective noun | `bundle` |
+| `nouncommon` | Common noun | `book` |
+| `nounconcrete` | Concrete noun | `chair` |
+| `nouncountable` | Countable noun | `apple` |
+| `noundeterminer` | Noun determiner | `the` |
+| `nounproper` | Proper noun | `London` |
+| `noununcountable` | Uncountable noun | `water` |
+| `preposition` | General preposition | `with` |
+| `prepositioncompound` | Compound preposition | `in front of` |
+| `prepositiondouble` | Double preposition | `out of` |
+| `prepositionsimple` | Simple preposition | `at` |
+| `pronoun` | General pronoun | `she` |
+| `pronoundemonstrative` | Demonstrative pronoun | `these` |
+| `pronounindefinite` | Indefinite pronoun | `someone` |
+| `pronouninterrogative` | Interrogative pronoun | `who` |
+| `pronounobject` | Object pronoun | `him` |
+| `pronounpersonal` | Personal pronoun | `I` |
+| `pronounpossessive` | Possessive pronoun | `mine` |
+| `pronounreflective` | Reflexive pronoun | `myself` |
+| `pronounrelative` | Relative pronoun | `which` |
+| `verb` | General verb | `run` |
+| `verbaction` | Action verb | `jump` |
+| `verbhelping` | Helping verb | `would` |
+| `verbintransitive` | Intransitive verb | `sleep` |
+| `verblinking` | Linking verb | `seem` |
+| `verbtransitive` | Transitive verb | `carry` |
+
+### Hacker
+
+| Pattern | Description | Example |
+|---|---|---|
+| `hackerabbreviation` | Hacker abbreviation | `SQL` |
+| `hackeradjective` | Hacker adjective | `back-end` |
+| `hackernoun` | Hacker noun | `firewall` |
+| `hackerphrase` | Hacker phrase | `Use the neural TCP...` |
+| `hackerverb` | Hacker verb | `parse` |
+| `hackeringverb` | Hacker -ing verb | `hacking` |
+
+### Error Messages
+
+| Pattern | Description | Example |
+|---|---|---|
+| `error` | Error message | `unexpected EOF` |
+| `errordatabase` | Database error | `connection refused` |
+| `errorgrpc` | gRPC error | `deadline exceeded` |
+| `errorhttp` | HTTP error | `404 Not Found` |
+| `errorhttpclient` | HTTP client error | `timeout awaiting...` |
+| `errorhttpserver` | HTTP server error | `502 Bad Gateway` |
+| `errorobject` | Error object | `{code: 500, message: service unavailable}` |
+| `errorruntime` | Runtime error | `index out of bounds` |
+| `errorvalidation` | Validation error | `field required` |
+
+### Emoji
+
+| Pattern | Description | Example |
+|---|---|---|
+| `emoji` | Random emoji | `🎉` |
+| `emojialias` | Emoji alias keyword | `:tada:` |
+| `emojicategory` | Emoji category | `Smileys & Emotion` |
+| `emojitag` | Emoji tag | `happy` |
+| `emojisentence:3` | Sentence with emojis (N emojis) | `I am 😊 and 🎉 today 🌟` |
+| `emojiface` | Face/smiley emoji | `😊` |
+| `emojihand` | Hand emoji | `👍` |
+| `emojigesture` | Gesture emoji | `🤷` |
+| `emojiperson` | Person emoji | `👩` |
+| `emojijob` | Job/role emoji | `👨‍🔬` |
+| `emojicostume` | Costume/fantasy emoji | `🧛` |
+| `emojianimal` | Animal emoji | `🐕` |
+| `emojifood` | Food emoji | `🍕` |
+| `emojiplant` | Plant emoji | `🌻` |
+| `emojisport` | Sport emoji | `⚽` |
+| `emojigame` | Game emoji | `🎮` |
+| `emojielectronics` | Electronics emoji | `📱` |
+| `emojimusic` | Music emoji | `🎸` |
+| `emojiweather` | Weather emoji | `☀️` |
+| `emojilandmark` | Landmark emoji | `🗽` |
+| `emojivehicle` | Vehicle emoji | `🚗` |
+| `emojiclothing` | Clothing emoji | `👗` |
+| `emojitools` | Tools emoji | `🔧` |
+| `emojiflag` | Flag emoji | `🇺🇸` |
+
+### School
+
+| Pattern | Description | Example |
+|---|---|---|
+| `school` | School name | `Lincoln High School` |
+
+### Social Media
+
+| Pattern | Description | Example |
+|---|---|---|
+| `socialmedia` | Social media handle/URL | `@johndoe` |
+
+### Minecraft
+
+| Pattern | Description | Example |
+|---|---|---|
+| `minecraftanimal` | Minecraft animal | `Cow` |
+| `minecraftbiome` | Minecraft biome | `Plains` |
+| `minecraftdye` | Minecraft dye color | `Red` |
+| `minecraftfood` | Minecraft food | `Bread` |
+| `minecraftore` | Minecraft ore | `Diamond` |
+| `minecrafttool` | Minecraft tool | `Pickaxe` |
+| `minecraftweapon` | Minecraft weapon | `Sword` |
+| `minecraftwood` | Minecraft wood type | `Oak` |
+| `minecraftweather` | Minecraft weather | `Rain` |
+| `minecraftarmorpart` | Armor piece | `Chestplate` |
+| `minecraftarmortier` | Armor tier | `Diamond` |
+| `minecraftmobboss` | Boss mob | `Ender Dragon` |
+| `minecraftmobhostile` | Hostile mob | `Creeper` |
+| `minecraftmobneutral` | Neutral mob | `Enderman` |
+| `minecraftmobpassive` | Passive mob | `Sheep` |
+| `minecraftvillagerjob` | Villager job | `Librarian` |
+| `minecraftvillagerlevel` | Villager level | `Journeyman` |
+| `minecraftvillagerstation` | Villager station | `Lectern` |
+
+### Data Structures
+
+| Pattern | Description | Example |
+|---|---|---|
+| `map` | Random key-value map | `{interest: 5418, only: 2991258, fly: {shall: 1188343}}` |
+| `json:object,10` | JSON document (type, field count) | `{"name": "..."}` |
+| `xml:single,xml,record,10` | XML document | `<record>...</record>` |
+| `csv:,,10` | CSV rows (delimiter, row count) | `name,email\nAlice,...` |
+| `fixed_width:10` | Fixed-width format | `Alice     ...` |
+| `sql:,10` | SQL INSERT statements | `INSERT INTO ...` |
+| `svg:500,500` | SVG image | `<svg>...</svg>` |
+| `template:` | Template-driven text | *(from template)* |
+
+### Miscellaneous
+
+| Pattern | Description | Example |
+|---|---|---|
+| `password:true,true,true,true,false,12` | Password (lower, upper, numeric, special, space, length) | `aB3$kL9mPq2x` |
+| `email_text` | Email message body | `Dear Sir/Madam...` |
+| `loglevel` | Log severity level | `error` |
+| `shufflestrings:` | Shuffle string array | *(shuffled array)* |
+| `shuffleints:` | Shuffle int array | *(shuffled array)* |
+| `weighted:,` | Weighted random selection | *(selected value)* |
+| `randomstring:` | Random pick from string array | *(selected string)* |
+| `randomint:` | Random pick from int array | *(selected int)* |
+| `randomuint:` | Random pick from uint array | *(selected uint)* |
+| `teams:,` | Split people into teams | *(team assignments)* |
+| `imagejpeg:500,500` | Random JPEG image (W×H) | *(binary image data)* |
+| `imagepng:500,500` | Random PNG image (W×H) | *(binary image data)* |

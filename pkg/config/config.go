@@ -2,12 +2,16 @@ package config
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 
+	"github.com/codingconcepts/edg/pkg/gen"
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
 	"gopkg.in/yaml.v3"
 )
+
+var genCallRe = regexp.MustCompile(`gen\(\s*['"]([^'"]+)['"]\s*\)`)
 
 // Duration wraps time.Duration for YAML unmarshaling from strings like "1s".
 type Duration time.Duration
@@ -353,6 +357,47 @@ func (r *Request) Validate() error {
 			for _, q := range item.Transaction.Queries {
 				if q.Name == name {
 					return fmt.Errorf("run transaction %d (%s): local %q shadows query name", i, item.Name(), name)
+				}
+			}
+		}
+	}
+
+	// Validate gen() patterns reference known gofakeit functions.
+	{
+		var exprs []string
+		for _, v := range r.Expressions {
+			exprs = append(exprs, v)
+		}
+		for _, row := range r.Rows {
+			exprs = append(exprs, row...)
+		}
+		for _, group := range []struct {
+			name    string
+			queries []*Query
+		}{
+			{"up", r.Up},
+			{"seed", r.Seed},
+			{"deseed", r.Deseed},
+			{"down", r.Down},
+			{"init", r.Init},
+			{"run", runQueries},
+		} {
+			for _, q := range group.queries {
+				exprs = append(exprs, q.Args...)
+			}
+		}
+		for _, item := range r.Run {
+			if item.IsTransaction() {
+				for _, v := range item.Transaction.Locals {
+					exprs = append(exprs, v)
+				}
+			}
+		}
+
+		for _, e := range exprs {
+			for _, m := range genCallRe.FindAllStringSubmatch(e, -1) {
+				if err := gen.ValidatePattern(m[1]); err != nil {
+					return fmt.Errorf("expression %q: %w", e, err)
 				}
 			}
 		}

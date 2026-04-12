@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brianvoe/gofakeit/v7"
 	"github.com/codingconcepts/edg/pkg/convert"
 	"github.com/codingconcepts/edg/pkg/random"
 )
@@ -441,4 +442,14 @@ func GenTimez(minStr, maxStr string) (string, error) {
 		return "", err
 	}
 	return t + "+00:00", nil
+}
+
+// ValidatePattern checks that a gofakeit pattern references a known
+// function. The function name is the part before any ':' separator.
+func ValidatePattern(pattern string) error {
+	name, _, _ := strings.Cut(pattern, ":")
+	if gofakeit.GetFuncLookup(name) == nil {
+		return fmt.Errorf("unknown gofakeit function %q", name)
+	}
+	return nil
 }

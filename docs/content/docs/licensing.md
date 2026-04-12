@@ -23,8 +23,8 @@ Commands that don't connect to a database (`repl`, `validate config`, and bare e
 
 Contact [lic@edg.run](mailto:lic@edg.run) to purchase a license key. A license includes:
 
-- **Licensed drivers** — each license covers one or more enterprise drivers (e.g. Oracle + MSSQL)
-- **Expiry date** — licenses are time-limited and must be renewed before they expire
+- **Licensed drivers** - each license covers one or more enterprise drivers (e.g. Oracle + MSSQL)
+- **Expiry date** - licenses are time-limited and must be renewed before they expire
 
 ## Using a License
 

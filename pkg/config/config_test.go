@@ -542,6 +542,68 @@ func TestCompileLocals_Invalid(t *testing.T) {
 	}
 }
 
+func TestValidate_GenPatternValid(t *testing.T) {
+	req := &Request{
+		Run: []*RunItem{
+			{Query: &Query{Name: "q1", Args: []string{"gen('email')", "gen('number:1,100')"}}},
+		},
+	}
+	if err := req.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_GenPatternInvalid(t *testing.T) {
+	req := &Request{
+		Run: []*RunItem{
+			{Query: &Query{Name: "q1", Args: []string{"gen('notafunction')"}}},
+		},
+	}
+	err := req.Validate()
+	if err == nil {
+		t.Fatal("expected error for invalid gen pattern, got nil")
+	}
+	if !strings.Contains(err.Error(), "notafunction") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_GenPatternInRow(t *testing.T) {
+	req := &Request{
+		Rows: map[string][]string{
+			"user": {"gen('email')", "gen('bogusxyz')"},
+		},
+	}
+	err := req.Validate()
+	if err == nil {
+		t.Fatal("expected error for invalid gen pattern in row, got nil")
+	}
+	if !strings.Contains(err.Error(), "bogusxyz") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_GenPatternInLocals(t *testing.T) {
+	req := &Request{
+		Run: []*RunItem{
+			{Transaction: &Transaction{
+				Name:   "tx",
+				Locals: map[string]string{"amount": "gen('notreal')"},
+				Queries: []*Query{
+					{Name: "q1", Type: QueryTypeExec, Query: "SELECT 1"},
+				},
+			}},
+		},
+	}
+	err := req.Validate()
+	if err == nil {
+		t.Fatal("expected error for invalid gen pattern in locals, got nil")
+	}
+	if !strings.Contains(err.Error(), "notreal") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestLoadConfig_MultipleIncludes(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "shared/globals.yaml", `
