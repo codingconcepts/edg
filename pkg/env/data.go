@@ -35,7 +35,7 @@ func (e *Env) Exec(ctx context.Context, db *sql.DB, q *config.Query, args ...any
 	return nil
 }
 
-func (e *Env) QueryStmt(ctx context.Context, stmt *sql.Stmt, q *config.Query, args ...any) error {
+func (e *Env) QueryPrepared(ctx context.Context, stmt *sql.Stmt, q *config.Query, args ...any) error {
 	rows, err := stmt.QueryContext(ctx, args...)
 	if err != nil {
 		return fmt.Errorf("running prepared statement: %w", err)
@@ -51,7 +51,7 @@ func (e *Env) QueryStmt(ctx context.Context, stmt *sql.Stmt, q *config.Query, ar
 	return nil
 }
 
-func (e *Env) ExecStmt(ctx context.Context, stmt *sql.Stmt, q *config.Query, args ...any) error {
+func (e *Env) ExecPrepared(ctx context.Context, stmt *sql.Stmt, q *config.Query, args ...any) error {
 	_, err := stmt.ExecContext(ctx, args...)
 	if err != nil {
 		return fmt.Errorf("running prepared statement: %w", err)

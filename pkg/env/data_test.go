@@ -193,7 +193,7 @@ func newTestEnv(t *testing.T) *Env {
 	return env
 }
 
-func TestQueryStmt(t *testing.T) {
+func TestQueryPrepared(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("creating sqlmock: %v", err)
@@ -214,20 +214,20 @@ func TestQueryStmt(t *testing.T) {
 	env := newTestEnv(t)
 	q := &config.Query{Name: "users", Query: "SELECT id, name FROM users WHERE id = ?"}
 
-	if err := env.QueryStmt(context.Background(), stmt, q, 1); err != nil {
-		t.Fatalf("QueryStmt error: %v", err)
+	if err := env.QueryPrepared(context.Background(), stmt, q, 1); err != nil {
+		t.Fatalf("QueryPrepared error: %v", err)
 	}
 
 	data, ok := env.env["users"].([]map[string]any)
 	if !ok {
-		t.Fatal("QueryStmt did not store results")
+		t.Fatal("QueryPrepared did not store results")
 	}
 	if len(data) != 1 || data[0]["name"] != "alice" {
 		t.Errorf("got %v, want [{id:1 name:alice}]", data)
 	}
 }
 
-func TestExecStmt(t *testing.T) {
+func TestExecPrepared(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("creating sqlmock: %v", err)
@@ -248,8 +248,8 @@ func TestExecStmt(t *testing.T) {
 	env := newTestEnv(t)
 	q := &config.Query{Name: "insert_user", Query: "INSERT INTO users VALUES (?, ?)"}
 
-	if err := env.ExecStmt(context.Background(), stmt, q, 1, "alice"); err != nil {
-		t.Fatalf("ExecStmt error: %v", err)
+	if err := env.ExecPrepared(context.Background(), stmt, q, 1, "alice"); err != nil {
+		t.Fatalf("ExecPrepared error: %v", err)
 	}
 }
 
