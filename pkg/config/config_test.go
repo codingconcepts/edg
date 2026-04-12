@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -358,6 +359,186 @@ globals: !include nonexistent.yaml
 	_, err := LoadConfig(filepath.Join(dir, "main.yaml"))
 	if err == nil {
 		t.Fatal("expected error for missing include, got nil")
+	}
+}
+
+func TestTransactionParsesRollbackIf(t *testing.T) {
+	input := `
+run:
+  - transaction: make_transfer
+    queries:
+      - name: read_source
+        type: query
+        query: SELECT id, balance FROM account WHERE id = 1
+      - rollback_if: "ref_same('read_source').balance < 100"
+`
+	var req Request
+	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if len(req.Run) != 1 {
+		t.Fatalf("expected 1 run item, got %d", len(req.Run))
+	}
+	if !req.Run[0].IsTransaction() {
+		t.Fatal("expected run item to be a transaction")
+	}
+
+	tx := req.Run[0].Transaction
+	if tx.Name != "make_transfer" {
+		t.Errorf("transaction name = %q, want %q", tx.Name, "make_transfer")
+	}
+	if len(tx.Queries) != 2 {
+		t.Fatalf("expected 2 queries, got %d", len(tx.Queries))
+	}
+	if !tx.Queries[1].IsRollbackIf() {
+		t.Fatal("expected second element to be a rollback_if")
+	}
+	if tx.Queries[1].RollbackIf != "ref_same('read_source').balance < 100" {
+		t.Errorf("rollback_if = %q, want %q", tx.Queries[1].RollbackIf, "ref_same('read_source').balance < 100")
+	}
+}
+
+func TestTransactionParsesWithoutRollbackIf(t *testing.T) {
+	input := `
+run:
+  - transaction: simple
+    queries:
+      - name: q1
+        type: exec
+        query: INSERT INTO t VALUES (1)
+`
+	var req Request
+	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	for _, q := range req.Run[0].Transaction.Queries {
+		if q.IsRollbackIf() {
+			t.Error("unexpected rollback_if element")
+		}
+	}
+}
+
+func TestCompileRollbackIf_Valid(t *testing.T) {
+	q := &Query{RollbackIf: "balance < 100"}
+
+	envMap := map[string]any{"balance": 50}
+	if err := q.CompileRollbackIf(envMap); err != nil {
+		t.Fatalf("CompileRollbackIf failed: %v", err)
+	}
+	if q.CompiledRollbackIf == nil {
+		t.Fatal("CompiledRollbackIf should not be nil")
+	}
+}
+
+func TestCompileRollbackIf_Empty(t *testing.T) {
+	q := &Query{}
+
+	if err := q.CompileRollbackIf(map[string]any{}); err != nil {
+		t.Fatalf("CompileRollbackIf failed: %v", err)
+	}
+	if q.CompiledRollbackIf != nil {
+		t.Fatal("CompiledRollbackIf should be nil when rollback_if is empty")
+	}
+}
+
+func TestCompileRollbackIf_Invalid(t *testing.T) {
+	q := &Query{RollbackIf: "invalid +++"}
+
+	err := q.CompileRollbackIf(map[string]any{})
+	if err == nil {
+		t.Fatal("expected error for invalid expression, got nil")
+	}
+}
+
+func TestCompileRollbackIf_NonBoolReturnsError(t *testing.T) {
+	q := &Query{RollbackIf: "42"}
+
+	err := q.CompileRollbackIf(map[string]any{})
+	if err == nil {
+		t.Fatal("expected error for non-boolean expression, got nil")
+	}
+}
+
+func TestTransactionParsesLocals(t *testing.T) {
+	input := `
+run:
+  - transaction: make_transfer
+    locals:
+      amount: gen('number:1,100')
+      fee: const(5)
+    queries:
+      - name: debit
+        type: exec
+        query: UPDATE account SET balance = balance - 1
+`
+	var req Request
+	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	tx := req.Run[0].Transaction
+	if len(tx.Locals) != 2 {
+		t.Fatalf("expected 2 locals, got %d", len(tx.Locals))
+	}
+	if tx.Locals["amount"] != "gen('number:1,100')" {
+		t.Errorf("locals[amount] = %q, want %q", tx.Locals["amount"], "gen('number:1,100')")
+	}
+	if tx.Locals["fee"] != "const(5)" {
+		t.Errorf("locals[fee] = %q, want %q", tx.Locals["fee"], "const(5)")
+	}
+}
+
+func TestValidate_LocalShadowsQueryName(t *testing.T) {
+	req := &Request{
+		Run: []*RunItem{
+			{Transaction: &Transaction{
+				Name:   "tx",
+				Locals: map[string]string{"debit": "const(1)"},
+				Queries: []*Query{
+					{Name: "debit", Type: QueryTypeExec, Query: "UPDATE t SET x = 1"},
+				},
+			}},
+		},
+	}
+
+	err := req.Validate()
+	if err == nil {
+		t.Fatal("expected error when local shadows query name, got nil")
+	}
+	if !strings.Contains(err.Error(), `local "debit" shadows query name`) {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCompileLocals_Valid(t *testing.T) {
+	envMap := map[string]any{
+		"const": func(v any) any { return v },
+	}
+	tx := &Transaction{
+		Locals: map[string]string{"amount": "const(42)"},
+	}
+
+	if err := tx.CompileLocals(envMap); err != nil {
+		t.Fatalf("CompileLocals failed: %v", err)
+	}
+	if len(tx.CompiledLocals) != 1 {
+		t.Fatalf("expected 1 compiled local, got %d", len(tx.CompiledLocals))
+	}
+	if tx.CompiledLocals["amount"] == nil {
+		t.Fatal("compiled local 'amount' is nil")
+	}
+}
+
+func TestCompileLocals_Invalid(t *testing.T) {
+	tx := &Transaction{
+		Locals: map[string]string{"bad": "invalid +++"},
+	}
+
+	err := tx.CompileLocals(map[string]any{})
+	if err == nil {
+		t.Fatal("expected error for invalid expression, got nil")
 	}
 }
 

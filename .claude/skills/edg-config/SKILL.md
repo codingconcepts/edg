@@ -77,23 +77,38 @@ A complete edg YAML config with all applicable sections:
 - Use `batch(n)` for sequential indices
 
 ### Transactions
-- Group related `run` queries into an explicit `BEGIN/COMMIT` block using the `transaction` key:
+- Group related `run` queries into an explicit `BEGIN/COMMIT` block using the `transaction` key
+- Use `locals` to define transaction-scoped variables evaluated once at transaction start, accessible via `local('name')`:
   ```yaml
   run:
     - transaction: make_transfer
+      locals:
+        amount: gen('number:1,100')
       queries:
         - name: read_source
           type: query
-          args: [ref_rand('fetch_accounts').id]
-          query: SELECT balance FROM accounts WHERE id = $1
+          args: [ref_diff('fetch_accounts').id]
+          query: SELECT id, balance FROM account WHERE id = $1
         - name: debit_source
           type: exec
-          args: [ref_same('fetch_accounts').id, 100]
+          args: [ref_same('read_source').id, local('amount')]
           query: UPDATE accounts SET balance = balance - $2 WHERE id = $1
+        - name: credit_target
+          type: exec
+          args: [ref_same('fetch_accounts').id, local('amount')]
+          query: UPDATE accounts SET balance = balance + $2 WHERE id = $1
   ```
+- Use `rollback_if` elements between queries for conditional early rollback:
+  ```yaml
+  - rollback_if: "ref_same('read_source').balance < local('amount')"
+  ```
+- `rollback_if` must evaluate to a boolean and must not have `name`, `type`, `args`, or `query` fields
+- Local names must not collide with query names in the same transaction
+- Conditional rollbacks are not errors, the worker continues to the next iteration
+- Multiple `rollback_if` elements can be placed at different points in the transaction
 - Batch types (`exec_batch`, `query_batch`) cannot be used inside a transaction
 - `prepared: true` cannot be used inside a transaction
-- Transactions appear in a separate TRANSACTION stats section alongside query stats
+- Transactions appear in a separate TRANSACTION stats section (with COMMITS, ROLLBACKS, ERRORS columns)
 - Use `run_weights` to weight transactions against standalone queries (reference by transaction name)
 
 ### Formatting

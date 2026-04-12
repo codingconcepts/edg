@@ -1296,6 +1296,371 @@ func TestRunSection_PreparedTranslatesPlaceholders(t *testing.T) {
 	}
 }
 
+func TestRunTransaction_RollbackIfTrue(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "balance"}).AddRow(1, 50),
+	)
+	mock.ExpectRollback()
+
+	results := make(chan config.QueryResult, 10)
+	env := &Env{
+		db:        db,
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{},
+		request:   &config.Request{},
+		Results:   results,
+	}
+
+	env.env["ref_same"] = env.refSame
+
+	rollbackCheck := &config.Query{RollbackIf: "ref_same('read_source').balance < 100"}
+	if err := rollbackCheck.CompileRollbackIf(env.env); err != nil {
+		t.Fatalf("CompileRollbackIf failed: %v", err)
+	}
+
+	tx := &config.Transaction{
+		Name: "test_tx",
+		Queries: []*config.Query{
+			{Name: "read_source", Type: config.QueryTypeQuery, Query: "SELECT id, balance FROM account WHERE id = 1"},
+			rollbackCheck,
+		},
+	}
+
+	err = env.runTransaction(context.Background(), tx)
+	if err != nil {
+		t.Fatalf("runTransaction returned error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+
+	// Check result was reported as a rollback.
+	close(results)
+	var gotRollback bool
+	for r := range results {
+		if r.IsTransaction && r.Name == "test_tx" {
+			gotRollback = r.Rollback
+		}
+	}
+	if !gotRollback {
+		t.Error("expected result with Rollback=true")
+	}
+}
+
+func TestRunTransaction_RollbackIfFalse(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "balance"}).AddRow(1, 500),
+	)
+	mock.ExpectCommit()
+
+	results := make(chan config.QueryResult, 10)
+	env := &Env{
+		db:        db,
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{},
+		request:   &config.Request{},
+		Results:   results,
+	}
+
+	env.env["ref_same"] = env.refSame
+
+	rollbackCheck := &config.Query{RollbackIf: "ref_same('read_source').balance < 100"}
+	if err := rollbackCheck.CompileRollbackIf(env.env); err != nil {
+		t.Fatalf("CompileRollbackIf failed: %v", err)
+	}
+
+	tx := &config.Transaction{
+		Name: "test_tx",
+		Queries: []*config.Query{
+			{Name: "read_source", Type: config.QueryTypeQuery, Query: "SELECT id, balance FROM account WHERE id = 1"},
+			rollbackCheck,
+		},
+	}
+
+	err = env.runTransaction(context.Background(), tx)
+	if err != nil {
+		t.Fatalf("runTransaction returned error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+
+	// Check result was NOT a rollback.
+	close(results)
+	for r := range results {
+		if r.IsTransaction && r.Name == "test_tx" && r.Rollback {
+			t.Error("expected result with Rollback=false, got true")
+		}
+	}
+}
+
+func TestRunTransaction_NoRollbackIf(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT").WillReturnResult(driver.ResultNoRows)
+	mock.ExpectCommit()
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{},
+		request:   &config.Request{},
+	}
+
+	tx := &config.Transaction{
+		Name: "simple_tx",
+		Queries: []*config.Query{
+			{Name: "insert", Type: config.QueryTypeExec, Query: "INSERT INTO t VALUES (1)"},
+		},
+	}
+
+	if err := env.runTransaction(context.Background(), tx); err != nil {
+		t.Fatalf("runTransaction error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestNewEnv_CompilesTransactionRollbackIf(t *testing.T) {
+	req := &config.Request{
+		Globals: map[string]any{"threshold": 100},
+		Run: []*config.RunItem{
+			{Transaction: &config.Transaction{
+				Name: "test_tx",
+				Queries: []*config.Query{
+					{Name: "q1", Type: config.QueryTypeExec, Query: "INSERT INTO t VALUES (1)"},
+					{RollbackIf: "threshold > 50"},
+				},
+			}},
+		},
+	}
+
+	env, err := NewEnv(nil, "", req)
+	if err != nil {
+		t.Fatalf("NewEnv failed: %v", err)
+	}
+
+	rollbackQ := env.request.Run[0].Transaction.Queries[1]
+	if rollbackQ.CompiledRollbackIf == nil {
+		t.Fatal("expected CompiledRollbackIf to be set")
+	}
+}
+
+func TestNewEnv_InvalidTransactionRollbackIf(t *testing.T) {
+	req := &config.Request{
+		Run: []*config.RunItem{
+			{Transaction: &config.Transaction{
+				Name: "bad_tx",
+				Queries: []*config.Query{
+					{Name: "q1", Type: config.QueryTypeExec, Query: "INSERT INTO t VALUES (1)"},
+					{RollbackIf: "invalid +++"},
+				},
+			}},
+		},
+	}
+
+	_, err := NewEnv(nil, "", req)
+	if err == nil {
+		t.Fatal("expected error for invalid rollback_if, got nil")
+	}
+}
+
+func TestLocal_ReturnsValue(t *testing.T) {
+	env := testEnv(nil)
+	env.txLocals = map[string]any{"amount": 42}
+
+	got, err := env.local("amount")
+	if err != nil {
+		t.Fatalf("local() error: %v", err)
+	}
+	if got != 42 {
+		t.Errorf("local('amount') = %v, want 42", got)
+	}
+}
+
+func TestLocal_NotInTransaction(t *testing.T) {
+	env := testEnv(nil)
+
+	_, err := env.local("amount")
+	if err == nil {
+		t.Fatal("expected error when not in transaction, got nil")
+	}
+	if !strings.Contains(err.Error(), "not inside a transaction") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestLocal_Undefined(t *testing.T) {
+	env := testEnv(nil)
+	env.txLocals = map[string]any{}
+
+	_, err := env.local("missing")
+	if err == nil {
+		t.Fatal("expected error for undefined local, got nil")
+	}
+	if !strings.Contains(err.Error(), "not defined") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestEvalLocals(t *testing.T) {
+	env := testEnv(nil)
+	env.env["const"] = convert.Constant
+
+	tx := &config.Transaction{
+		Name:   "test_tx",
+		Locals: map[string]string{"amount": "const(99)"},
+	}
+	if err := tx.CompileLocals(env.env); err != nil {
+		t.Fatalf("CompileLocals failed: %v", err)
+	}
+
+	if err := env.evalLocals(tx); err != nil {
+		t.Fatalf("evalLocals failed: %v", err)
+	}
+
+	if env.txLocals["amount"] != 99 {
+		t.Errorf("txLocals[amount] = %v, want 99", env.txLocals["amount"])
+	}
+}
+
+func TestClearLocals(t *testing.T) {
+	env := testEnv(nil)
+	env.txLocals = map[string]any{"amount": 42}
+
+	env.clearLocals()
+
+	if env.txLocals != nil {
+		t.Error("clearLocals did not nil out txLocals")
+	}
+}
+
+func TestNewEnv_CompilesTransactionLocals(t *testing.T) {
+	req := &config.Request{
+		Globals: map[string]any{"fee": 5},
+		Run: []*config.RunItem{
+			{Transaction: &config.Transaction{
+				Name:   "test_tx",
+				Locals: map[string]string{"amount": "fee * 2"},
+				Queries: []*config.Query{
+					{Name: "q1", Type: config.QueryTypeExec, Query: "INSERT INTO t VALUES (1)"},
+				},
+			}},
+		},
+	}
+
+	_, err := NewEnv(nil, "", req)
+	if err != nil {
+		t.Fatalf("NewEnv failed: %v", err)
+	}
+
+	tx := req.Run[0].Transaction
+	if len(tx.CompiledLocals) != 1 {
+		t.Fatalf("expected 1 compiled local, got %d", len(tx.CompiledLocals))
+	}
+	if tx.CompiledLocals["amount"] == nil {
+		t.Fatal("compiled local 'amount' is nil")
+	}
+}
+
+func TestNewEnv_InvalidTransactionLocal(t *testing.T) {
+	req := &config.Request{
+		Run: []*config.RunItem{
+			{Transaction: &config.Transaction{
+				Name:   "bad_tx",
+				Locals: map[string]string{"bad": "invalid +++"},
+				Queries: []*config.Query{
+					{Name: "q1", Type: config.QueryTypeExec, Query: "INSERT INTO t VALUES (1)"},
+				},
+			}},
+		},
+	}
+
+	_, err := NewEnv(nil, "", req)
+	if err == nil {
+		t.Fatal("expected error for invalid local expression, got nil")
+	}
+}
+
+func TestRunTransaction_WithLocals(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("creating sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT").WillReturnResult(driver.ResultNoRows)
+	mock.ExpectCommit()
+
+	results := make(chan config.QueryResult, 10)
+	env := &Env{
+		db:        db,
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{"const": convert.Constant},
+		request:   &config.Request{},
+		Results:   results,
+	}
+	env.env["local"] = env.local
+
+	q := &config.Query{
+		Name:  "insert",
+		Type:  config.QueryTypeExec,
+		Query: "INSERT INTO t VALUES ($1)",
+		Args:  []string{"local('amount')"},
+	}
+	if err := q.CompileArgs(env.env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	tx := &config.Transaction{
+		Name:    "test_tx",
+		Locals:  map[string]string{"amount": "const(77)"},
+		Queries: []*config.Query{q},
+	}
+	if err := tx.CompileLocals(env.env); err != nil {
+		t.Fatalf("CompileLocals failed: %v", err)
+	}
+
+	if err := env.runTransaction(context.Background(), tx); err != nil {
+		t.Fatalf("runTransaction error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+
+	// Verify locals were cleared after transaction.
+	if env.txLocals != nil {
+		t.Error("txLocals not cleared after transaction")
+	}
+}
+
 func BenchmarkPickWeighted(b *testing.B) {
 	cases := []struct {
 		name  string

@@ -88,6 +88,8 @@ run:
       SELECT balance FROM account WHERE id = $1::UUID
 
   - transaction: make_transfer
+    locals:
+      amount: gen('number:1,100')
     queries:
       - name: read_source
         type: query
@@ -95,6 +97,8 @@ run:
           - ref_diff('fetch_accounts').id
         query: |-
           SELECT id, balance FROM account WHERE id = $1::UUID
+
+      - rollback_if: "ref_same('read_source').balance < local('amount')"
 
       - name: read_target
         type: query
@@ -107,7 +111,7 @@ run:
         type: exec
         args:
           - ref_same('read_source').id
-          - gen('number:1,100')
+          - local('amount')
         query: |-
           UPDATE account SET balance = balance - $2::FLOAT
           WHERE id = $1::UUID
@@ -116,7 +120,7 @@ run:
         type: exec
         args:
           - ref_same('read_target').id
-          - gen('number:1,100')
+          - local('amount')
         query: |-
           UPDATE account SET balance = balance + $2::FLOAT
           WHERE id = $1::UUID

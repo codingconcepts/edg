@@ -3,6 +3,7 @@ package env
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -19,6 +20,11 @@ import (
 
 	"github.com/expr-lang/expr"
 )
+
+// ErrConditionalRollback is returned when a transaction's rollback_if
+// condition evaluates to true. It triggers a rollback without being
+// treated as an error.
+var ErrConditionalRollback = errors.New("conditional rollback")
 
 type Env struct {
 	db      *sql.DB
@@ -46,6 +52,8 @@ type Env struct {
 	seqCounter int64
 
 	computedArgs []any
+
+	txLocals map[string]any
 
 	stmtCache map[*config.Query]*sql.Stmt
 
@@ -91,6 +99,7 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		"gen_batch":         gen.GenBatch,        // Generate N values in batches, returns [][]any of comma-separated strings.
 		"gen":               gen.Gen,             // Generate a random value using gofakeit.
 		"global":            env.global,          // Use a value in the global config section.
+		"local":             env.local,           // Use a transaction-scoped local variable.
 		"inet":              gen.GenInet,         // Random IP address within a CIDR block.
 		"json_arr":          gen.JsonArr,         // Build a JSON array of N random values.
 		"json_obj":          gen.JsonObj,         // Build a JSON object from key-value pairs.
@@ -208,6 +217,12 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		{"run", runQueries},
 	} {
 		for i, query := range group.queries {
+			if query.IsRollbackIf() {
+				if err := query.CompileRollbackIf(env.env); err != nil {
+					return nil, fmt.Errorf("failed to compile %s rollback_if %d: %w", group.name, i, err)
+				}
+				continue
+			}
 			switch query.Type {
 			case config.QueryTypeQuery, config.QueryTypeExec, config.QueryTypeQueryBatch, config.QueryTypeExecBatch, "":
 			default:
@@ -215,6 +230,15 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 			}
 			if err := query.CompileArgs(env.env); err != nil {
 				return nil, fmt.Errorf("failed to compile %s query %d: %w", group.name, i, err)
+			}
+		}
+	}
+
+	// Compile transaction locals.
+	for _, item := range r.Run {
+		if item.Transaction != nil && len(item.Transaction.Locals) > 0 {
+			if err := item.Transaction.CompileLocals(env.env); err != nil {
+				return nil, fmt.Errorf("transaction %s: %w", item.Transaction.Name, err)
 			}
 		}
 	}
@@ -650,6 +674,9 @@ func (e *Env) runRunItems(ctx context.Context, items []*config.RunItem) error {
 
 // runTransaction wraps the queries of a Transaction in an explicit
 // BEGIN/COMMIT block. On error the transaction is rolled back.
+// When a rollback_if condition is set, it is evaluated after each
+// query; if it returns true the transaction is rolled back without
+// being treated as an error.
 func (e *Env) runTransaction(ctx context.Context, tx *config.Transaction) error {
 	start := time.Now()
 
@@ -660,8 +687,21 @@ func (e *Env) runTransaction(ctx context.Context, tx *config.Transaction) error 
 		return err
 	}
 
-	if err := e.runSection(ctx, tx.Queries, config.ConfigSectionRun, dbTx); err != nil {
+	if len(tx.CompiledLocals) > 0 {
+		if err := e.evalLocals(tx); err != nil {
+			_ = dbTx.Rollback()
+			e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Err: err, IsTransaction: true})
+			return err
+		}
+		defer e.clearLocals()
+	}
+
+	if err := e.runTransactionQueries(ctx, tx, dbTx); err != nil {
 		_ = dbTx.Rollback()
+		if errors.Is(err, ErrConditionalRollback) {
+			e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Latency: time.Since(start), Count: 1, IsTransaction: true, Rollback: true})
+			return nil
+		}
 		e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Err: err, IsTransaction: true})
 		return err
 	}
@@ -673,6 +713,29 @@ func (e *Env) runTransaction(ctx context.Context, tx *config.Transaction) error 
 	}
 
 	e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Latency: time.Since(start), Count: 1, IsTransaction: true})
+	return nil
+}
+
+// runTransactionQueries executes each query in the transaction.
+// When a rollback_if element is encountered, its condition is
+// evaluated; if true, ErrConditionalRollback is returned.
+func (e *Env) runTransactionQueries(ctx context.Context, tx *config.Transaction, dbTx *sql.Tx) error {
+	for _, q := range tx.Queries {
+		if q.IsRollbackIf() {
+			result, err := expr.Run(q.CompiledRollbackIf, e.env)
+			if err != nil {
+				return fmt.Errorf("evaluating rollback_if in transaction %s: %w", tx.Name, err)
+			}
+			if b, ok := result.(bool); ok && b {
+				return ErrConditionalRollback
+			}
+			continue
+		}
+
+		if err := e.runSection(ctx, []*config.Query{q}, config.ConfigSectionRun, dbTx); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -728,6 +791,35 @@ func (e *Env) arg(index int) (any, error) {
 		return nil, fmt.Errorf("arg(%d): index out of range (%d args computed so far)", index, len(e.computedArgs))
 	}
 	return e.computedArgs[index], nil
+}
+
+func (e *Env) local(name string) (any, error) {
+	if e.txLocals == nil {
+		return nil, fmt.Errorf("local(%q): not inside a transaction", name)
+	}
+	v, ok := e.txLocals[name]
+	if !ok {
+		return nil, fmt.Errorf("local(%q): not defined", name)
+	}
+	return v, nil
+}
+
+// evalLocals evaluates all compiled locals for a transaction and
+// stores the results in txLocals for access via local().
+func (e *Env) evalLocals(tx *config.Transaction) error {
+	e.txLocals = make(map[string]any, len(tx.CompiledLocals))
+	for name, p := range tx.CompiledLocals {
+		result, err := expr.Run(p, e.env)
+		if err != nil {
+			return fmt.Errorf("evaluating local %q in transaction %s: %w", name, tx.Name, err)
+		}
+		e.txLocals[name] = result
+	}
+	return nil
+}
+
+func (e *Env) clearLocals() {
+	e.txLocals = nil
 }
 
 func (e *Env) SetEnv(name string, data []map[string]any) {

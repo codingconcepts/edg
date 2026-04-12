@@ -77,6 +77,7 @@ type QueryResult struct {
 	Err           error
 	Count         int
 	IsTransaction bool
+	Rollback      bool
 }
 
 type Query struct {
@@ -90,17 +91,56 @@ type Query struct {
 	Row          string        `json:"row" yaml:"row"`
 	Args         []string      `json:"args" yaml:"args"`
 	BatchFormat  string        `json:"batch_format" yaml:"batch_format"`
+	RollbackIf   string        `json:"rollback_if" yaml:"rollback_if"`
 	CompiledArgs []*vm.Program `json:"-" yaml:"-"`
 
-	CompiledCount *vm.Program `json:"-" yaml:"-"`
-	CompiledSize  *vm.Program `json:"-" yaml:"-"`
+	CompiledCount      *vm.Program `json:"-" yaml:"-"`
+	CompiledSize       *vm.Program `json:"-" yaml:"-"`
+	CompiledRollbackIf *vm.Program `json:"-" yaml:"-"`
+}
+
+// IsRollbackIf returns true when this query element is a rollback_if
+// condition check rather than a database query.
+func (q *Query) IsRollbackIf() bool {
+	return q.RollbackIf != ""
+}
+
+// CompileRollbackIf compiles the rollback_if expression (if set)
+// against the given environment map.
+func (q *Query) CompileRollbackIf(envMap map[string]any) error {
+	if q.RollbackIf == "" {
+		return nil
+	}
+	p, err := expr.Compile(q.RollbackIf, expr.Env(envMap), expr.AsBool())
+	if err != nil {
+		return fmt.Errorf("failed to compile rollback_if (%s): %w", q.RollbackIf, err)
+	}
+	q.CompiledRollbackIf = p
+	return nil
 }
 
 // Transaction groups multiple queries to run inside an explicit
 // BEGIN/COMMIT block.
 type Transaction struct {
-	Name    string   `json:"name" yaml:"transaction"`
-	Queries []*Query `json:"queries" yaml:"queries"`
+	Name    string            `json:"name" yaml:"transaction"`
+	Locals  map[string]string `json:"locals" yaml:"locals"`
+	Queries []*Query          `json:"queries" yaml:"queries"`
+
+	CompiledLocals map[string]*vm.Program `json:"-" yaml:"-"`
+}
+
+// CompileLocals compiles each locals expression against the given
+// environment map.
+func (tx *Transaction) CompileLocals(envMap map[string]any) error {
+	tx.CompiledLocals = make(map[string]*vm.Program, len(tx.Locals))
+	for name, body := range tx.Locals {
+		p, err := expr.Compile(body, expr.Env(envMap))
+		if err != nil {
+			return fmt.Errorf("failed to compile local %q (%s): %w", name, body, err)
+		}
+		tx.CompiledLocals[name] = p
+	}
+	return nil
 }
 
 // RunItem represents a single entry in the run section: either a
@@ -294,11 +334,26 @@ func (r *Request) Validate() error {
 			return fmt.Errorf("run transaction %d (%s): must contain at least one query", i, item.Name())
 		}
 		for j, q := range item.Transaction.Queries {
+			if q.IsRollbackIf() {
+				if q.Query != "" || q.Name != "" || q.Type != "" || len(q.Args) > 0 {
+					return fmt.Errorf("run transaction %d (%s): rollback_if element %d must not have name, type, args, or query", i, item.Name(), j)
+				}
+				continue
+			}
 			if q.IsBatch() {
 				return fmt.Errorf("run transaction %d (%s): query %d (%s) cannot be a batch type inside a transaction", i, item.Name(), j, q.Name)
 			}
 			if q.Prepared {
 				return fmt.Errorf("run transaction %d (%s): query %d (%s) cannot use prepared statements inside a transaction", i, item.Name(), j, q.Name)
+			}
+		}
+
+		// Locals names must not collide with query names in the same transaction.
+		for name := range item.Transaction.Locals {
+			for _, q := range item.Transaction.Queries {
+				if q.Name == name {
+					return fmt.Errorf("run transaction %d (%s): local %q shadows query name", i, item.Name(), name)
+				}
 			}
 		}
 	}

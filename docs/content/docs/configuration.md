@@ -398,6 +398,8 @@ The `run` section supports grouping multiple queries into an explicit database t
 ```yaml
 run:
   - transaction: make_transfer
+    locals:
+      amount: gen('number:1,100')
     queries:
       - name: read_source
         type: query
@@ -415,21 +417,26 @@ run:
         type: exec
         args:
           - ref_same('read_source').id
-          - gen('number:1,100')
+          - local('amount')
         query: UPDATE account SET balance = balance - $2::FLOAT WHERE id = $1::UUID
 
       - name: credit_target
         type: exec
         args:
           - ref_same('read_target').id
-          - gen('number:1,100')
+          - local('amount')
         query: UPDATE account SET balance = balance + $2::FLOAT WHERE id = $1::UUID
 ```
+
+The `locals` map defines transaction-scoped variables. Each expression is evaluated once when the transaction begins, and the result is available to all queries via `local('name')`. This ensures the same value is used consistently across multiple queries. For example, the same transfer amount for both the debit and credit.
+
+Local names must not collide with query names in the same transaction.
 
 Transactions and standalone queries can coexist in the same `run` section:
 
 ```yaml
 run:
+
   - name: check_balance
     type: query
     args:
@@ -437,17 +444,34 @@ run:
     query: SELECT balance FROM account WHERE id = $1::UUID
 
   - transaction: make_transfer
+    locals:
+      amount: gen('number:1,100')
     queries:
-      - name: read_balance
+      - name: read_source
         type: query
-        args: [ref_diff('fetch_accounts').id]
+        args:
+          - ref_diff('fetch_accounts').id
         query: SELECT id, balance FROM account WHERE id = $1::UUID
-      - name: update_balance
+
+      - name: read_target
+        type: query
+        args:
+          - ref_diff('fetch_accounts').id
+        query: SELECT id, balance FROM account WHERE id = $1::UUID
+
+      - name: debit_source
         type: exec
         args:
-          - ref_same('read_balance').id
-          - gen('number:1,100')
+          - ref_same('read_source').id
+          - local('amount')
         query: UPDATE account SET balance = balance - $2::FLOAT WHERE id = $1::UUID
+
+      - name: credit_target
+        type: exec
+        args:
+          - ref_same('read_target').id
+          - local('amount')
+        query: UPDATE account SET balance = balance + $2::FLOAT WHERE id = $1::UUID
 ```
 
 #### When to use transactions
@@ -460,16 +484,53 @@ Use transactions when your workload needs **read-then-write patterns** or **mult
 
 Use standalone queries when each operation is independent and doesn't need transactional guarantees.
 
+#### Conditional rollback
+
+A `rollback_if` element can be placed between queries in a transaction. When reached, its expression is evaluated; if it returns `true`, the transaction is rolled back immediately. This is not treated as an error, the worker continues to the next iteration.
+
+```yaml
+run:
+
+  - name: check_balance
+    type: query
+    args:
+      - ref_rand('fetch_accounts').id
+    query: SELECT balance FROM account WHERE id = $1::UUID
+
+  - transaction: make_transfer
+    locals:
+      amount: gen('number:1,100')
+    queries:
+      - name: read_source
+        type: query
+        args: [ref_diff('fetch_accounts').id]
+        query: SELECT id, balance FROM account WHERE id = $1::UUID
+
+      - rollback_if: "ref_same('read_source').balance < local('amount')"
+
+      - name: debit_source
+        type: exec
+        args:
+          - ref_same('read_source').id
+          - local('amount')
+        query: UPDATE account SET balance = balance - $2::FLOAT WHERE id = $1::UUID
+```
+
+In this example, the transfer `amount` is generated once as a local. After `read_source` runs, the condition checks whether the account balance can cover the transfer amount. If not, the transaction rolls back before `debit_source` executes. Multiple `rollback_if` elements can be placed at different points in the transaction to check different conditions.
+
+The expression has access to all data in the environment, including results from queries that have already run within the transaction. A `rollback_if` element must not have `name`, `type`, `args`, or `query` fields.
+
 #### Constraints
 
 - **Batch types not allowed**: `query_batch` and `exec_batch` cannot be used inside a transaction.
 - **Prepared statements not allowed**: Queries inside a transaction cannot set `prepared: true`.
 - A transaction must contain at least one query.
 - Transaction names and standalone query names share the same namespace for `run_weights`.
+- The `rollback_if` expression must evaluate to a boolean.
 
 #### Error handling
 
-If any query inside a transaction fails, the transaction is rolled back. During the `run` phase, the error is logged and the worker continues to the next iteration (same as standalone query errors).
+If any query inside a transaction fails, the transaction is rolled back. During the `run` phase, the error is logged and the worker continues to the next iteration (same as standalone query errors). Conditional rollbacks (via `rollback_if`) are not errors and do not appear in the error rate.
 
 ### Wait
 
@@ -543,6 +604,8 @@ run:
     query: SELECT balance FROM account WHERE id = $1::UUID
 
   - transaction: make_transfer
+    locals:
+      amount: gen('number:1,100')
     queries:
       - name: read_balance
         type: query
@@ -552,7 +615,7 @@ run:
         type: exec
         args:
           - ref_same('read_balance').id
-          - gen('number:1,100')
+          - local('amount')
         query: UPDATE account SET balance = balance - $2::FLOAT WHERE id = $1::UUID
 ```
 

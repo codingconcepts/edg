@@ -16,6 +16,12 @@ func Gen(s string) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gen(%q): %w", s, err)
 	}
+	// gofakeit always returns strings. Try to return typed values so
+	// expressions (e.g. rollback_if comparisons) get correct types.
+	var typed any
+	if json.Unmarshal([]byte(val), &typed) == nil {
+		return typed, nil
+	}
 	return val, nil
 }
 

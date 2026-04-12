@@ -140,36 +140,36 @@ During the run, progress is printed at the `--print-interval` (default: every se
 ```
 59s / 1m0s
 QUERY          COUNT  ERRORS  AVG      p50      p95      p99      QPS
-check_balance  3907   0       2.545ms  2.326ms  3.991ms  6.314ms  66.2
-credit_target  3914   0       1.625ms  1.482ms  2.423ms  3.823ms  66.3
-debit_source   3914   0       2.25ms   2.1ms    3.468ms  5.036ms  66.3
-read_source    3915   0       1.976ms  1.792ms  3.031ms  4.452ms  66.4
-read_target    3914   0       2.721ms  2.511ms  4.164ms  6.507ms  66.3
+check_balance  3674   0       2.631ms  2.367ms  4.154ms  6.252ms  62.3
+credit_target  3769   0       1.68ms   1.495ms  2.624ms  3.911ms  63.9
+debit_source   3769   0       2.376ms  2.13ms   3.722ms  5.288ms  63.9
+read_source    3770   0       2.047ms  1.803ms  3.254ms  5.052ms  63.9
+read_target    3769   0       2.839ms  2.579ms  4.486ms  6.446ms  63.9
 
-TRANSACTION    COUNT  ERRORS  AVG       p50       p95       p99       TPS
-make_transfer  3914   0       12.498ms  11.856ms  17.479ms  24.829ms  66.3
+TRANSACTION    COMMITS  ROLLBACKS  ERRORS  AVG       p50       p95       p99       TPS
+make_transfer  3769     0          0       13.053ms  12.424ms  18.498ms  26.074ms  63.9
 ```
 
 After all workers complete, a final summary is printed:
 
 ```
 summary
-Duration:  1m0.003s
+Duration:  1m0.004s
 Workers:   1
 
 QUERY          COUNT  ERRORS  AVG      p50      p95      p99      QPS
-check_balance  3978   0       2.55ms   2.329ms  3.993ms  6.335ms  66.3
-credit_target  3976   0       1.628ms  1.484ms  2.429ms  3.892ms  66.3
-debit_source   3976   0       2.251ms  2.101ms  3.468ms  5.036ms  66.3
-read_source    3976   0       1.978ms  1.793ms  3.062ms  4.502ms  66.3
-read_target    3976   0       2.724ms  2.512ms  4.189ms  6.531ms  66.3
+check_balance  3749   0       2.628ms  2.362ms  4.14ms   6.249ms  62.5
+credit_target  3828   0       1.681ms  1.497ms  2.624ms  3.911ms  63.8
+debit_source   3828   1       2.381ms  2.13ms   3.724ms  5.338ms  63.8
+read_source    3829   0       2.046ms  1.802ms  3.25ms   5.052ms  63.8
+read_target    3829   0       2.843ms  2.583ms  4.485ms  6.446ms  63.8
 
-TRANSACTION    COUNT  ERRORS  AVG       p50       p95       p99       TPS
-make_transfer  3975   1       12.504ms  11.871ms  17.523ms  24.829ms  66.2
+TRANSACTION    COMMITS  ROLLBACKS  ERRORS  AVG       p50       p95       p99       TPS
+make_transfer  3828     0          1       13.063ms  12.438ms  18.498ms  26.652ms  63.8
 
-Transactions:  19882
-Errors:        0
-tpm:           19881.0
+Transactions:  19063
+Errors:        1
+tpm:           19061.6
 ```
 
 | Metric | Description |

@@ -13,6 +13,8 @@ import (
 type queryStats struct {
 	count         int64
 	errors        int64
+	commits       int64
+	rollbacks     int64
 	totalLatency  time.Duration
 	latencies     []time.Duration
 	isTransaction bool
@@ -44,6 +46,13 @@ func printResults(results <-chan config.QueryResult, interval time.Duration, sta
 				s.count += int64(r.Count)
 				s.totalLatency += r.Latency
 				s.latencies = append(s.latencies, r.Latency)
+				if r.IsTransaction && r.Err == nil {
+					if r.Rollback {
+						s.rollbacks++
+					} else {
+						s.commits++
+					}
+				}
 			}
 		case <-ticker.C:
 			printProgress(stats, start, totalDuration)
@@ -84,7 +93,7 @@ func printProgress(stats map[string]*queryStats, start time.Time, totalDuration 
 			qps)
 	}
 	if len(txNames) > 0 {
-		fmt.Fprintf(w, "\nTRANSACTION\tCOUNT\tERRORS\tAVG\tp50\tp95\tp99\tTPS\n")
+		fmt.Fprintf(w, "\nTRANSACTION\tCOMMITS\tROLLBACKS\tERRORS\tAVG\tp50\tp95\tp99\tTPS\n")
 		for _, name := range txNames {
 			s := stats[name]
 			var avg time.Duration
@@ -93,7 +102,7 @@ func printProgress(stats map[string]*queryStats, start time.Time, totalDuration 
 			}
 			p50, p95, p99 := percentiles(s.latencies)
 			tps := float64(s.count) / elapsed.Seconds()
-			fmt.Fprintf(w, "%s\t%d\t%d\t%s\t%s\t%s\t%s\t%.1f\n", name, s.count, s.errors,
+			fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%s\t%s\t%s\t%s\t%.1f\n", name, s.commits, s.rollbacks, s.errors,
 				avg.Round(time.Microsecond),
 				p50.Round(time.Microsecond),
 				p95.Round(time.Microsecond),
@@ -147,7 +156,7 @@ func printSummary(stats map[string]*queryStats, start time.Time, numWorkers int)
 			qps)
 	}
 	if len(txNames) > 0 {
-		fmt.Fprintf(w, "\nTRANSACTION\tCOUNT\tERRORS\tAVG\tp50\tp95\tp99\tTPS\n")
+		fmt.Fprintf(w, "\nTRANSACTION\tCOMMITS\tROLLBACKS\tERRORS\tAVG\tp50\tp95\tp99\tTPS\n")
 		for _, name := range txNames {
 			s := stats[name]
 			var avg time.Duration
@@ -156,7 +165,7 @@ func printSummary(stats map[string]*queryStats, start time.Time, numWorkers int)
 			}
 			p50, p95, p99 := percentiles(s.latencies)
 			tps := float64(s.count) / elapsed.Seconds()
-			fmt.Fprintf(w, "%s\t%d\t%d\t%s\t%s\t%s\t%s\t%.1f\n", name, s.count, s.errors,
+			fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%s\t%s\t%s\t%s\t%.1f\n", name, s.commits, s.rollbacks, s.errors,
 				avg.Round(time.Microsecond),
 				p50.Round(time.Microsecond),
 				p95.Round(time.Microsecond),
