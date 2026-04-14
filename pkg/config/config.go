@@ -366,56 +366,61 @@ func (r *Request) Validate() error {
 		}
 	}
 
-	// Walk the config and collect expressions.
-	{
-		var exprs []string
-		for _, v := range r.Expressions {
-			exprs = append(exprs, v)
-		}
-		for _, row := range r.Rows {
-			exprs = append(exprs, row...)
-		}
-		for _, group := range []struct {
-			name    string
-			queries []*Query
-		}{
-			{"up", r.Up},
-			{"seed", r.Seed},
-			{"deseed", r.Deseed},
-			{"down", r.Down},
-			{"init", r.Init},
-			{"run", runQueries},
-		} {
-			for _, q := range group.queries {
-				exprs = append(exprs, q.Args...)
+	// Walk the config and validate gen(...) and env(...) expressions inline.
+	validateExpr := func(e string) error {
+		for _, m := range genCallRe.FindAllStringSubmatch(e, -1) {
+			if err := gen.ValidatePattern(m[1]); err != nil {
+				return fmt.Errorf("expression %q: %w", e, err)
 			}
 		}
-		for _, item := range r.Run {
-			if item.IsTransaction() {
-				for _, v := range item.Transaction.Locals {
-					exprs = append(exprs, v)
-				}
+		for _, m := range envCallRe.FindAllStringSubmatch(e, -1) {
+			name := m[1]
+			if name == "" {
+				name = m[2]
+			}
+			if _, ok := os.LookupEnv(name); !ok {
+				return fmt.Errorf("missing environment variable: %q", name)
 			}
 		}
+		return nil
+	}
 
-		// Validate gen(...) expressions.
-		for _, e := range exprs {
-			for _, m := range genCallRe.FindAllStringSubmatch(e, -1) {
-				if err := gen.ValidatePattern(m[1]); err != nil {
-					return fmt.Errorf("expression %q: %w", e, err)
+	for _, v := range r.Expressions {
+		if err := validateExpr(v); err != nil {
+			return err
+		}
+	}
+	for _, row := range r.Rows {
+		for _, v := range row {
+			if err := validateExpr(v); err != nil {
+				return err
+			}
+		}
+	}
+	for _, group := range []struct {
+		name    string
+		queries []*Query
+	}{
+		{"up", r.Up},
+		{"seed", r.Seed},
+		{"deseed", r.Deseed},
+		{"down", r.Down},
+		{"init", r.Init},
+		{"run", runQueries},
+	} {
+		for _, q := range group.queries {
+			for _, arg := range q.Args {
+				if err := validateExpr(arg); err != nil {
+					return err
 				}
 			}
 		}
-
-		// Validate env(...) expressions.
-		for _, e := range exprs {
-			for _, m := range envCallRe.FindAllStringSubmatch(e, -1) {
-				name := m[1]
-				if name == "" {
-					name = m[2]
-				}
-				if _, ok := os.LookupEnv(name); !ok {
-					return fmt.Errorf("missing environment variable: %q", name)
+	}
+	for _, item := range r.Run {
+		if item.IsTransaction() {
+			for _, v := range item.Transaction.Locals {
+				if err := validateExpr(v); err != nil {
+					return err
 				}
 			}
 		}

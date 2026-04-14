@@ -40,11 +40,8 @@ View the docs [here](https://edg.run/docs).
 ## Todos
 
 * Instead of chr(31) create a function (preferably without parens) called "separator" or "sep"
-* Move the duplicate expression check in config.go into the walk part to save repeating the read
 * Switch to assert in tests
 * Switch to comparing actual errors, not just wantErr
-* Validate env(...) before running
-* Is gen(company) broken for batches? " Inc."
 * Cleanup things like Global tests being in rand_test.go
 * Collapse multiple tests into table-driven tests where possible
 * Consolidate pkg/config/config_test.go and pkg/env/config_test.go
