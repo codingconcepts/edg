@@ -202,7 +202,7 @@ seed:
     query: |-
       INSERT INTO test_gen_batch (email)
       SELECT column_value
-      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))
+      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"'))
 
   - name: seed_batch
     type: exec

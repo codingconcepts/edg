@@ -55,7 +55,7 @@ seed:
       - gen_batch(customers, batch_size, 'email')
     query: |-
       INSERT INTO customer (email)
-      SELECT unnest(string_to_array('$1', ','))
+      SELECT unnest(string_to_array('$1', chr(31)))
 
   - name: populate_account
     args:
@@ -201,7 +201,7 @@ seed:
       - gen_batch(users, batch_size, 'email')
     query: |-
       INSERT INTO users (email)
-      SELECT unnest(string_to_array('$1', ','))
+      SELECT unnest(string_to_array('$1', chr(31)))
 deseed: !include shared/teardown.yaml
 down: !include shared/schema.yaml
 ```

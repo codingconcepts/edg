@@ -152,7 +152,7 @@ seed:
     query: |-
       INSERT INTO customer (email, name)
       SELECT value, SUBSTRING(value, 1, 12)
-      FROM STRING_SPLIT('$1', ',')
+      FROM STRING_SPLIT('$1', CHAR(31))
 
 deseed:
 

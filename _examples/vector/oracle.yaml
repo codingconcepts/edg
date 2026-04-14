@@ -49,10 +49,10 @@ seed:
     query: |-
       INSERT INTO article (title, embedding_uniform, embedding_zipf, embedding_norm)
       SELECT t.val, u.val, z.val, n.val
-      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(500) PATH '.') t
-      JOIN XMLTABLE(('"' || REPLACE('$2', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(4000) PATH '.') u ON t.rn = u.rn
-      JOIN XMLTABLE(('"' || REPLACE('$3', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(4000) PATH '.') z ON t.rn = z.rn
-      JOIN XMLTABLE(('"' || REPLACE('$4', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(4000) PATH '.') n ON t.rn = n.rn
+      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(500) PATH '.') t
+      JOIN XMLTABLE(('"' || REPLACE('$2', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(4000) PATH '.') u ON t.rn = u.rn
+      JOIN XMLTABLE(('"' || REPLACE('$3', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(4000) PATH '.') z ON t.rn = z.rn
+      JOIN XMLTABLE(('"' || REPLACE('$4', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(4000) PATH '.') n ON t.rn = n.rn
 
 deseed:
 

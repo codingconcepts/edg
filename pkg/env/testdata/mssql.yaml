@@ -205,7 +205,7 @@ seed:
       - gen_batch(10, 5, 'email')
     query: |-
       INSERT INTO test_gen_batch (email)
-      SELECT value FROM STRING_SPLIT('$1', ',')
+      SELECT value FROM STRING_SPLIT('$1', CHAR(31))
 
   - name: seed_batch
     type: exec

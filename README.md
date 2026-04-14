@@ -39,7 +39,7 @@ View the docs [here](https://edg.run/docs).
 
 ## Todos
 
-* ref_each with cartesian product support
+* Instead of chr(31) create a function (preferably without parens) called "separator" or "sep"
 * Move the duplicate expression check in config.go into the walk part to save repeating the read
 * Switch to assert in tests
 * Switch to comparing actual errors, not just wantErr

@@ -45,10 +45,10 @@ seed:
     query: |-
       INSERT INTO "user" (email, phone, bio, referred_by)
       SELECT e.val, NULLIF(p.val, 'NULL'), NULLIF(b.val, 'NULL'), NULLIF(r.val, 'NULL')
-      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(255) PATH '.') e
-      JOIN XMLTABLE(('"' || REPLACE('$2', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(50) PATH '.') p ON e.rn = p.rn
-      JOIN XMLTABLE(('"' || REPLACE('$3', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(4000) PATH '.') b ON e.rn = b.rn
-      JOIN XMLTABLE(('"' || REPLACE('$4', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(36) PATH '.') r ON e.rn = r.rn
+      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(255) PATH '.') e
+      JOIN XMLTABLE(('"' || REPLACE('$2', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(50) PATH '.') p ON e.rn = p.rn
+      JOIN XMLTABLE(('"' || REPLACE('$3', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(4000) PATH '.') b ON e.rn = b.rn
+      JOIN XMLTABLE(('"' || REPLACE('$4', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(36) PATH '.') r ON e.rn = r.rn
 
 deseed:
 

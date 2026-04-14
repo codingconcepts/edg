@@ -42,7 +42,7 @@ func TestGenBatch(t *testing.T) {
 	// First two batches should have 10 emails each.
 	for _, i := range []int{0, 1} {
 		csv := string(result[i][0].(convert.RawSQL))
-		parts := strings.Split(csv, ",")
+		parts := strings.Split(csv, "\x1f")
 		if len(parts) != 10 {
 			t.Errorf("batch %d has %d values, want 10", i, len(parts))
 		}
@@ -50,7 +50,7 @@ func TestGenBatch(t *testing.T) {
 
 	// Last batch should have 5 emails (remainder).
 	csv := string(result[2][0].(convert.RawSQL))
-	parts := strings.Split(csv, ",")
+	parts := strings.Split(csv, "\x1f")
 	if len(parts) != 5 {
 		t.Errorf("last batch has %d values, want 5", len(parts))
 	}
@@ -58,7 +58,7 @@ func TestGenBatch(t *testing.T) {
 	// All emails across all batches should be unique.
 	seen := map[string]bool{}
 	for _, row := range result {
-		for _, v := range strings.Split(string(row[0].(convert.RawSQL)), ",") {
+		for _, v := range strings.Split(string(row[0].(convert.RawSQL)), "\x1f") {
 			if seen[v] {
 				t.Errorf("GenBatch produced duplicate: %s", v)
 			}
@@ -79,7 +79,7 @@ func TestGenBatch_ExactMultiple(t *testing.T) {
 		t.Fatalf("GenBatch(20, 10) returned %d batches, want 2", len(result))
 	}
 	for i, row := range result {
-		parts := strings.Split(string(row[0].(convert.RawSQL)), ",")
+		parts := strings.Split(string(row[0].(convert.RawSQL)), "\x1f")
 		if len(parts) != 10 {
 			t.Errorf("batch %d has %d values, want 10", i, len(parts))
 		}

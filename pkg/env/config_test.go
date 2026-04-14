@@ -295,6 +295,93 @@ func TestGenerateArgs_MixedBatchAndScalar(t *testing.T) {
 	}
 }
 
+func TestGenerateArgs_CartesianProduct(t *testing.T) {
+	env := testEnv(nil)
+
+	batchA := [][]any{{1}, {2}}
+	batchB := [][]any{{"x"}, {"y"}, {"z"}}
+	env.env["batchA"] = func() [][]any { return batchA }
+	env.env["batchB"] = func() [][]any { return batchB }
+
+	q := &config.Query{Args: []string{"batchA()", "batchB()"}}
+	if err := q.CompileArgs(env.env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	argSets, expanded, err := env.GenerateArgs(q)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	if !expanded {
+		t.Fatal("expected batch expansion")
+	}
+
+	// 2 x 3 = 6 cartesian product rows.
+	want := [][]any{
+		{1, "x"},
+		{1, "y"},
+		{1, "z"},
+		{2, "x"},
+		{2, "y"},
+		{2, "z"},
+	}
+
+	if len(argSets) != len(want) {
+		t.Fatalf("expected %d arg sets, got %d", len(want), len(argSets))
+	}
+
+	for i, args := range argSets {
+		if len(args) != len(want[i]) {
+			t.Fatalf("arg set %d: expected %d args, got %d", i, len(want[i]), len(args))
+		}
+		for j, v := range args {
+			if v != want[i][j] {
+				t.Errorf("arg set %d[%d] = %v, want %v", i, j, v, want[i][j])
+			}
+		}
+	}
+}
+
+func TestGenerateArgs_CartesianWithScalars(t *testing.T) {
+	env := testEnv(nil)
+	env.env["const"] = convert.Constant
+
+	batchA := [][]any{{1}, {2}}
+	batchB := [][]any{{"x"}, {"y"}}
+	env.env["batchA"] = func() [][]any { return batchA }
+	env.env["batchB"] = func() [][]any { return batchB }
+
+	q := &config.Query{Args: []string{"const(99)", "batchA()", "batchB()", "const(42)"}}
+	if err := q.CompileArgs(env.env); err != nil {
+		t.Fatalf("CompileArgs failed: %v", err)
+	}
+
+	argSets, _, err := env.GenerateArgs(q)
+	if err != nil {
+		t.Fatalf("GenerateArgs failed: %v", err)
+	}
+
+	want := [][]any{
+		{99, 1, "x", 42},
+		{99, 1, "y", 42},
+		{99, 2, "x", 42},
+		{99, 2, "y", 42},
+	}
+
+	if len(argSets) != len(want) {
+		t.Fatalf("expected %d arg sets, got %d", len(want), len(argSets))
+	}
+
+	for i, args := range argSets {
+		for j, v := range args {
+			if v != want[i][j] {
+				t.Errorf("arg set %d[%d] = %v, want %v", i, j, v, want[i][j])
+			}
+		}
+	}
+}
+
 func TestGenerateArgs_BatchType(t *testing.T) {
 	env := testEnv(map[string][]map[string]any{
 		"categories": {
@@ -336,13 +423,13 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 	// First two batches should have 4 CSV values, last should have 2.
 	for _, args := range argSets[:2] {
 		csv := string(args[0].(convert.RawSQL))
-		parts := strings.Split(csv, ",")
+		parts := strings.Split(csv, "\x1f")
 		if len(parts) != 4 {
 			t.Errorf("expected 4 CSV values, got %d: %q", len(parts), csv)
 		}
 	}
 	lastCSV := string(argSets[2][0].(convert.RawSQL))
-	parts := strings.Split(lastCSV, ",")
+	parts := strings.Split(lastCSV, "\x1f")
 	if len(parts) != 2 {
 		t.Errorf("last batch: expected 2 CSV values, got %d: %q", len(parts), lastCSV)
 	}
@@ -354,8 +441,8 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 		"'books'":       "1.1",
 	}
 	for _, args := range argSets {
-		names := strings.Split(string(args[1].(convert.RawSQL)), ",")
-		markups := strings.Split(string(args[2].(convert.RawSQL)), ",")
+		names := strings.Split(string(args[1].(convert.RawSQL)), "\x1f")
+		markups := strings.Split(string(args[2].(convert.RawSQL)), "\x1f")
 		if len(names) != len(markups) {
 			t.Fatalf("name/markup length mismatch: %d vs %d", len(names), len(markups))
 		}
@@ -398,13 +485,13 @@ func TestGenerateArgs_BatchType_GlobalRefs(t *testing.T) {
 
 	// First two batches: 3 values each.
 	for _, args := range argSets[:2] {
-		parts := strings.Split(string(args[0].(convert.RawSQL)), ",")
+		parts := strings.Split(string(args[0].(convert.RawSQL)), "\x1f")
 		if len(parts) != 3 {
 			t.Errorf("expected 3 CSV values, got %d", len(parts))
 		}
 	}
 	// Last batch: 1 value.
-	parts := strings.Split(string(argSets[2][0].(convert.RawSQL)), ",")
+	parts := strings.Split(string(argSets[2][0].(convert.RawSQL)), "\x1f")
 	if len(parts) != 1 {
 		t.Errorf("last batch: expected 1 CSV value, got %d", len(parts))
 	}
@@ -433,7 +520,7 @@ func TestGenerateArgs_BatchType_SizeDefaultsToCount(t *testing.T) {
 		t.Fatalf("expected 1 batch, got %d", len(argSets))
 	}
 
-	parts := strings.Split(string(argSets[0][0].(convert.RawSQL)), ",")
+	parts := strings.Split(string(argSets[0][0].(convert.RawSQL)), "\x1f")
 	if len(parts) != 5 {
 		t.Errorf("expected 5 CSV values, got %d", len(parts))
 	}

@@ -216,7 +216,7 @@ seed:
     query: |-
       INSERT INTO customer (email, name)
       SELECT column_value, SUBSTR(column_value, 1, 12)
-      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))
+      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"'))
 
 deseed:
 
@@ -434,6 +434,6 @@ run:
       LEFT JOIN review r ON r.product_id = p.id
       WHERE p.id IN (
         SELECT TO_NUMBER(column_value)
-        FROM XMLTABLE(('"' || REPLACE(:1, ',', '","') || '"'))
+        FROM XMLTABLE(('"' || REPLACE(:1, CHR(31), '","') || '"'))
       )
       GROUP BY p.id, p.name, p.price, p.stock_qty

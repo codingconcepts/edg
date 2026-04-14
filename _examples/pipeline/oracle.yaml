@@ -85,7 +85,7 @@ seed:
     query: |-
       INSERT INTO a (name)
       SELECT column_value
-      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))
+      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"'))
 
   - name: populate_b
     args:

@@ -206,7 +206,7 @@ seed:
       INSERT INTO test_gen_batch (email)
       SELECT j.val
       FROM JSON_TABLE(
-        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
         '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
       ) j
 

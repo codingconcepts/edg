@@ -48,9 +48,9 @@ seed:
     query: |-
       INSERT INTO contact (name, email, phone)
       SELECT n.val, NULLIF(e.val, 'NULL'), NULLIF(p.val, 'NULL')
-      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(255) PATH '.') n
-      JOIN XMLTABLE(('"' || REPLACE('$3', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(255) PATH '.') e ON n.rn = e.rn
-      JOIN XMLTABLE(('"' || REPLACE('$4', ',', '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(50) PATH '.') p ON n.rn = p.rn
+      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(255) PATH '.') n
+      JOIN XMLTABLE(('"' || REPLACE('$3', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(255) PATH '.') e ON n.rn = e.rn
+      JOIN XMLTABLE(('"' || REPLACE('$4', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(50) PATH '.') p ON n.rn = p.rn
 
 deseed:
 

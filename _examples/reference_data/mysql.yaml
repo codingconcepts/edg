@@ -38,15 +38,15 @@ seed:
       INSERT INTO customer (email, region, city)
       SELECT j1.val, j2.val, j3.val
       FROM JSON_TABLE(
-        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
         '$[*]' COLUMNS(val VARCHAR(255) PATH '$', rn FOR ORDINALITY)
       ) j1
       JOIN JSON_TABLE(
-        CONCAT('["', REPLACE('$2', ',', '","'), '"]'),
+        CONCAT('["', REPLACE('$2', CHAR(31), '","'), '"]'),
         '$[*]' COLUMNS(val VARCHAR(50) PATH '$', rn FOR ORDINALITY)
       ) j2 ON j1.rn = j2.rn
       JOIN JSON_TABLE(
-        CONCAT('["', REPLACE('$3', ',', '","'), '"]'),
+        CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'),
         '$[*]' COLUMNS(val VARCHAR(50) PATH '$', rn FOR ORDINALITY)
       ) j3 ON j1.rn = j3.rn
 

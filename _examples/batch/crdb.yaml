@@ -31,7 +31,7 @@ seed:
       - gen('productname')
     query: |-
       INSERT INTO product (name)
-      SELECT unnest(string_to_array('$1', ','))
+      SELECT unnest(string_to_array('$1', chr(31)))
       RETURNING id, name
 
   - name: insert_reviews
@@ -45,9 +45,9 @@ seed:
     query: |-
       INSERT INTO review (product_id, rating, body)
       SELECT
-        unnest(string_to_array('$1', ','))::UUID,
-        unnest(string_to_array('$2', ','))::INT,
-        unnest(string_to_array('$3', ','))
+        unnest(string_to_array('$1', chr(31)))::UUID,
+        unnest(string_to_array('$2', chr(31)))::INT,
+        unnest(string_to_array('$3', chr(31)))
 
 deseed:
 

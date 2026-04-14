@@ -48,9 +48,9 @@ seed:
     query: |-
       INSERT INTO customer (email, region, city)
       SELECT e.val, r.val, c.val
-      FROM (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))) e
-      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$2', ',', '","') || '"'))) r ON e.rn = r.rn
-      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$3', ',', '","') || '"'))) c ON e.rn = c.rn
+      FROM (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"'))) e
+      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$2', CHR(31), '","') || '"'))) r ON e.rn = r.rn
+      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$3', CHR(31), '","') || '"'))) c ON e.rn = c.rn
 
 deseed:
 

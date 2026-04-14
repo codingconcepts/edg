@@ -50,7 +50,7 @@ seed:
       - gen_batch(a_rows, batch_size, 'word')
     query: |-
       INSERT INTO a (name)
-      SELECT value FROM STRING_SPLIT('$1', ',')
+      SELECT value FROM STRING_SPLIT('$1', CHAR(31))
 
   - name: populate_b
     args:

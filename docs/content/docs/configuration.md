@@ -144,9 +144,9 @@ seed:
       INSERT INTO customer (email, name, created_at)
       SELECT e, n, t
       FROM unnest(
-        string_to_array('$1', ','),
-        string_to_array('$2', ','),
-        string_to_array('$3', ',')
+        string_to_array('$1', chr(31)),
+        string_to_array('$2', chr(31)),
+        string_to_array('$3', chr(31))
       ) AS t(e, n, t)
 
 run:
@@ -181,7 +181,7 @@ seed:
       - gen_batch(1000, 100, 'email')
     query: |-
       INSERT INTO users (email)
-      SELECT unnest(string_to_array('$1', ','))
+      SELECT unnest(string_to_array('$1', chr(31)))
 ```
 
 - **`up`** and **`down`** manage schema (CREATE/DROP).
@@ -195,8 +195,8 @@ seed:
 |---|---|
 | `query` (default) | Executes the SQL and reads result rows. Results are stored in separate memory for each worker by query name, making them available to `ref_*` functions. |
 | `exec` | Executes the SQL without reading results. Use for DDL, DML that returns no rows, or when results aren't needed. |
-| `query_batch` | Like `query`, but evaluates args repeatedly (controlled by `count` and `size`) and collects values into comma-separated strings per arg position. Each batch becomes a separate query execution whose results are stored. |
-| `exec_batch` | Like `exec`, but evaluates args repeatedly (controlled by `count` and `size`) and collects values into comma-separated strings per arg position. Each batch becomes a separate exec. |
+| `query_batch` | Like `query`, but evaluates args repeatedly (controlled by `count` and `size`) and collects values into unit-separator-delimited (ASCII 31) strings per arg position. Each batch becomes a separate query execution whose results are stored. |
+| `exec_batch` | Like `exec`, but evaluates args repeatedly (controlled by `count` and `size`) and collects values into unit-separator-delimited (ASCII 31) strings per arg position. Each batch becomes a separate exec. |
 
 ### Batch Fields
 
@@ -206,13 +206,13 @@ The `query_batch` and `exec_batch` types use two additional fields to control ho
 |---|---|
 | `count` | Total number of rows to generate. Evaluated as an expression, so it can reference globals. |
 | `size` | Number of rows per batch. If omitted or zero, defaults to `count` (single batch). Also evaluated as an expression. |
-| `batch_format` | Controls how batch values are serialized. Default is CSV (comma-separated). Set to `json` to produce JSON arrays. |
+| `batch_format` | Controls how batch values are serialized. Default uses the ASCII unit separator (char 31, `\x1f`) as a delimiter. Set to `json` to produce JSON arrays. |
 
-Each arg expression is evaluated once per row. The results are collected into strings per arg position. For example, with `count: 1000` and `size: 100`, you get 10 batches, each containing 100 generated values.
+Each arg expression is evaluated once per row. The results are collected into strings per arg position, delimited by the ASCII unit separator (char 31, `\x1f`). For example, with `count: 1000` and `size: 100`, you get 10 batches, each containing 100 generated values.
 
 #### Postgres / CockroachDB
 
-By default, batch values are joined with commas. This works well with PostgreSQL/CockroachDB `string_to_array` and MySQL `JSON_TABLE`:
+By default, batch values are joined with the ASCII unit separator (char 31). This works well with PostgreSQL/CockroachDB `string_to_array` and MySQL `JSON_TABLE`:
 
 ```yaml
 seed:
@@ -224,7 +224,7 @@ seed:
       - gen('email')
     query: |-
       INSERT INTO users (email)
-      SELECT unnest(string_to_array('$1', ','))
+      SELECT unnest(string_to_array('$1', chr(31)))
 ```
 
 Which resolves to the following query automatically by edg:
@@ -232,13 +232,13 @@ Which resolves to the following query automatically by edg:
 ```sql
 INSERT INTO users (email)
 SELECT unnest(string_to_array(
-  'a@x.com,b@y.com,...,z@x.com', ','
+  'a@x.com\x1fb@y.com\x1f...\x1fz@x.com', chr(31)
 ))
 ```
 
 #### MySQL
 
-MySQL uses `JSON_TABLE` to unpack batch values. The CSV string is converted to a JSON array using `CONCAT` and `REPLACE`, then `JSON_TABLE` extracts each element as a row. Multiple columns are correlated using `FOR ORDINALITY`:
+MySQL uses `JSON_TABLE` to unpack batch values. The unit-separator-delimited string is converted to a JSON array using `CONCAT` and `REPLACE`, then `JSON_TABLE` extracts each element as a row. Multiple columns are correlated using `FOR ORDINALITY`:
 
 ```yaml
 seed:
@@ -252,7 +252,7 @@ seed:
       INSERT INTO users (email)
       SELECT j.val
       FROM JSON_TABLE(
-        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
         '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
       ) j
 ```
@@ -265,8 +265,8 @@ SELECT j.val
 FROM JSON_TABLE(
   CONCAT('["',
     REPLACE(
-      'a@x.com,b@y.com,...,z@x.com',
-      ',', '","'
+      'a@x.com\x1fb@y.com\x1f...\x1fz@x.com',
+      CHAR(31), '","'
     ),
   '"]'),
   '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
@@ -275,7 +275,7 @@ FROM JSON_TABLE(
 
 #### Oracle
 
-For Oracle, batch values are joined with commas and unpacked using `xmltable` with `tokenize`. Multiple columns are correlated by joining on `rowid`:
+For Oracle, batch values are joined with the unit separator and unpacked using `xmltable` with `tokenize`. Multiple columns are correlated by joining on `rowid`:
 
 ```yaml
 seed:
@@ -290,12 +290,12 @@ seed:
       INSERT INTO users (name, email)
       SELECT x1.value, x2.value
       FROM xmltable(
-             'for $s in tokenize($v, ",") return <r>{$s}</r>'
+             'for $s in tokenize($v, codepoints-to-string(31)) return <r>{$s}</r>'
              PASSING '$1' AS "v"
              COLUMNS value VARCHAR2(255) PATH '.'
            ) x1
       JOIN xmltable(
-             'for $s in tokenize($v, ",") return <r>{$s}</r>'
+             'for $s in tokenize($v, codepoints-to-string(31)) return <r>{$s}</r>'
              PASSING '$2' AS "v"
              COLUMNS value VARCHAR2(255) PATH '.'
            ) x2 ON x1.rowid = x2.rowid
@@ -307,20 +307,20 @@ Which resolves to the following query automatically by edg:
 INSERT INTO users (name, email)
 SELECT x1.value, x2.value
 FROM xmltable(
-  'for $s in tokenize($v, ",") return <r>{$s}</r>'
-  PASSING 'Alice,Bob,Charlie' AS "v"
+  'for $s in tokenize($v, codepoints-to-string(31)) return <r>{$s}</r>'
+  PASSING 'Alice\x1fBob\x1fCharlie' AS "v"
   COLUMNS value VARCHAR2(255) PATH '.'
 ) x1
 JOIN xmltable(
-  'for $s in tokenize($v, ",") return <r>{$s}</r>'
-  PASSING 'a@x.com,b@y.com,c@z.com' AS "v"
+  'for $s in tokenize($v, codepoints-to-string(31)) return <r>{$s}</r>'
+  PASSING 'a@x.com\x1fb@y.com\x1fc@z.com' AS "v"
   COLUMNS value VARCHAR2(255) PATH '.'
 ) x2 ON x1.rowid = x2.rowid
 ```
 
 #### MSSQL
 
-When `batch_format` is set to `json`, each arg position is serialized as a properly escaped JSON array (e.g. `["val1","val2","val3"]`). This is required for MSSQL, where the default CSV format can break `OPENJSON` if values contain commas or double quotes. Multiple `OPENJSON` calls are correlated using `[key]`, which is the zero-based array index. NULL values appear as JSON `null` and can be handled with `NULLIF(j.value, 'null')` if the target column is nullable:
+When `batch_format` is set to `json`, each arg position is serialized as a properly escaped JSON array (e.g. `["val1","val2","val3"]`). This is recommended for MSSQL, where `OPENJSON` expects JSON input. Multiple `OPENJSON` calls are correlated using `[key]`, which is the zero-based array index. NULL values appear as JSON `null` and can be handled with `NULLIF(j.value, 'null')` if the target column is nullable:
 
 ```yaml
 seed:
@@ -549,14 +549,14 @@ args:
   - gen_batch(1000, 100, 'email')
 query: |-
   INSERT INTO users (email)
-  SELECT unnest(string_to_array('$1', ','))
+  SELECT unnest(string_to_array('$1', chr(31)))
 ```
 
-If `$1` evaluates to `alice@x.com,bob@y.com,...`, the SQL sent to the database becomes:
+If `$1` evaluates to `alice@x.com\x1fbob@y.com\x1f...`, the SQL sent to the database becomes:
 
 ```sql
 INSERT INTO users (email)
-SELECT unnest(string_to_array('alice@x.com,bob@y.com,...', ','))
+SELECT unnest(string_to_array('alice@x.com\x1fbob@y.com\x1f...', chr(31)))
 ```
 
 The database never sees `$1`, it receives a fully formed query with the values baked in. This is used for:

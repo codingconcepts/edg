@@ -138,9 +138,9 @@ func Tmpl(format string, args ...any) string {
 	return fmt.Sprintf(format, args...)
 }
 
-// BatchFormatValue formats a value for use inside a batch CSV string
+// BatchFormatValue formats a value for use inside a batch-delimited string
 // that will be placed within an already-quoted SQL context (e.g.
-// string_to_array('$1', ',')). Values are not wrapped in quotes;
+// string_to_array('$1', chr(31))). Values are not wrapped in quotes;
 // embedded single quotes are escaped for SQL safety. []byte values
 // are hex-encoded.
 func BatchFormatValue(v any) string {

@@ -146,7 +146,7 @@ seed:
       INSERT INTO customer (email, name)
       SELECT j.val, SUBSTRING(MD5(j.val), 1, 12)
       FROM JSON_TABLE(
-        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
         '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
       ) j
 

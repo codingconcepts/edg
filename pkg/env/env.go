@@ -275,26 +275,51 @@ func (e *Env) GenerateArgs(q *config.Query) ([][]any, bool, error) {
 		e.computedArgs = append(e.computedArgs, compiledArg)
 	}
 
-	// Find a ref_each batch arg ([][]any) and expand it into multiple
-	// arg sets, merging with any scalar args at their positions.
+	// Collect all ref_each batch args ([][]any) and their positions.
+	type batchArg struct {
+		pos  int
+		rows [][]any
+	}
+	var batches []batchArg
 	for i, arg := range completeArgs {
-		batches, ok := arg.([][]any)
-		if !ok {
-			continue
+		if b, ok := arg.([][]any); ok {
+			batches = append(batches, batchArg{pos: i, rows: b})
 		}
-
-		result := make([][]any, len(batches))
-		for b, batchRow := range batches {
-			row := make([]any, 0, len(completeArgs)-1+len(batchRow))
-			row = append(row, completeArgs[:i]...)
-			row = append(row, batchRow...)
-			row = append(row, completeArgs[i+1:]...)
-			result[b] = row
-		}
-		return result, true, nil
 	}
 
-	return [][]any{completeArgs}, false, nil
+	if len(batches) == 0 {
+		return [][]any{completeArgs}, false, nil
+	}
+
+	// Compute cartesian product of all batch args, keeping scalar
+	// args in their original positions.
+	totalRows := 1
+	for _, b := range batches {
+		totalRows *= len(b.rows)
+	}
+
+	result := make([][]any, totalRows)
+	for idx := range totalRows {
+		var row []any
+		bi := 0
+		for i, arg := range completeArgs {
+			if bi < len(batches) && batches[bi].pos == i {
+				// stride = product of lengths of all subsequent batches
+				stride := 1
+				for _, sb := range batches[bi+1:] {
+					stride *= len(sb.rows)
+				}
+				batchRowIdx := (idx / stride) % len(batches[bi].rows)
+				row = append(row, batches[bi].rows[batchRowIdx]...)
+				bi++
+			} else {
+				row = append(row, arg)
+			}
+		}
+		result[idx] = row
+	}
+
+	return result, true, nil
 }
 
 // generateBatchArgs handles type: query_batch/exec_batch queries. It evaluates each arg
@@ -384,7 +409,7 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 			if useJSON {
 				args[i] = convert.RawSQL(convert.BatchJoinJSON(parts))
 			} else {
-				args[i] = convert.RawSQL(strings.Join(parts, ","))
+				args[i] = convert.RawSQL(strings.Join(parts, "\x1f"))
 			}
 		}
 		result[b] = args
@@ -466,7 +491,7 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 		// Inline $N placeholders when batch expansion occurred
 		// (gen_batch/batch/ref_each/query_batch/exec_batch), when
 		// placeholders appear inside quoted strings (e.g.
-		// string_to_array('$1', ',')) where the driver can't see them,
+		// string_to_array('$1', chr(31))) where the driver can't see them,
 		// or when the query uses $N placeholders at all. The last case
 		// ensures cross-driver compatibility: only PostgreSQL/CockroachDB
 		// understand $N natively; MySQL, Oracle, and SQL Server do not.

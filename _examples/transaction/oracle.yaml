@@ -61,7 +61,7 @@ seed:
     query: |-
       INSERT INTO customer (email)
       SELECT column_value
-      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))
+      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"'))
 
   - name: populate_account
     args:

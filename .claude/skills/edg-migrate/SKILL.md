@@ -57,10 +57,10 @@ Apply the following transformations based on the source and target driver. edg h
 
 | Driver | Pattern |
 |---|---|
-| pgx | `SELECT unnest(string_to_array('$1', ','))` |
-| mysql | `SELECT j.val FROM JSON_TABLE(CONCAT('["', REPLACE('$1', ',', '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j` |
+| pgx | `SELECT unnest(string_to_array('$1', chr(31)))` |
+| mysql | `SELECT j.val FROM JSON_TABLE(CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j` |
 | mssql | Use `batch_format: json` and `SELECT value FROM OPENJSON('$1')` |
-| oracle | `SELECT column_value FROM XMLTABLE(('"' \|\| REPLACE('$1', ',', '","') \|\| '"'))` |
+| oracle | `SELECT column_value FROM XMLTABLE(('"' \|\| REPLACE('$1', CHR(31), '","') \|\| '"'))` |
 
 ### Upsert / Merge
 

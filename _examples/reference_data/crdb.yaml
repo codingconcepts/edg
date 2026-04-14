@@ -32,9 +32,9 @@ seed:
     query: |-
       INSERT INTO customer (email, region, city)
       SELECT
-        unnest(string_to_array('$1', ',')),
-        unnest(string_to_array('$2', ',')),
-        unnest(string_to_array('$3', ','))
+        unnest(string_to_array('$1', chr(31))),
+        unnest(string_to_array('$2', chr(31))),
+        unnest(string_to_array('$3', chr(31)))
 
 deseed:
 

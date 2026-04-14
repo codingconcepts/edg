@@ -237,7 +237,7 @@ Apply these patterns based on the target driver.
 - **Row generation in seed**: Use `generate_series(1, $1)` for bulk generation inside SQL
 - **Array columns**: Use `ARRAY[...]` type and `array(minN, maxN, pattern)` expression
 - **Vector columns**: Use `VECTOR(n)` type (pgvector) and `vector(dims, clusters, spread)` expression for clustered, unit-length vectors that support realistic similarity search
-- **Batch expansion**: Use `unnest(string_to_array('$1', ','))` to expand CSV args into rows
+- **Batch expansion**: Use `unnest(string_to_array('$1', chr(31)))` to expand batch args into rows (values are delimited by ASCII unit separator, char 31)
 - **Upsert**: `ON CONFLICT (col) DO UPDATE SET ...`
 - **Pagination**: `LIMIT $1 OFFSET $2`
 - **Random ordering**: `ORDER BY random()`
@@ -255,10 +255,10 @@ Apply these patterns based on the target driver.
     SELECT 1 AS s UNION ALL SELECT s + 1 FROM seq WHERE s < $1
   ) SELECT * FROM seq
   ```
-- **Batch expansion**: Use `JSON_TABLE` to convert CSV args into rows:
+- **Batch expansion**: Use `JSON_TABLE` to convert batch args into rows (values are delimited by ASCII unit separator, char 31):
   ```sql
   SELECT j.val FROM JSON_TABLE(
-    CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+    CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
     '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
   ) j
   ```
@@ -300,9 +300,9 @@ Apply these patterns based on the target driver.
   ```sql
   SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= $1
   ```
-- **Batch expansion**: Use `XMLTABLE` to expand CSV args:
+- **Batch expansion**: Use `XMLTABLE` to expand batch args (values are delimited by ASCII unit separator, char 31):
   ```sql
-  SELECT column_value FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))
+  SELECT column_value FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"'))
   ```
 - **Upsert**: Use `MERGE INTO ... USING (SELECT :1 AS col FROM DUAL) src ON ... WHEN MATCHED THEN UPDATE ... WHEN NOT MATCHED THEN INSERT ...`
 - **DDL safety**: Wrap in PL/SQL with exception handling:

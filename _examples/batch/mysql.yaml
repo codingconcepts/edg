@@ -43,7 +43,7 @@ seed:
       INSERT INTO product (name)
       SELECT j.val
       FROM JSON_TABLE(
-        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
         '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
       ) j
 
@@ -63,15 +63,15 @@ seed:
       INSERT INTO review (product_id, rating, body)
       SELECT j1.val, CAST(j2.val AS UNSIGNED), j3.val
       FROM JSON_TABLE(
-        CONCAT('["', REPLACE('$1', ',', '","'), '"]'),
+        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
         '$[*]' COLUMNS(val VARCHAR(36) PATH '$', rn FOR ORDINALITY)
       ) j1
       JOIN JSON_TABLE(
-        CONCAT('["', REPLACE('$2', ',', '","'), '"]'),
+        CONCAT('["', REPLACE('$2', CHAR(31), '","'), '"]'),
         '$[*]' COLUMNS(val VARCHAR(20) PATH '$', rn FOR ORDINALITY)
       ) j2 ON j1.rn = j2.rn
       JOIN JSON_TABLE(
-        CONCAT('["', REPLACE('$3', ',', '","'), '"]'),
+        CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'),
         '$[*]' COLUMNS(val TEXT PATH '$', rn FOR ORDINALITY)
       ) j3 ON j1.rn = j3.rn
 

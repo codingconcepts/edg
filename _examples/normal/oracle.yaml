@@ -118,4 +118,4 @@ run:
     query: |-
       INSERT INTO review (product_id, rating)
       SELECT TO_NUMBER(column_value), $2
-      FROM XMLTABLE(('"' || REPLACE('$1', ',', '","') || '"'))
+      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"'))
