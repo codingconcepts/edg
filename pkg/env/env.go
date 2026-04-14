@@ -93,6 +93,7 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		"date":              gen.DateRand,        // Random date with custom format.
 		"distinct":          env.aggDistinct,     // Number of distinct values for a field in a dataset.
 		"duration":          gen.RandDuration,    // Random duration between min and max.
+		"env":               environ,             // Use a value in the environment.
 		"exp_f":             gen.ExpRandF,        // Exponential-distribution random float with precision.
 		"exp":               gen.ExpRand,         // Exponential-distribution random float in [min, max].
 		"expr":              convert.Constant,    // Evaluate an arithmetic expression (e.g. expr(warehouses * 10)).

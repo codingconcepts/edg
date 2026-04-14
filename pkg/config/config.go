@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"time"
 
@@ -11,7 +12,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var genCallRe = regexp.MustCompile(`gen\(\s*['"]([^'"]+)['"]\s*\)`)
+var (
+	genCallRe = regexp.MustCompile(`gen\(\s*['"]([^'"]+)['"]\s*\)`)
+	envCallRe = regexp.MustCompile(`env\(\s*(?:'([^']+)'|"([^"]+)")\s*\)`)
+)
 
 // Duration wraps time.Duration for YAML unmarshaling from strings like "1s".
 type Duration time.Duration
@@ -362,7 +366,7 @@ func (r *Request) Validate() error {
 		}
 	}
 
-	// Validate gen() patterns reference known gofakeit functions.
+	// Walk the config and collect expressions.
 	{
 		var exprs []string
 		for _, v := range r.Expressions {
@@ -394,10 +398,24 @@ func (r *Request) Validate() error {
 			}
 		}
 
+		// Validate gen(...) expressions.
 		for _, e := range exprs {
 			for _, m := range genCallRe.FindAllStringSubmatch(e, -1) {
 				if err := gen.ValidatePattern(m[1]); err != nil {
 					return fmt.Errorf("expression %q: %w", e, err)
+				}
+			}
+		}
+
+		// Validate env(...) expressions.
+		for _, e := range exprs {
+			for _, m := range envCallRe.FindAllStringSubmatch(e, -1) {
+				name := m[1]
+				if name == "" {
+					name = m[2]
+				}
+				if _, ok := os.LookupEnv(name); !ok {
+					return fmt.Errorf("missing environment variable: %q", name)
 				}
 			}
 		}

@@ -1,9 +1,9 @@
 ---
-title: Quick Start
+title: Introduction
 weight: 2
 ---
 
-# Quick Start
+# Introduction
 
 This guide gets you from zero to running a workload in under a minute.
 

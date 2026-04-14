@@ -15,6 +15,7 @@ Complete workload configs you can run directly or use as starting points for you
 | [Batch](https://github.com/codingconcepts/edg/tree/main/_examples/batch/) | Demonstrates `query_batch` and `exec_batch` query types for batch inserts and updates |
 | [Distributions](https://github.com/codingconcepts/edg/tree/main/_examples/distributions/) | All five distribution functions (uniform, zipf, norm_f, exp_f, lognorm_f) |
 | [E-Commerce](https://github.com/codingconcepts/edg/tree/main/_examples/ecommerce/) | E-commerce with categories, products, customers, and orders |
+| [Environment](https://github.com/codingconcepts/edg/tree/main/_examples/environment/) | Demonstrates fetching and using environment variables |
 | [Exclusive Columns](https://github.com/codingconcepts/edg/tree/main/_examples/exclusive_columns/) | Mutually exclusive columns - either col_a or col_b, never both |
 | [Expectations](https://github.com/codingconcepts/edg/tree/main/_examples/expectations/) | Post-run assertions for CI/CD gating on error rate, latency, and throughput |
 | [Expressions](https://github.com/codingconcepts/edg/tree/main/_examples/expression/) | Demonstrates expr-lang built-in features (array, map, string, bitwise, etc.) |

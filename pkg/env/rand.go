@@ -2,12 +2,22 @@ package env
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"sync/atomic"
 
 	"github.com/codingconcepts/edg/pkg/convert"
 	"github.com/codingconcepts/edg/pkg/random"
 )
+
+func environ(name string) (string, error) {
+	val, ok := os.LookupEnv(name)
+	if !ok {
+		return "", fmt.Errorf("missing environment variable: %q", name)
+	}
+
+	return val, nil
+}
 
 func (e *Env) global(name string) any {
 	return e.request.Globals[name]

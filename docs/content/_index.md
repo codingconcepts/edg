@@ -7,11 +7,21 @@ type: docs
 
 # edg
 
-An Expression-based Data Generator driven by YAML configuration. Define your schema, seed data, and transactional workloads in a single config file, then run them against any supported database with concurrent workers and real-time throughput reporting.
+An Expression-based Data Generator driven by YAML configuration.
 
-Query arguments are written as expressions compiled at startup, giving you access to global constants, random data generation, reference lookups, and TPC-C-compliant non-uniform random distributions.
+## The reason for edg
 
-## Supported Databases
+edg is the result of two wonderful decades spent developing software that talks to databases.
+
+Back in 2014 when I connected to my first database (Oracle), I - rather diligently - added approximately 25 rows of immaculate data to ensure that all of my code paths were covered. Fast forward to the day of the first production release and everything ground to a halt. The problem? I hadn't _really_ tested my database at all.
+
+Sure, I'd added a _variety_ of data to the test database but I hadn't understood what would happen when production amounts of traffic (or production amounts of data) would be thrown at my database or application.
+
+edg was built to help you do just that. Connect to one of the [supported databases](#supported-databases), create database objects, seed realistic amounts of data quickly, and define transactional workloads; all from YAML. Concurrent workers and real-time throughput reporting will take of the rest.
+
+Query arguments are written as expressions compiled at startup, giving you access to global constants, random data generation, reference lookups, and a bunch of [random distributions](/docs/expressions/#numeric-distributions).
+
+## Supported databases
 
 | Database | Driver | URL (example) |
 |---|---|---|
@@ -21,7 +31,7 @@ Query arguments are written as expressions compiled at startup, giving you acces
 | MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
 | MSSQL | `mssql` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
 
-## Quick Start
+## Quick start
 
 Install with the Go toolchain.
 

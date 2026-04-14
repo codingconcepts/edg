@@ -29,6 +29,7 @@ Query arguments are written as expressions compiled at startup using [expr-lang/
 | `date(format, min, max)` | `string` | Random timestamp formatted using a Go time format string.<br><br>`date('2006-01-02', '2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')` -> `2023-07-15` |
 | `distinct(name, field)` | `int` | Number of distinct values for a field in a named dataset.<br><br>`distinct('fetch_products', 'category')` -> `3` |
 | `duration(min, max)` | `string` | Random duration between `min` and `max` (Go duration strings).<br><br>`duration('1h', '24h')` -> `14h32m17s` |
+| `env(name)` | `string` | Returns the value of a given environment variable (or an error if one doesn't exist with that name). Missing variables are caught at config load time, before any queries run. Can be composed with other functions, e.g. `upper(env('HOST'))`. For numeric values, use expr-lang conversion: `int(env('PORT'))`, `float(env('RATE'))`.<br><br>`env('API_KEY')` -> `ca3864628a8f29d644e1...` |
 | `exp_f(rate, min, max, precision)` | `float64` | Exponentially-distributed random number in [min, max], rounded to `precision` decimal places.<br><br>`exp_f(0.5, 0, 100, 2)` -> `3.72` |
 | `exp(rate, min, max)` | `float64` | Exponentially-distributed random number in [min, max], rounded to 0 decimal places.<br><br>`exp(0.5, 0, 100)` -> `4` |
 | `expr(expression)` | `any` | Evaluates an arithmetic expression. Alias for `const`, the expr engine handles the arithmetic.<br><br>`expr(2 + 3)` -> `5` |

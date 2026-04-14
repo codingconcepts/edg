@@ -2,9 +2,57 @@ package env
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/codingconcepts/edg/pkg/test"
 )
+
+func TestEnviron(t *testing.T) {
+	cases := []struct {
+		name      string
+		envKeySet string
+		envKeyGet string
+		envVal    string
+		wantErr   bool
+	}{
+		{
+			name:      "missing env var",
+			envKeySet: "ABC",
+			envKeyGet: "DEF",
+			envVal:    "123",
+			wantErr:   true,
+		},
+		{
+			name:      "valid env var",
+			envKeySet: "ABC",
+			envKeyGet: "ABC",
+			envVal:    "123",
+			wantErr:   false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			test.CleanupEnv(t, c.envKeySet)
+			os.Setenv(c.envKeySet, c.envVal)
+
+			act, err := environ(c.envKeyGet)
+
+			if err != nil {
+				if !c.wantErr {
+					t.Fatalf("expected no error but got: %v", err)
+				}
+				return
+			}
+
+			if act != c.envVal {
+				t.Fatalf("exp: %[1]q (%[1]T)\ngot: %[2]q (%[2]T)", c.envVal, act)
+			}
+		})
+	}
+}
 
 func TestNURand_InRange(t *testing.T) {
 	env := testEnv(nil)

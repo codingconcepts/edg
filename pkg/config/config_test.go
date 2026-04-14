@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codingconcepts/edg/pkg/test"
 	"gopkg.in/yaml.v3"
 )
 
@@ -601,6 +602,75 @@ func TestValidate_GenPatternInLocals(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "notreal") {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_EnvPattern(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     map[string]string
+		pattern string
+		wantErr bool
+	}{
+		{
+			name: "valid single quote",
+			env: map[string]string{
+				"ABC": "123",
+			},
+			pattern: `env('ABC')`,
+			wantErr: false,
+		},
+		{
+			name: "valid double quote",
+			env: map[string]string{
+				"ABC": "123",
+			},
+			pattern: `env("ABC")`,
+			wantErr: false,
+		},
+		{
+			name: "missing env var",
+			env: map[string]string{
+				"ABC": "123",
+			},
+			pattern: `env("DEF")`,
+			wantErr: true,
+		},
+		{
+			name: "mismatched quotes not matched",
+			env: map[string]string{
+				"ABC": "123",
+			},
+			pattern: `env('ABC")`,
+			wantErr: false, // regex won't match, so no validation error (expr-lang catches syntax)
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			test.CleanupEnv(t, "ABC")
+
+			for k, v := range c.env {
+				if err := os.Setenv(k, v); err != nil {
+					t.Fatalf("error setting env var for test: %v", err)
+				}
+			}
+
+			req := &Request{
+				Rows: map[string][]string{
+					"value": {c.pattern},
+				},
+			}
+
+			err := req.Validate()
+
+			if err != nil {
+				if !c.wantErr {
+					t.Fatalf("expected no error but got: %v", err)
+				}
+				return
+			}
+		})
 	}
 }
 
