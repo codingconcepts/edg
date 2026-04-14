@@ -20,6 +20,8 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/microsoft/go-mssqldb"
 	_ "github.com/sijms/go-ora/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
 
@@ -125,27 +127,24 @@ func skipIfNoDB(t *testing.T) {
 func loadConfig(t *testing.T, data []byte) *config.Request {
 	t.Helper()
 	var req config.Request
-	if err := yaml.Unmarshal(data, &req); err != nil {
-		t.Fatalf("parsing config: %v", err)
-	}
+	err := yaml.Unmarshal(data, &req)
+	require.NoError(t, err, "parsing config")
 	return &req
 }
 
 func rowCount(t *testing.T, table string) int {
 	t.Helper()
 	var count int
-	if err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", table)).Scan(&count); err != nil {
-		t.Fatalf("counting %s: %v", table, err)
-	}
+	err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", table)).Scan(&count)
+	require.NoError(t, err, "counting %s", table)
 	return count
 }
 
 func tableExists(t *testing.T, query, table string) bool {
 	t.Helper()
 	var count int
-	if err := db.QueryRow(query, table).Scan(&count); err != nil {
-		t.Fatalf("checking table %s: %v", table, err)
-	}
+	err := db.QueryRow(query, table).Scan(&count)
+	require.NoError(t, err, "checking table %s", table)
 	return count > 0
 }
 
@@ -268,9 +267,7 @@ func runIntegrationTests(t *testing.T, config []byte, queries map[string]string)
 	ctx := context.Background()
 
 	env, err := NewEnv(db, driverName, req)
-	if err != nil {
-		t.Fatalf("creating env: %v", err)
-	}
+	require.NoError(t, err, "creating env")
 
 	// Tear down tables when the test finishes.
 	t.Cleanup(func() {
@@ -286,20 +283,16 @@ func runIntegrationTests(t *testing.T, config []byte, queries map[string]string)
 }
 
 func testUp(t *testing.T, env *Env, ctx context.Context, queries map[string]string) {
-	if err := env.Up(ctx); err != nil {
-		t.Fatalf("up: %v", err)
-	}
+	err := env.Up(ctx)
+	require.NoError(t, err, "up")
 	for _, table := range allTables {
-		if !tableExists(t, queries["table_exists"], table) {
-			t.Errorf("table %s was not created", table)
-		}
+		assert.True(t, tableExists(t, queries["table_exists"], table), "table %s was not created", table)
 	}
 }
 
 func testSeed(t *testing.T, env *Env, ctx context.Context, queries map[string]string) {
-	if err := env.Seed(ctx); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	err := env.Seed(ctx)
+	require.NoError(t, err, "seed")
 
 	t.Run("ref_source", func(t *testing.T) { testSeedRefSource(t) })
 	t.Run("gen_batch", func(t *testing.T) { testSeedGenBatch(t) })
@@ -308,27 +301,19 @@ func testSeed(t *testing.T, env *Env, ctx context.Context, queries map[string]st
 }
 
 func testSeedRefSource(t *testing.T) {
-	if got := rowCount(t, "test_ref_source"); got != 20 {
-		t.Errorf("test_ref_source rows = %d, want 20", got)
-	}
+	assert.Equal(t, 20, rowCount(t, "test_ref_source"))
 }
 
 func testSeedGenBatch(t *testing.T) {
-	if got := rowCount(t, "test_gen_batch"); got != 10 {
-		t.Errorf("test_gen_batch rows = %d, want 10", got)
-	}
+	assert.Equal(t, 10, rowCount(t, "test_gen_batch"))
 }
 
 func testSeedBatch(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_batch"); got != 5 {
-		t.Errorf("test_batch rows = %d, want 5", got)
-	}
+	assert.Equal(t, 5, rowCount(t, "test_batch"))
 
 	// Values should be 0..4.
 	rows, err := db.Query(queries["batch_vals"])
-	if err != nil {
-		t.Fatalf("querying test_batch: %v", err)
-	}
+	require.NoError(t, err, "querying test_batch")
 	defer rows.Close()
 	var vals []int
 	for rows.Next() {
@@ -337,29 +322,23 @@ func testSeedBatch(t *testing.T, queries map[string]string) {
 		vals = append(vals, v)
 	}
 	for i, v := range vals {
-		if v != i {
-			t.Errorf("test_batch[%d] = %d, want %d", i, v, i)
-		}
+		assert.Equal(t, i, v, "test_batch[%d]", i)
 	}
 }
 
 func testSeedRefEach(t *testing.T) {
-	if got := rowCount(t, "test_ref_each"); got != 5 {
-		t.Errorf("test_ref_each rows = %d, want 5", got)
-	}
+	assert.Equal(t, 5, rowCount(t, "test_ref_each"))
 }
 
 func testInit(t *testing.T, env *Env, ctx context.Context) {
-	if err := env.Init(ctx); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	err := env.Init(ctx)
+	require.NoError(t, err, "init")
 }
 
 func testRun(t *testing.T, env *Env, ctx context.Context, queries map[string]string) {
 	for i := range runIterations {
-		if err := env.RunIteration(ctx); err != nil {
-			t.Fatalf("run iteration %d: %v", i, err)
-		}
+		err := env.RunIteration(ctx)
+		require.NoError(t, err, "run iteration %d", i)
 	}
 
 	t.Run("scalars", func(t *testing.T) { testRunScalars(t, queries) })
@@ -379,14 +358,10 @@ func testRun(t *testing.T, env *Env, ctx context.Context, queries map[string]str
 }
 
 func testRunScalars(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_scalars"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_scalars"))
 
 	rows, err := db.Query(queries["scalars"])
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
+	require.NoError(t, err, "querying")
 	defer rows.Close()
 
 	regexPat := regexp.MustCompile(`^[A-Z]{3}-[0-9]{4}$`)
@@ -398,228 +373,140 @@ func testRunScalars(t *testing.T, queries map[string]string) {
 		var exprFnVal float64
 		rows.Scan(&constVal, &globalVal, &exprVal, &genVal, &regexVal, &tmplVal, &condVal, &coalVal, &exprFnVal)
 
-		if constVal != 42 {
-			t.Errorf("const_val = %d, want 42", constVal)
-		}
-		if globalVal != 42 {
-			t.Errorf("global_val = %d, want 42", globalVal)
-		}
-		if exprVal != 84 {
-			t.Errorf("expr_val = %d, want 84", exprVal)
-		}
-		if genVal == "" {
-			t.Error("gen_val is empty")
-		}
-		if !regexPat.MatchString(regexVal) {
-			t.Errorf("regex_val %q does not match pattern", regexVal)
-		}
-		if !tmplPat.MatchString(tmplVal) {
-			t.Errorf("tmpl_val %q does not match pattern", tmplVal)
-		}
-		if condVal != "yes" {
-			t.Errorf("cond_val = %q, want yes", condVal)
-		}
-		if coalVal != "fallback" {
-			t.Errorf("coal_val = %q, want fallback", coalVal)
-		}
-		if exprFnVal != 10 {
-			t.Errorf("expr_fn_val = %v, want 10", exprFnVal)
-		}
+		assert.Equal(t, 42, constVal, "const_val")
+		assert.Equal(t, 42, globalVal, "global_val")
+		assert.Equal(t, 84, exprVal, "expr_val")
+		assert.NotEmpty(t, genVal, "gen_val")
+		assert.Regexp(t, regexPat, regexVal, "regex_val")
+		assert.Regexp(t, tmplPat, tmplVal, "tmpl_val")
+		assert.Equal(t, "yes", condVal, "cond_val")
+		assert.Equal(t, "fallback", coalVal, "coal_val")
+		assert.Equal(t, float64(10), exprFnVal, "expr_fn_val")
 	}
 }
 
 func testRunUUIDs(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_uuids"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_uuids"))
 
 	uuidPat := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 	rows, err := db.Query(queries["uuids"])
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
+	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
 		var v1, v4, v6, v7 string
 		rows.Scan(&v1, &v4, &v6, &v7)
 		for _, v := range []string{v1, v4, v6, v7} {
-			if !uuidPat.MatchString(v) {
-				t.Errorf("invalid UUID: %q", v)
-			}
+			assert.Regexp(t, uuidPat, v, "invalid UUID")
 		}
 	}
 }
 
 func testRunNumbers(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_numbers"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_numbers"))
 
 	rows, err := db.Query(queries["numbers"])
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
+	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
 		var floatVal, uniformVal, normVal, normFVal float64
 		var zipfVal int
 		rows.Scan(&floatVal, &uniformVal, &normVal, &normFVal, &zipfVal)
 
-		if floatVal < 1.0 || floatVal > 100.0 {
-			t.Errorf("float_val %v out of [1, 100]", floatVal)
-		}
-		if uniformVal < 1.0 || uniformVal > 100.0 {
-			t.Errorf("uniform_val %v out of [1, 100]", uniformVal)
-		}
-		if normVal < 1 || normVal > 100 {
-			t.Errorf("norm_val %v out of [1, 100]", normVal)
-		}
-		if normFVal < 1 || normFVal > 100 {
-			t.Errorf("norm_f_val %v out of [1, 100]", normFVal)
-		}
-		if zipfVal < 0 || zipfVal > 99 {
-			t.Errorf("zipf_val %d out of [0, 99]", zipfVal)
-		}
+		assert.True(t, floatVal >= 1.0 && floatVal <= 100.0, "float_val %v out of [1, 100]", floatVal)
+		assert.True(t, uniformVal >= 1.0 && uniformVal <= 100.0, "uniform_val %v out of [1, 100]", uniformVal)
+		assert.True(t, normVal >= 1 && normVal <= 100, "norm_val %v out of [1, 100]", normVal)
+		assert.True(t, normFVal >= 1 && normFVal <= 100, "norm_f_val %v out of [1, 100]", normFVal)
+		assert.True(t, zipfVal >= 0 && zipfVal <= 99, "zipf_val %d out of [0, 99]", zipfVal)
 	}
 }
 
 func testRunSets(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_sets"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_sets"))
 
 	validRand := map[string]bool{"red": true, "green": true, "blue": true}
 	validWeighted := map[string]bool{"visa": true, "mastercard": true, "amex": true}
 	validDist := map[string]bool{"a": true, "b": true, "c": true, "d": true, "e": true}
 
 	rows, err := db.Query(queries["sets"])
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
+	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
 		var randVal, weightedVal, normalVal, expVal, lognormVal, zipfianVal string
 		rows.Scan(&randVal, &weightedVal, &normalVal, &expVal, &lognormVal, &zipfianVal)
 
-		if !validRand[randVal] {
-			t.Errorf("rand_val %q not in valid set", randVal)
-		}
-		if !validWeighted[weightedVal] {
-			t.Errorf("weighted_val %q not in valid set", weightedVal)
-		}
-		if !validDist[normalVal] {
-			t.Errorf("normal_val %q not in valid set", normalVal)
-		}
-		if !validDist[expVal] {
-			t.Errorf("exp_val %q not in valid set", expVal)
-		}
-		if !validDist[lognormVal] {
-			t.Errorf("lognorm_val %q not in valid set", lognormVal)
-		}
-		if !validDist[zipfianVal] {
-			t.Errorf("zipfian_val %q not in valid set", zipfianVal)
-		}
+		assert.True(t, validRand[randVal], "rand_val %q not in valid set", randVal)
+		assert.True(t, validWeighted[weightedVal], "weighted_val %q not in valid set", weightedVal)
+		assert.True(t, validDist[normalVal], "normal_val %q not in valid set", normalVal)
+		assert.True(t, validDist[expVal], "exp_val %q not in valid set", expVal)
+		assert.True(t, validDist[lognormVal], "lognorm_val %q not in valid set", lognormVal)
+		assert.True(t, validDist[zipfianVal], "zipfian_val %q not in valid set", zipfianVal)
 	}
 }
 
 func testRunJSON(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_json"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_json"))
 
 	rows, err := db.Query(queries["json"])
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
+	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
 		var obj, arr string
 		rows.Scan(&obj, &arr)
 
-		if !strings.HasPrefix(obj, "{") {
-			t.Errorf("obj %q is not a JSON object", obj)
-		}
-		if !strings.HasPrefix(arr, "[") {
-			t.Errorf("arr %q is not a JSON array", arr)
-		}
+		assert.True(t, strings.HasPrefix(obj, "{"), "obj %q is not a JSON object", obj)
+		assert.True(t, strings.HasPrefix(arr, "["), "arr %q is not a JSON array", arr)
 	}
 }
 
 func testRunGeo(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_geo"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_geo"))
 
 	rows, err := db.Query(queries["geo"])
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
+	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
 		var lat, lon float64
 		var wkt string
 		rows.Scan(&lat, &lon, &wkt)
 
-		if lat < -90 || lat > 90 {
-			t.Errorf("lat %v out of [-90, 90]", lat)
-		}
-		if lon < -180 || lon > 180 {
-			t.Errorf("lon %v out of [-180, 180]", lon)
-		}
-		if !strings.HasPrefix(wkt, "POINT(") {
-			t.Errorf("wkt %q does not start with POINT(", wkt)
-		}
+		assert.True(t, lat >= -90 && lat <= 90, "lat %v out of [-90, 90]", lat)
+		assert.True(t, lon >= -180 && lon <= 180, "lon %v out of [-180, 180]", lon)
+		assert.True(t, strings.HasPrefix(wkt, "POINT("), "wkt %q does not start with POINT(", wkt)
 	}
 }
 
 func testRunTime(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_time"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_time"))
 
 	timePat := regexp.MustCompile(`^\d{2}:\d{2}:\d{2}$`)
 	timezPat := regexp.MustCompile(`^\d{2}:\d{2}:\d{2}\+00:00$`)
 
 	rows, err := db.Query(queries["time"])
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
+	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
 		var ts, dur, dateStr, offsetTs, timeVal, timezVal string
 		rows.Scan(&ts, &dur, &dateStr, &offsetTs, &timeVal, &timezVal)
 
-		if _, err := time.Parse(time.RFC3339, ts); err != nil {
-			t.Errorf("ts %q is not valid RFC3339: %v", ts, err)
-		}
-		if _, err := time.ParseDuration(dur); err != nil {
-			t.Errorf("dur %q is not valid duration: %v", dur, err)
-		}
-		if _, err := time.Parse("2006-01-02", dateStr); err != nil {
-			t.Errorf("date_str %q is not valid date: %v", dateStr, err)
-		}
-		if _, err := time.Parse(time.RFC3339, offsetTs); err != nil {
-			t.Errorf("offset_ts %q is not valid RFC3339: %v", offsetTs, err)
-		}
-		if !timePat.MatchString(timeVal) {
-			t.Errorf("time_val %q does not match HH:MM:SS", timeVal)
-		}
-		if !timezPat.MatchString(timezVal) {
-			t.Errorf("timez_val %q does not match HH:MM:SS+00:00", timezVal)
-		}
+		_, err := time.Parse(time.RFC3339, ts)
+		assert.NoError(t, err, "ts %q is not valid RFC3339", ts)
+		_, err = time.ParseDuration(dur)
+		assert.NoError(t, err, "dur %q is not valid duration", dur)
+		_, err = time.Parse("2006-01-02", dateStr)
+		assert.NoError(t, err, "date_str %q is not valid date", dateStr)
+		_, err = time.Parse(time.RFC3339, offsetTs)
+		assert.NoError(t, err, "offset_ts %q is not valid RFC3339", offsetTs)
+		assert.Regexp(t, timePat, timeVal, "time_val %q does not match HH:MM:SS", timeVal)
+		assert.Regexp(t, timezPat, timezVal, "timez_val %q does not match HH:MM:SS+00:00", timezVal)
 	}
 }
 
 func testRunDistributions(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_distributions"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_distributions"))
 
 	rows, err := db.Query(queries["distributions"])
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
+	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
 		var nuVal int
@@ -627,220 +514,140 @@ func testRunDistributions(t *testing.T, queries map[string]string) {
 		var expVal, lognormVal, expIntVal, lognormIntVal float64
 		rows.Scan(&nuVal, &nuVals, &normVals, &expVal, &lognormVal, &expIntVal, &lognormIntVal)
 
-		if nuVal < 1 || nuVal > 1000 {
-			t.Errorf("nu_val %d out of [1, 1000]", nuVal)
-		}
+		assert.True(t, nuVal >= 1 && nuVal <= 1000, "nu_val %d out of [1, 1000]", nuVal)
 
 		nuParts := strings.Split(nuVals, ",")
-		if len(nuParts) < 3 || len(nuParts) > 5 {
-			t.Errorf("nu_vals has %d parts, want 3-5", len(nuParts))
-		}
+		assert.True(t, len(nuParts) >= 3 && len(nuParts) <= 5, "nu_vals has %d parts, want 3-5", len(nuParts))
 
 		normParts := strings.Split(normVals, ",")
-		if len(normParts) < 3 || len(normParts) > 5 {
-			t.Errorf("norm_vals has %d parts, want 3-5", len(normParts))
-		}
+		assert.True(t, len(normParts) >= 3 && len(normParts) <= 5, "norm_vals has %d parts, want 3-5", len(normParts))
 
-		if expVal < 0 || expVal > 100 {
-			t.Errorf("exp_val %v out of [0, 100]", expVal)
-		}
-
-		if lognormVal < 1 || lognormVal > 100 {
-			t.Errorf("lognorm_val %v out of [1, 100]", lognormVal)
-		}
-
-		if expIntVal < 0 || expIntVal > 100 {
-			t.Errorf("exp_int_val %v out of [0, 100]", expIntVal)
-		}
-
-		if lognormIntVal < 1 || lognormIntVal > 100 {
-			t.Errorf("lognorm_int_val %v out of [1, 100]", lognormIntVal)
-		}
+		assert.True(t, expVal >= 0 && expVal <= 100, "exp_val %v out of [0, 100]", expVal)
+		assert.True(t, lognormVal >= 1 && lognormVal <= 100, "lognorm_val %v out of [1, 100]", lognormVal)
+		assert.True(t, expIntVal >= 0 && expIntVal <= 100, "exp_int_val %v out of [0, 100]", expIntVal)
+		assert.True(t, lognormIntVal >= 1 && lognormIntVal <= 100, "lognorm_int_val %v out of [1, 100]", lognormIntVal)
 	}
 }
 
 func testRunBinary(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_binary"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_binary"))
 
 	bytesPat := regexp.MustCompile(`^\\x[0-9a-f]{32}$`)
 	bitPat := regexp.MustCompile(`^[01]{8}$`)
 	varbitPat := regexp.MustCompile(`^[01]{1,16}$`)
 
 	rows, err := db.Query(queries["binary"])
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
+	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
 		var bytesVal, bitVal, varbitVal, inetVal string
 		rows.Scan(&bytesVal, &bitVal, &varbitVal, &inetVal)
 
-		if !bytesPat.MatchString(bytesVal) {
-			t.Errorf("bytes_val %q does not match \\x + 32 hex chars", bytesVal)
-		}
-		if !bitPat.MatchString(bitVal) {
-			t.Errorf("bit_val %q does not match 8 bits", bitVal)
-		}
-		if !varbitPat.MatchString(varbitVal) {
-			t.Errorf("varbit_val %q does not match 1-16 bits", varbitVal)
-		}
-		if ip := net.ParseIP(inetVal); ip == nil {
-			t.Errorf("inet_val %q is not a valid IP address", inetVal)
-		}
+		assert.Regexp(t, bytesPat, bytesVal, "bytes_val %q does not match \\x + 32 hex chars", bytesVal)
+		assert.Regexp(t, bitPat, bitVal, "bit_val %q does not match 8 bits", bitVal)
+		assert.Regexp(t, varbitPat, varbitVal, "varbit_val %q does not match 1-16 bits", varbitVal)
+		assert.NotNil(t, net.ParseIP(inetVal), "inet_val %q is not a valid IP address", inetVal)
 	}
 }
 
 func testRunArrays(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_arrays"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_arrays"))
 
 	rows, err := db.Query(queries["arrays"])
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
+	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
 		var arrVal string
 		rows.Scan(&arrVal)
 
-		if !strings.HasPrefix(arrVal, "{") || !strings.HasSuffix(arrVal, "}") {
-			t.Errorf("arr_val %q is not a valid array literal", arrVal)
-		}
+		assert.True(t, strings.HasPrefix(arrVal, "{") && strings.HasSuffix(arrVal, "}"),
+			"arr_val %q is not a valid array literal", arrVal)
 	}
 }
 
 func testRunRefs(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_refs"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_refs"))
 
 	rows, err := db.Query(queries["refs"])
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
+	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
 		var randID, sameID int
 		var sameName, refNIDs, weightedIDs string
 		rows.Scan(&randID, &sameID, &sameName, &refNIDs, &weightedIDs)
 
-		if randID < 1 || randID > 20 {
-			t.Errorf("rand_id %d out of [1, 20]", randID)
-		}
-		if sameID < 1 || sameID > 20 {
-			t.Errorf("same_id %d out of [1, 20]", sameID)
-		}
+		assert.True(t, randID >= 1 && randID <= 20, "rand_id %d out of [1, 20]", randID)
+		assert.True(t, sameID >= 1 && sameID <= 20, "same_id %d out of [1, 20]", sameID)
 
 		// ref_same should return consistent id and name.
 		expectedName := fmt.Sprintf("item-%d", sameID)
-		if sameName != expectedName {
-			t.Errorf("same_name %q inconsistent with same_id %d (want %q)", sameName, sameID, expectedName)
-		}
+		assert.Equal(t, expectedName, sameName, "same_name inconsistent with same_id %d", sameID)
 
 		refNParts := strings.Split(refNIDs, ",")
-		if len(refNParts) < 2 || len(refNParts) > 4 {
-			t.Errorf("ref_n_ids has %d parts, want 2-4", len(refNParts))
-		}
+		assert.True(t, len(refNParts) >= 2 && len(refNParts) <= 4, "ref_n_ids has %d parts, want 2-4", len(refNParts))
 
 		weightedParts := strings.Split(weightedIDs, ",")
-		if len(weightedParts) < 2 || len(weightedParts) > 4 {
-			t.Errorf("weighted_ids has %d parts, want 2-4", len(weightedParts))
-		}
+		assert.True(t, len(weightedParts) >= 2 && len(weightedParts) <= 4, "weighted_ids has %d parts, want 2-4", len(weightedParts))
 	}
 }
 
 func testRunRefDiff(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_ref_diff"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_ref_diff"))
 
 	rows, err := db.Query(queries["ref_diff"])
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
+	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
 		var id1, id2 int
 		rows.Scan(&id1, &id2)
-		if id1 == id2 {
-			t.Errorf("ref_diff returned same id for both args: %d", id1)
-		}
+		assert.NotEqual(t, id1, id2, "ref_diff returned same id for both args: %d", id1)
 	}
 }
 
 func testRunAgg(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_agg"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_agg"))
 
 	// ref_source has ids 1..20 and weight = id * 10.
 	// All aggregation values are deterministic.
 	rows, err := db.Query(queries["agg"])
-	if err != nil {
-		t.Fatalf("querying: %v", err)
-	}
+	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
 		var sumVal, avgVal, minVal, maxVal float64
 		var countVal, distinctVal int
 		rows.Scan(&sumVal, &avgVal, &minVal, &maxVal, &countVal, &distinctVal)
 
-		if sumVal != 210 {
-			t.Errorf("sum_val = %v, want 210", sumVal)
-		}
-		if avgVal != 10.5 {
-			t.Errorf("avg_val = %v, want 10.5", avgVal)
-		}
-		if minVal != 1 {
-			t.Errorf("min_val = %v, want 1", minVal)
-		}
-		if maxVal != 20 {
-			t.Errorf("max_val = %v, want 20", maxVal)
-		}
-		if countVal != 20 {
-			t.Errorf("count_val = %d, want 20", countVal)
-		}
-		if distinctVal != 20 {
-			t.Errorf("distinct_val = %d, want 20", distinctVal)
-		}
+		assert.Equal(t, float64(210), sumVal, "sum_val")
+		assert.Equal(t, 10.5, avgVal, "avg_val")
+		assert.Equal(t, float64(1), minVal, "min_val")
+		assert.Equal(t, float64(20), maxVal, "max_val")
+		assert.Equal(t, 20, countVal, "count_val")
+		assert.Equal(t, 20, distinctVal, "distinct_val")
 	}
 }
 
 func testRunRefPerm(t *testing.T, queries map[string]string) {
-	if got := rowCount(t, "test_ref_perm"); got != runIterations {
-		t.Errorf("rows = %d, want %d", got, runIterations)
-	}
+	assert.Equal(t, runIterations, rowCount(t, "test_ref_perm"))
 
 	// All rows should have the same perm_id since the same Env
 	// is used for all iterations.
 	var distinct int
 	db.QueryRow(queries["ref_perm"]).Scan(&distinct)
-	if distinct != 1 {
-		t.Errorf("ref_perm produced %d distinct values, want 1", distinct)
-	}
+	assert.Equal(t, 1, distinct, "ref_perm produced %d distinct values, want 1", distinct)
 }
 
 func testDeseed(t *testing.T, env *Env, ctx context.Context) {
-	if err := env.Deseed(ctx); err != nil {
-		t.Fatalf("deseed: %v", err)
-	}
+	err := env.Deseed(ctx)
+	require.NoError(t, err, "deseed")
 	for _, table := range allTables {
-		if got := rowCount(t, table); got != 0 {
-			t.Errorf("%s has %d rows after deseed, want 0", table, got)
-		}
+		assert.Equal(t, 0, rowCount(t, table), "%s has rows after deseed", table)
 	}
 }
 
 func testDown(t *testing.T, env *Env, ctx context.Context, queries map[string]string) {
-	if err := env.Down(ctx); err != nil {
-		t.Fatalf("down: %v", err)
-	}
+	err := env.Down(ctx)
+	require.NoError(t, err, "down")
 	for _, table := range allTables {
-		if tableExists(t, queries["table_exists"], table) {
-			t.Errorf("table %s still exists after down", table)
-		}
+		assert.False(t, tableExists(t, queries["table_exists"], table), "table %s still exists after down", table)
 	}
 }

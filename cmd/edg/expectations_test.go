@@ -3,12 +3,13 @@ package main
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCheckExpectations_NoExpectations(t *testing.T) {
-	if err := checkExpectations(nil, nil, time.Minute); err != nil {
-		t.Fatalf("expected nil, got %v", err)
-	}
+	require.NoError(t, checkExpectations(nil, nil, time.Minute))
 }
 
 func TestCheckExpectations_AllPass(t *testing.T) {
@@ -30,9 +31,7 @@ func TestCheckExpectations_AllPass(t *testing.T) {
 		"read_balance.qps > 10",
 	}
 
-	if err := checkExpectations(expectations, stats, time.Minute); err != nil {
-		t.Fatalf("expected all pass, got %v", err)
-	}
+	require.NoError(t, checkExpectations(expectations, stats, time.Minute))
 }
 
 func TestCheckExpectations_SomeFail(t *testing.T) {
@@ -52,12 +51,8 @@ func TestCheckExpectations_SomeFail(t *testing.T) {
 	}
 
 	err := checkExpectations(expectations, stats, time.Minute)
-	if err == nil {
-		t.Fatal("expected failure, got nil")
-	}
-	if err.Error() != "2 expectation(s) failed" {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.Error(t, err)
+	require.EqualError(t, err, "2 expectation(s) failed")
 }
 
 func TestCheckExpectations_InvalidExpression(t *testing.T) {
@@ -66,9 +61,7 @@ func TestCheckExpectations_InvalidExpression(t *testing.T) {
 	expectations := []string{"??? invalid"}
 
 	err := checkExpectations(expectations, stats, time.Minute)
-	if err == nil {
-		t.Fatal("expected failure for invalid expression")
-	}
+	require.Error(t, err)
 }
 
 func TestCheckExpectations_PerQueryMetrics(t *testing.T) {
@@ -92,9 +85,7 @@ func TestCheckExpectations_PerQueryMetrics(t *testing.T) {
 		"slow_query.p99 > 500",
 	}
 
-	if err := checkExpectations(expectations, stats, time.Minute); err != nil {
-		t.Fatalf("expected all pass, got %v", err)
-	}
+	require.NoError(t, checkExpectations(expectations, stats, time.Minute))
 }
 
 func TestCheckExpectations_TotalMetrics(t *testing.T) {
@@ -119,9 +110,7 @@ func TestCheckExpectations_TotalMetrics(t *testing.T) {
 		"tpm > 0",
 	}
 
-	if err := checkExpectations(expectations, stats, time.Minute); err != nil {
-		t.Fatalf("expected all pass, got %v", err)
-	}
+	require.NoError(t, checkExpectations(expectations, stats, time.Minute))
 }
 
 func TestErrorRate(t *testing.T) {
@@ -141,9 +130,7 @@ func TestErrorRate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := errorRate(tt.errors, tt.successfulOps)
-			if got != tt.want {
-				t.Errorf("errorRate(%d, %d) = %v, want %v", tt.errors, tt.successfulOps, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

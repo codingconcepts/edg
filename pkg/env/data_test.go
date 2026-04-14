@@ -9,6 +9,8 @@ import (
 	"github.com/codingconcepts/edg/pkg/config"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReadRows(t *testing.T) {
@@ -67,26 +69,19 @@ func TestReadRows(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db, mock, err := sqlmock.New()
-			if err != nil {
-				t.Fatalf("creating sqlmock: %v", err)
-			}
+			require.NoError(t, err)
 			defer db.Close()
 
 			mock.ExpectQuery("SELECT").WillReturnRows(buildMockRows(tt.columns, tt.rows))
 
 			rows, err := db.Query("SELECT")
-			if err != nil {
-				t.Fatalf("querying: %v", err)
-			}
+			require.NoError(t, err)
 
 			got, err := ReadRows(rows)
-			if err != nil {
-				t.Fatalf("ReadRows() error: %v", err)
-			}
+			require.NoError(t, err)
 
-			if err := mock.ExpectationsWereMet(); err != nil {
-				t.Fatalf("unmet expectations: %v", err)
-			}
+			err = mock.ExpectationsWereMet()
+			require.NoError(t, err)
 
 			assertMaps(t, got, tt.expected)
 		})
@@ -119,9 +114,7 @@ func TestNormalizeBytes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := normalizeBytes(tt.input, tt.dbType)
 			got := fmt.Sprintf("%T", result)
-			if got != tt.expectType {
-				t.Errorf("normalizeBytes(%v, %q) type = %s, want %s", tt.input, tt.dbType, got, tt.expectType)
-			}
+			assert.Equal(t, tt.expectType, got, "normalizeBytes(%v, %q)", tt.input, tt.dbType)
 		})
 	}
 }
@@ -141,19 +134,12 @@ func buildMockRows(columns []string, rows [][]any) *sqlmock.Rows {
 func assertMaps(t *testing.T, got, expected []map[string]any) {
 	t.Helper()
 
-	if len(got) != len(expected) {
-		t.Fatalf("got %d rows, want %d", len(got), len(expected))
-	}
+	require.Equal(t, len(expected), len(got), "row count mismatch")
 	for i, want := range expected {
 		for k, v := range want {
 			gv, ok := got[i][k]
-			if !ok {
-				t.Errorf("row %d: missing key %q", i, k)
-				continue
-			}
-			if fmt.Sprint(gv) != fmt.Sprint(v) {
-				t.Errorf("row %d[%q] = %v, want %v", i, k, gv, v)
-			}
+			require.True(t, ok, "row %d: missing key %q", i, k)
+			assert.Equal(t, fmt.Sprint(v), fmt.Sprint(gv), "row %d[%q]", i, k)
 		}
 	}
 }
@@ -228,9 +214,7 @@ func newTestEnv(t *testing.T) *Env {
 
 func TestQueryPrepared(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectPrepare("SELECT id, name FROM users").
@@ -239,32 +223,24 @@ func TestQueryPrepared(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow(1, "alice"))
 
 	stmt, err := db.Prepare("SELECT id, name FROM users WHERE id = ?")
-	if err != nil {
-		t.Fatalf("preparing: %v", err)
-	}
+	require.NoError(t, err)
 	defer stmt.Close()
 
 	env := newTestEnv(t)
 	q := &config.Query{Name: "users", Query: "SELECT id, name FROM users WHERE id = ?"}
 
-	if err := env.QueryPrepared(context.Background(), stmt, q, 1); err != nil {
-		t.Fatalf("QueryPrepared error: %v", err)
-	}
+	err = env.QueryPrepared(context.Background(), stmt, q, 1)
+	require.NoError(t, err)
 
 	data, ok := env.env["users"].([]map[string]any)
-	if !ok {
-		t.Fatal("QueryPrepared did not store results")
-	}
-	if len(data) != 1 || data[0]["name"] != "alice" {
-		t.Errorf("got %v, want [{id:1 name:alice}]", data)
-	}
+	require.True(t, ok, "QueryPrepared did not store results")
+	require.Equal(t, 1, len(data))
+	assert.Equal(t, "alice", data[0]["name"])
 }
 
 func TestExecPrepared(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectPrepare("INSERT INTO users").
@@ -273,17 +249,14 @@ func TestExecPrepared(t *testing.T) {
 		WillReturnResult(driver.ResultNoRows)
 
 	stmt, err := db.Prepare("INSERT INTO users VALUES (?, ?)")
-	if err != nil {
-		t.Fatalf("preparing: %v", err)
-	}
+	require.NoError(t, err)
 	defer stmt.Close()
 
 	env := newTestEnv(t)
 	q := &config.Query{Name: "insert_user", Query: "INSERT INTO users VALUES (?, ?)"}
 
-	if err := env.ExecPrepared(context.Background(), stmt, q, 1, "alice"); err != nil {
-		t.Fatalf("ExecPrepared error: %v", err)
-	}
+	err = env.ExecPrepared(context.Background(), stmt, q, 1, "alice")
+	require.NoError(t, err)
 }
 
 func TestQuery(t *testing.T) {
@@ -295,7 +268,7 @@ func TestQuery(t *testing.T) {
 		queryErr    error
 		query       config.Query
 		args        []any
-		expectErr   string
+		expErr      string
 		expected    []map[string]any
 	}{
 		{
@@ -314,7 +287,7 @@ func TestQuery(t *testing.T) {
 			mockPattern: "SELECT",
 			queryErr:    fmt.Errorf("connection refused"),
 			query:       config.Query{Name: "users", Query: "SELECT 1"},
-			expectErr:   "running statement: connection refused",
+			expErr:      "running statement: connection refused",
 		},
 		{
 			name:        "passes args to query",
@@ -332,9 +305,7 @@ func TestQuery(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db, mock, err := sqlmock.New()
-			if err != nil {
-				t.Fatalf("creating sqlmock: %v", err)
-			}
+			require.NoError(t, err)
 			defer db.Close()
 
 			eq := mock.ExpectQuery(tt.mockPattern)
@@ -354,28 +325,18 @@ func TestQuery(t *testing.T) {
 			env := newTestEnv(t)
 			err = env.Query(context.Background(), db, &tt.query, tt.args...)
 
-			if tt.expectErr != "" {
-				if err == nil {
-					t.Fatalf("expected error, got nil")
-				}
-				if got := err.Error(); got != tt.expectErr {
-					t.Fatalf("error = %q, want %q", got, tt.expectErr)
-				}
+			if tt.expErr != "" {
+				require.EqualError(t, err, tt.expErr)
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("Query() error: %v", err)
-			}
+			require.NoError(t, err)
 
-			if err := mock.ExpectationsWereMet(); err != nil {
-				t.Fatalf("unmet expectations: %v", err)
-			}
+			err = mock.ExpectationsWereMet()
+			require.NoError(t, err)
 
 			data, ok := env.env[tt.query.Name].([]map[string]any)
-			if !ok {
-				t.Fatalf("env[%q] not set or wrong type: %v", tt.query.Name, env.env[tt.query.Name])
-			}
+			require.True(t, ok, "env[%q] not set or wrong type: %v", tt.query.Name, env.env[tt.query.Name])
 
 			assertMaps(t, data, tt.expected)
 		})

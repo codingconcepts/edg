@@ -3,23 +3,20 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/codingconcepts/edg/pkg/test"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
 
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	path := filepath.Join(dir, name)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
 
 func TestRequestParsesSeedSection(t *testing.T) {
@@ -37,25 +34,13 @@ down:
     query: DROP TABLE t
 `
 	var req Request
-	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
+	require.NoError(t, yaml.Unmarshal([]byte(input), &req))
 
-	if len(req.Up) != 1 {
-		t.Fatalf("expected 1 up query, got %d", len(req.Up))
-	}
-	if len(req.Seed) != 1 {
-		t.Fatalf("expected 1 seed query, got %d", len(req.Seed))
-	}
-	if req.Seed[0].Name != "populate_table" {
-		t.Errorf("seed query name = %q, want %q", req.Seed[0].Name, "populate_table")
-	}
-	if len(req.Seed[0].Args) != 1 {
-		t.Fatalf("expected 1 seed arg, got %d", len(req.Seed[0].Args))
-	}
-	if len(req.Down) != 1 {
-		t.Fatalf("expected 1 down query, got %d", len(req.Down))
-	}
+	require.Len(t, req.Up, 1)
+	require.Len(t, req.Seed, 1)
+	assert.Equal(t, "populate_table", req.Seed[0].Name)
+	require.Len(t, req.Seed[0].Args, 1)
+	require.Len(t, req.Down, 1)
 }
 
 func TestRequestParsesDeseedSection(t *testing.T) {
@@ -69,19 +54,11 @@ deseed:
     query: TRUNCATE TABLE warehouse
 `
 	var req Request
-	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
+	require.NoError(t, yaml.Unmarshal([]byte(input), &req))
 
-	if len(req.Deseed) != 2 {
-		t.Fatalf("expected 2 deseed queries, got %d", len(req.Deseed))
-	}
-	if req.Deseed[0].Name != "truncate_items" {
-		t.Errorf("deseed query name = %q, want %q", req.Deseed[0].Name, "truncate_items")
-	}
-	if req.Deseed[0].Type != QueryTypeExec {
-		t.Errorf("deseed query type = %q, want %q", req.Deseed[0].Type, QueryTypeExec)
-	}
+	require.Len(t, req.Deseed, 2)
+	assert.Equal(t, "truncate_items", req.Deseed[0].Name)
+	assert.Equal(t, QueryTypeExec, req.Deseed[0].Type)
 }
 
 func TestRequestParsesEmptySeed(t *testing.T) {
@@ -91,13 +68,9 @@ up:
     query: CREATE TABLE t (id INT PRIMARY KEY)
 `
 	var req Request
-	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
+	require.NoError(t, yaml.Unmarshal([]byte(input), &req))
 
-	if len(req.Seed) != 0 {
-		t.Errorf("expected 0 seed queries, got %d", len(req.Seed))
-	}
+	assert.Empty(t, req.Seed)
 }
 
 func TestRequestParsesExpectations(t *testing.T) {
@@ -110,33 +83,25 @@ expectations:
   - check_balance.p99 < 100
 `
 	var req Request
-	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
+	require.NoError(t, yaml.Unmarshal([]byte(input), &req))
 
-	if len(req.Expectations) != 2 {
-		t.Fatalf("expected 2 expectations, got %d", len(req.Expectations))
-	}
-	if req.Expectations[0] != "error_rate < 1" {
-		t.Errorf("expectation[0] = %q, want %q", req.Expectations[0], "error_rate < 1")
-	}
-	if req.Expectations[1] != "check_balance.p99 < 100" {
-		t.Errorf("expectation[1] = %q, want %q", req.Expectations[1], "check_balance.p99 < 100")
-	}
+	require.Len(t, req.Expectations, 2)
+	assert.Equal(t, "error_rate < 1", req.Expectations[0])
+	assert.Equal(t, "check_balance.p99 < 100", req.Expectations[1])
 }
 
 func TestDurationUnmarshalYAML(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		want    time.Duration
-		wantErr bool
+		name   string
+		input  string
+		want   time.Duration
+		expErr string
 	}{
-		{"seconds", "wait: 5s", 5 * time.Second, false},
-		{"milliseconds", "wait: 250ms", 250 * time.Millisecond, false},
-		{"minutes", "wait: 2m", 2 * time.Minute, false},
-		{"complex", "wait: 1m30s", 90 * time.Second, false},
-		{"invalid", "wait: notaduration", 0, true},
+		{"seconds", "wait: 5s", 5 * time.Second, ""},
+		{"milliseconds", "wait: 250ms", 250 * time.Millisecond, ""},
+		{"minutes", "wait: 2m", 2 * time.Minute, ""},
+		{"complex", "wait: 1m30s", 90 * time.Second, ""},
+		{"invalid", "wait: notaduration", 0, "invalid duration"},
 	}
 
 	for _, tt := range tests {
@@ -145,18 +110,12 @@ func TestDurationUnmarshalYAML(t *testing.T) {
 				Wait Duration `yaml:"wait"`
 			}
 			err := yaml.Unmarshal([]byte(tt.input), &out)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
+			if tt.expErr != "" {
+				require.ErrorContains(t, err, tt.expErr)
 				return
 			}
-			if err != nil {
-				t.Fatalf("Unmarshal error: %v", err)
-			}
-			if time.Duration(out.Wait) != tt.want {
-				t.Errorf("got %v, want %v", time.Duration(out.Wait), tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, time.Duration(out.Wait))
 		})
 	}
 }
@@ -174,36 +133,22 @@ seed:
       INSERT INTO product (name) SELECT unnest(string_to_array('$1', ','))
 `
 	var req Request
-	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
+	require.NoError(t, yaml.Unmarshal([]byte(input), &req))
 
-	if len(req.Seed) != 1 {
-		t.Fatalf("expected 1 seed query, got %d", len(req.Seed))
-	}
+	require.Len(t, req.Seed, 1)
 	q := req.Seed[0]
-	if q.Type != QueryTypeExecBatch {
-		t.Errorf("type = %q, want %q", q.Type, QueryTypeExecBatch)
-	}
+	assert.Equal(t, QueryTypeExecBatch, q.Type)
 	// Count/Size are parsed as any from YAML, typically int.
-	if q.Count != 100 {
-		t.Errorf("count = %v, want 100", q.Count)
-	}
-	if q.Size != 50 {
-		t.Errorf("size = %v, want 50", q.Size)
-	}
+	assert.Equal(t, 100, q.Count)
+	assert.Equal(t, 50, q.Size)
 }
 
 func TestConfigSectionSeedValue(t *testing.T) {
-	if ConfigSectionSeed != "seed" {
-		t.Errorf("ConfigSectionSeed = %q, want %q", ConfigSectionSeed, "seed")
-	}
+	assert.Equal(t, ConfigSection("seed"), ConfigSectionSeed)
 }
 
 func TestConfigSectionDeseedValue(t *testing.T) {
-	if ConfigSectionDeseed != "deseed" {
-		t.Errorf("ConfigSectionDeseed = %q, want %q", ConfigSectionDeseed, "deseed")
-	}
+	assert.Equal(t, ConfigSection("deseed"), ConfigSectionDeseed)
 }
 
 func TestLoadConfig_NoIncludes(t *testing.T) {
@@ -217,16 +162,11 @@ up:
 `)
 
 	req, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	if err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if req.Globals["batch_size"] != 100 {
-		t.Errorf("globals.batch_size = %v, want 100", req.Globals["batch_size"])
-	}
-	if len(req.Up) != 1 || req.Up[0].Name != "create_table" {
-		t.Errorf("unexpected up queries: %v", req.Up)
-	}
+	assert.Equal(t, 100, req.Globals["batch_size"])
+	require.Len(t, req.Up, 1)
+	assert.Equal(t, "create_table", req.Up[0].Name)
 }
 
 func TestLoadConfig_IncludeMapping(t *testing.T) {
@@ -243,16 +183,10 @@ up:
 `)
 
 	req, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	if err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if req.Globals["batch_size"] != 500 {
-		t.Errorf("globals.batch_size = %v, want 500", req.Globals["batch_size"])
-	}
-	if req.Globals["workers"] != 4 {
-		t.Errorf("globals.workers = %v, want 4", req.Globals["workers"])
-	}
+	assert.Equal(t, 500, req.Globals["batch_size"])
+	assert.Equal(t, 4, req.Globals["workers"])
 }
 
 func TestLoadConfig_IncludeSequence(t *testing.T) {
@@ -268,19 +202,11 @@ up: !include shared/schema.yaml
 `)
 
 	req, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	if err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(req.Up) != 2 {
-		t.Fatalf("expected 2 up queries, got %d", len(req.Up))
-	}
-	if req.Up[0].Name != "create_users" {
-		t.Errorf("up[0].name = %q, want %q", req.Up[0].Name, "create_users")
-	}
-	if req.Up[1].Name != "create_orders" {
-		t.Errorf("up[1].name = %q, want %q", req.Up[1].Name, "create_orders")
-	}
+	require.Len(t, req.Up, 2)
+	assert.Equal(t, "create_users", req.Up[0].Name)
+	assert.Equal(t, "create_orders", req.Up[1].Name)
 }
 
 func TestLoadConfig_IncludeSequenceItem(t *testing.T) {
@@ -299,19 +225,11 @@ run:
 `)
 
 	req, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	if err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(req.Run) != 2 {
-		t.Fatalf("expected 2 run queries, got %d", len(req.Run))
-	}
-	if req.Run[0].Name() != "check_balance" {
-		t.Errorf("run[0].name = %q, want %q", req.Run[0].Name(), "check_balance")
-	}
-	if req.Run[1].Name() != "make_transfer" {
-		t.Errorf("run[1].name = %q, want %q", req.Run[1].Name(), "make_transfer")
-	}
+	require.Len(t, req.Run, 2)
+	assert.Equal(t, "check_balance", req.Run[0].Name())
+	assert.Equal(t, "make_transfer", req.Run[1].Name())
 }
 
 func TestLoadConfig_NestedIncludes(t *testing.T) {
@@ -327,13 +245,9 @@ up:
 `)
 
 	req, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	if err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if req.Globals["batch_size"] != 42 {
-		t.Errorf("globals.batch_size = %v, want 42", req.Globals["batch_size"])
-	}
+	assert.Equal(t, 42, req.Globals["batch_size"])
 }
 
 func TestLoadConfig_CircularInclude(t *testing.T) {
@@ -346,9 +260,7 @@ batch_size: !include a.yaml
 `)
 
 	_, err := LoadConfig(filepath.Join(dir, "a.yaml"))
-	if err == nil {
-		t.Fatal("expected circular include error, got nil")
-	}
+	require.Error(t, err)
 }
 
 func TestLoadConfig_MissingInclude(t *testing.T) {
@@ -358,9 +270,7 @@ globals: !include nonexistent.yaml
 `)
 
 	_, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	if err == nil {
-		t.Fatal("expected error for missing include, got nil")
-	}
+	require.Error(t, err)
 }
 
 func TestTransactionParsesRollbackIf(t *testing.T) {
@@ -374,30 +284,16 @@ run:
       - rollback_if: "ref_same('read_source').balance < 100"
 `
 	var req Request
-	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
+	require.NoError(t, yaml.Unmarshal([]byte(input), &req))
 
-	if len(req.Run) != 1 {
-		t.Fatalf("expected 1 run item, got %d", len(req.Run))
-	}
-	if !req.Run[0].IsTransaction() {
-		t.Fatal("expected run item to be a transaction")
-	}
+	require.Len(t, req.Run, 1)
+	require.True(t, req.Run[0].IsTransaction())
 
 	tx := req.Run[0].Transaction
-	if tx.Name != "make_transfer" {
-		t.Errorf("transaction name = %q, want %q", tx.Name, "make_transfer")
-	}
-	if len(tx.Queries) != 2 {
-		t.Fatalf("expected 2 queries, got %d", len(tx.Queries))
-	}
-	if !tx.Queries[1].IsRollbackIf() {
-		t.Fatal("expected second element to be a rollback_if")
-	}
-	if tx.Queries[1].RollbackIf != "ref_same('read_source').balance < 100" {
-		t.Errorf("rollback_if = %q, want %q", tx.Queries[1].RollbackIf, "ref_same('read_source').balance < 100")
-	}
+	assert.Equal(t, "make_transfer", tx.Name)
+	require.Len(t, tx.Queries, 2)
+	require.True(t, tx.Queries[1].IsRollbackIf())
+	assert.Equal(t, "ref_same('read_source').balance < 100", tx.Queries[1].RollbackIf)
 }
 
 func TestTransactionParsesWithoutRollbackIf(t *testing.T) {
@@ -410,14 +306,10 @@ run:
         query: INSERT INTO t VALUES (1)
 `
 	var req Request
-	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
+	require.NoError(t, yaml.Unmarshal([]byte(input), &req))
 
 	for _, q := range req.Run[0].Transaction.Queries {
-		if q.IsRollbackIf() {
-			t.Error("unexpected rollback_if element")
-		}
+		assert.False(t, q.IsRollbackIf())
 	}
 }
 
@@ -425,41 +317,29 @@ func TestCompileRollbackIf_Valid(t *testing.T) {
 	q := &Query{RollbackIf: "balance < 100"}
 
 	envMap := map[string]any{"balance": 50}
-	if err := q.CompileRollbackIf(envMap); err != nil {
-		t.Fatalf("CompileRollbackIf failed: %v", err)
-	}
-	if q.CompiledRollbackIf == nil {
-		t.Fatal("CompiledRollbackIf should not be nil")
-	}
+	require.NoError(t, q.CompileRollbackIf(envMap))
+	require.NotNil(t, q.CompiledRollbackIf)
 }
 
 func TestCompileRollbackIf_Empty(t *testing.T) {
 	q := &Query{}
 
-	if err := q.CompileRollbackIf(map[string]any{}); err != nil {
-		t.Fatalf("CompileRollbackIf failed: %v", err)
-	}
-	if q.CompiledRollbackIf != nil {
-		t.Fatal("CompiledRollbackIf should be nil when rollback_if is empty")
-	}
+	require.NoError(t, q.CompileRollbackIf(map[string]any{}))
+	require.Nil(t, q.CompiledRollbackIf)
 }
 
 func TestCompileRollbackIf_Invalid(t *testing.T) {
 	q := &Query{RollbackIf: "invalid +++"}
 
 	err := q.CompileRollbackIf(map[string]any{})
-	if err == nil {
-		t.Fatal("expected error for invalid expression, got nil")
-	}
+	require.Error(t, err)
 }
 
 func TestCompileRollbackIf_NonBoolReturnsError(t *testing.T) {
 	q := &Query{RollbackIf: "42"}
 
 	err := q.CompileRollbackIf(map[string]any{})
-	if err == nil {
-		t.Fatal("expected error for non-boolean expression, got nil")
-	}
+	require.Error(t, err)
 }
 
 func TestTransactionParsesLocals(t *testing.T) {
@@ -475,20 +355,12 @@ run:
         query: UPDATE account SET balance = balance - 1
 `
 	var req Request
-	if err := yaml.Unmarshal([]byte(input), &req); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
+	require.NoError(t, yaml.Unmarshal([]byte(input), &req))
 
 	tx := req.Run[0].Transaction
-	if len(tx.Locals) != 2 {
-		t.Fatalf("expected 2 locals, got %d", len(tx.Locals))
-	}
-	if tx.Locals["amount"] != "gen('number:1,100')" {
-		t.Errorf("locals[amount] = %q, want %q", tx.Locals["amount"], "gen('number:1,100')")
-	}
-	if tx.Locals["fee"] != "const(5)" {
-		t.Errorf("locals[fee] = %q, want %q", tx.Locals["fee"], "const(5)")
-	}
+	require.Len(t, tx.Locals, 2)
+	assert.Equal(t, "gen('number:1,100')", tx.Locals["amount"])
+	assert.Equal(t, "const(5)", tx.Locals["fee"])
 }
 
 func TestValidate_LocalShadowsQueryName(t *testing.T) {
@@ -505,12 +377,8 @@ func TestValidate_LocalShadowsQueryName(t *testing.T) {
 	}
 
 	err := req.Validate()
-	if err == nil {
-		t.Fatal("expected error when local shadows query name, got nil")
-	}
-	if !strings.Contains(err.Error(), `local "debit" shadows query name`) {
-		t.Errorf("unexpected error: %v", err)
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `local "debit" shadows query name`)
 }
 
 func TestCompileLocals_Valid(t *testing.T) {
@@ -521,15 +389,9 @@ func TestCompileLocals_Valid(t *testing.T) {
 		Locals: map[string]string{"amount": "const(42)"},
 	}
 
-	if err := tx.CompileLocals(envMap); err != nil {
-		t.Fatalf("CompileLocals failed: %v", err)
-	}
-	if len(tx.CompiledLocals) != 1 {
-		t.Fatalf("expected 1 compiled local, got %d", len(tx.CompiledLocals))
-	}
-	if tx.CompiledLocals["amount"] == nil {
-		t.Fatal("compiled local 'amount' is nil")
-	}
+	require.NoError(t, tx.CompileLocals(envMap))
+	require.Len(t, tx.CompiledLocals, 1)
+	require.NotNil(t, tx.CompiledLocals["amount"])
 }
 
 func TestCompileLocals_Invalid(t *testing.T) {
@@ -538,9 +400,7 @@ func TestCompileLocals_Invalid(t *testing.T) {
 	}
 
 	err := tx.CompileLocals(map[string]any{})
-	if err == nil {
-		t.Fatal("expected error for invalid expression, got nil")
-	}
+	require.Error(t, err)
 }
 
 func TestValidate_GenPatternValid(t *testing.T) {
@@ -549,9 +409,7 @@ func TestValidate_GenPatternValid(t *testing.T) {
 			{Query: &Query{Name: "q1", Args: []string{"gen('email')", "gen('number:1,100')"}}},
 		},
 	}
-	if err := req.Validate(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, req.Validate())
 }
 
 func TestValidate_GenPatternInvalid(t *testing.T) {
@@ -561,12 +419,8 @@ func TestValidate_GenPatternInvalid(t *testing.T) {
 		},
 	}
 	err := req.Validate()
-	if err == nil {
-		t.Fatal("expected error for invalid gen pattern, got nil")
-	}
-	if !strings.Contains(err.Error(), "notafunction") {
-		t.Errorf("unexpected error: %v", err)
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "notafunction")
 }
 
 func TestValidate_GenPatternInRow(t *testing.T) {
@@ -576,12 +430,8 @@ func TestValidate_GenPatternInRow(t *testing.T) {
 		},
 	}
 	err := req.Validate()
-	if err == nil {
-		t.Fatal("expected error for invalid gen pattern in row, got nil")
-	}
-	if !strings.Contains(err.Error(), "bogusxyz") {
-		t.Errorf("unexpected error: %v", err)
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bogusxyz")
 }
 
 func TestValidate_GenPatternInLocals(t *testing.T) {
@@ -597,12 +447,8 @@ func TestValidate_GenPatternInLocals(t *testing.T) {
 		},
 	}
 	err := req.Validate()
-	if err == nil {
-		t.Fatal("expected error for invalid gen pattern in locals, got nil")
-	}
-	if !strings.Contains(err.Error(), "notreal") {
-		t.Errorf("unexpected error: %v", err)
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "notreal")
 }
 
 func TestValidate_EnvPattern(t *testing.T) {
@@ -610,7 +456,7 @@ func TestValidate_EnvPattern(t *testing.T) {
 		name    string
 		env     map[string]string
 		pattern string
-		wantErr bool
+		expErr  string
 	}{
 		{
 			name: "valid single quote",
@@ -618,7 +464,7 @@ func TestValidate_EnvPattern(t *testing.T) {
 				"ABC": "123",
 			},
 			pattern: `env('ABC')`,
-			wantErr: false,
+			expErr:  "",
 		},
 		{
 			name: "valid double quote",
@@ -626,7 +472,7 @@ func TestValidate_EnvPattern(t *testing.T) {
 				"ABC": "123",
 			},
 			pattern: `env("ABC")`,
-			wantErr: false,
+			expErr:  "",
 		},
 		{
 			name: "missing env var",
@@ -634,7 +480,7 @@ func TestValidate_EnvPattern(t *testing.T) {
 				"ABC": "123",
 			},
 			pattern: `env("DEF")`,
-			wantErr: true,
+			expErr:  "missing environment variable",
 		},
 		{
 			name: "mismatched quotes not matched",
@@ -642,7 +488,7 @@ func TestValidate_EnvPattern(t *testing.T) {
 				"ABC": "123",
 			},
 			pattern: `env('ABC")`,
-			wantErr: false, // regex won't match, so no validation error (expr-lang catches syntax)
+			expErr:  "", // regex won't match, so no validation error (expr-lang catches syntax)
 		},
 	}
 
@@ -651,9 +497,7 @@ func TestValidate_EnvPattern(t *testing.T) {
 			test.CleanupEnv(t, "ABC")
 
 			for k, v := range c.env {
-				if err := os.Setenv(k, v); err != nil {
-					t.Fatalf("error setting env var for test: %v", err)
-				}
+				require.NoError(t, os.Setenv(k, v))
 			}
 
 			req := &Request{
@@ -664,11 +508,10 @@ func TestValidate_EnvPattern(t *testing.T) {
 
 			err := req.Validate()
 
-			if err != nil {
-				if !c.wantErr {
-					t.Fatalf("expected no error but got: %v", err)
-				}
-				return
+			if c.expErr != "" {
+				require.ErrorContains(t, err, c.expErr)
+			} else {
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -695,17 +538,11 @@ down: !include shared/teardown.yaml
 `)
 
 	req, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	if err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if req.Globals["batch_size"] != 100 {
-		t.Errorf("globals.batch_size = %v, want 100", req.Globals["batch_size"])
-	}
-	if len(req.Up) != 1 || req.Up[0].Name != "create_table" {
-		t.Errorf("unexpected up: %v", req.Up)
-	}
-	if len(req.Down) != 1 || req.Down[0].Name != "drop_table" {
-		t.Errorf("unexpected down: %v", req.Down)
-	}
+	assert.Equal(t, 100, req.Globals["batch_size"])
+	require.Len(t, req.Up, 1)
+	assert.Equal(t, "create_table", req.Up[0].Name)
+	require.Len(t, req.Down, 1)
+	assert.Equal(t, "drop_table", req.Down[0].Name)
 }

@@ -4,23 +4,21 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestVector_Format(t *testing.T) {
 	env := testEnv(nil)
 
 	result, err := env.vector(4, 3, 0.1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(result, "[") || !strings.HasSuffix(result, "]") {
-		t.Fatalf("vector = %q, want []-wrapped", result)
-	}
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(result, "["), "vector = %q, want []-wrapped", result)
+	require.True(t, strings.HasSuffix(result, "]"), "vector = %q, want []-wrapped", result)
 	inner := result[1 : len(result)-1]
 	parts := strings.Split(inner, ",")
-	if len(parts) != 4 {
-		t.Fatalf("vector(4,...) produced %d dimensions, want 4", len(parts))
-	}
+	require.Equal(t, 4, len(parts), "vector(4,...) produced %d dimensions, want 4", len(parts))
 }
 
 func TestVector_UnitLength(t *testing.T) {
@@ -28,9 +26,7 @@ func TestVector_UnitLength(t *testing.T) {
 
 	for range 100 {
 		result, err := env.vector(16, 3, 0.1)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		inner := result[1 : len(result)-1]
 		parts := strings.Split(inner, ",")
 
@@ -41,9 +37,7 @@ func TestVector_UnitLength(t *testing.T) {
 			norm += v * v
 		}
 		// Should be approximately 1.0 (unit vector).
-		if norm < 0.99 || norm > 1.01 {
-			t.Fatalf("vector norm = %f, want ~1.0", norm)
-		}
+		require.InDelta(t, 1.0, norm, 0.01, "vector norm = %f, want ~1.0", norm)
 	}
 }
 
@@ -63,9 +57,7 @@ func TestVector_Clustering(t *testing.T) {
 	vecs := make([][]float64, n)
 	for i := range n {
 		result, err := env.vector(dims, clusters, spread)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		inner := result[1 : len(result)-1]
 		parts := strings.Split(inner, ",")
 		vec := make([]float64, dims)
@@ -102,26 +94,21 @@ func TestVector_Clustering(t *testing.T) {
 		}
 	}
 
-	if highCount == 0 {
-		t.Error("no high-similarity pairs found; clustering may not be working")
-	}
-	if lowCount == 0 {
-		t.Error("no low-similarity pairs found; vectors may not be clustered")
-	}
+	assert.NotZero(t, highCount, "no high-similarity pairs found; clustering may not be working")
+	assert.NotZero(t, lowCount, "no low-similarity pairs found; vectors may not be clustered")
 }
 
 func TestVector_InvalidArgs(t *testing.T) {
 	env := testEnv(nil)
 
-	if _, err := env.vector(0, 3, 0.1); err == nil {
-		t.Error("vector(0,...) should error")
-	}
-	if _, err := env.vector(4, 0, 0.1); err == nil {
-		t.Error("vector(...,0,...) should error")
-	}
-	if _, err := env.vector("bad", 3, 0.1); err == nil {
-		t.Error("vector with non-int dims should error")
-	}
+	_, err := env.vector(0, 3, 0.1)
+	assert.Error(t, err, "vector(0,...) should error")
+
+	_, err = env.vector(4, 0, 0.1)
+	assert.Error(t, err, "vector(...,0,...) should error")
+
+	_, err = env.vector("bad", 3, 0.1)
+	assert.Error(t, err, "vector with non-int dims should error")
 }
 
 func TestVector_CentroidsCached(t *testing.T) {
@@ -129,30 +116,20 @@ func TestVector_CentroidsCached(t *testing.T) {
 
 	// First call creates centroids.
 	_, err := env.vector(8, 3, 0.1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	c1 := env.vectorCentroids["8:3"]
-	if c1 == nil {
-		t.Fatal("centroids not cached after first call")
-	}
+	require.NotNil(t, c1, "centroids not cached after first call")
 
 	// Second call should reuse same centroids.
 	_, err = env.vector(8, 3, 0.1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	c2 := env.vectorCentroids["8:3"]
-	if len(c1) != len(c2) {
-		t.Fatal("centroids changed between calls")
-	}
+	require.Equal(t, len(c1), len(c2), "centroids changed between calls")
 	for i := range c1 {
 		for j := range c1[i] {
-			if c1[i][j] != c2[i][j] {
-				t.Fatal("centroid values changed between calls")
-			}
+			require.Equal(t, c1[i][j], c2[i][j], "centroid values changed between calls")
 		}
 	}
 }
@@ -161,17 +138,12 @@ func TestVectorZipf_Format(t *testing.T) {
 	env := testEnv(nil)
 
 	result, err := env.vectorZipf(8, 5, 0.1, 2.0, 1.0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(result, "[") || !strings.HasSuffix(result, "]") {
-		t.Fatalf("vector_zipf = %q, want []-wrapped", result)
-	}
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(result, "["), "vector_zipf = %q, want []-wrapped", result)
+	require.True(t, strings.HasSuffix(result, "]"), "vector_zipf = %q, want []-wrapped", result)
 	inner := result[1 : len(result)-1]
 	parts := strings.Split(inner, ",")
-	if len(parts) != 8 {
-		t.Fatalf("vector_zipf(8,...) produced %d dimensions, want 8", len(parts))
-	}
+	require.Equal(t, 8, len(parts), "vector_zipf(8,...) produced %d dimensions, want 8", len(parts))
 }
 
 func TestVectorZipf_Skewed(t *testing.T) {
@@ -191,9 +163,7 @@ func TestVectorZipf_Skewed(t *testing.T) {
 	clusterCounts := make([]int, clusters)
 	for range n {
 		result, err := env.vectorZipf(dims, clusters, 0.05, 2.0, 1.0)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		inner := result[1 : len(result)-1]
 		parts := strings.Split(inner, ",")
 		vec := make([]float64, dims)
@@ -218,26 +188,19 @@ func TestVectorZipf_Skewed(t *testing.T) {
 	}
 
 	// With s=2.0, cluster 0 should have significantly more vectors.
-	if clusterCounts[0] < n/3 {
-		t.Errorf("vector_zipf: cluster 0 got %d/%d, expected dominant (>%d)", clusterCounts[0], n, n/3)
-	}
+	assert.GreaterOrEqual(t, clusterCounts[0], n/3, "vector_zipf: cluster 0 got %d/%d, expected dominant (>%d)", clusterCounts[0], n, n/3)
 }
 
 func TestVectorNorm_Format(t *testing.T) {
 	env := testEnv(nil)
 
 	result, err := env.vectorNorm(8, 5, 0.1, 2.0, 1.0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(result, "[") || !strings.HasSuffix(result, "]") {
-		t.Fatalf("vector_norm = %q, want []-wrapped", result)
-	}
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(result, "["), "vector_norm = %q, want []-wrapped", result)
+	require.True(t, strings.HasSuffix(result, "]"), "vector_norm = %q, want []-wrapped", result)
 	inner := result[1 : len(result)-1]
 	parts := strings.Split(inner, ",")
-	if len(parts) != 8 {
-		t.Fatalf("vector_norm(8,...) produced %d dimensions, want 8", len(parts))
-	}
+	require.Equal(t, 8, len(parts), "vector_norm(8,...) produced %d dimensions, want 8", len(parts))
 }
 
 func TestVectorNorm_Centered(t *testing.T) {
@@ -256,9 +219,7 @@ func TestVectorNorm_Centered(t *testing.T) {
 	clusterCounts := make([]int, clusters)
 	for range n {
 		result, err := env.vectorNorm(dims, clusters, 0.05, 2.0, 0.8)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		inner := result[1 : len(result)-1]
 		parts := strings.Split(inner, ",")
 		vec := make([]float64, dims)
@@ -283,8 +244,8 @@ func TestVectorNorm_Centered(t *testing.T) {
 
 	// Cluster 2 (the mean) should be the most popular.
 	for i, c := range clusterCounts {
-		if i != 2 && c > clusterCounts[2] {
-			t.Errorf("vector_norm: cluster %d (%d) > center cluster 2 (%d)", i, c, clusterCounts[2])
+		if i != 2 {
+			assert.LessOrEqual(t, c, clusterCounts[2], "vector_norm: cluster %d (%d) > center cluster 2 (%d)", i, c, clusterCounts[2])
 		}
 	}
 }

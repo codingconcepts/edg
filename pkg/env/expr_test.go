@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/codingconcepts/edg/pkg/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // newExprEnv builds an Env with the same globals and expressions
@@ -38,9 +40,7 @@ else { "F" }`,
 	}
 
 	env, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv failed: %v", err)
-	}
+	require.NoError(t, err)
 	return env
 }
 
@@ -65,12 +65,8 @@ func TestArrayPredicates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := env.Eval(tt.expr)
-			if err != nil {
-				t.Fatalf("Eval(%q) error: %v", tt.expr, err)
-			}
-			if got != tt.want {
-				t.Errorf("Eval(%q) = %v, want %v", tt.expr, got, tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -92,12 +88,8 @@ func TestArraySearch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := env.Eval(tt.expr)
-			if err != nil {
-				t.Fatalf("Eval(%q) error: %v", tt.expr, err)
-			}
-			if fmt.Sprint(got) != fmt.Sprint(tt.want) {
-				t.Errorf("Eval(%q) = %v, want %v", tt.expr, got, tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, fmt.Sprint(tt.want), fmt.Sprint(got))
 		})
 	}
 }
@@ -106,75 +98,53 @@ func TestArrayTransform_FilterMap(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`join(map(filter(prices, # > threshold), string(#)), ",")`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	s := got.(string)
 	// prices > 10: 19.99, 29.99, 14.99
-	if s != "19.99,29.99,14.99" {
-		t.Errorf("filter+map = %q, want %q", s, "19.99,29.99,14.99")
-	}
+	assert.Equal(t, "19.99,29.99,14.99", s)
 }
 
 func TestArrayTransform_MapDouble(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`join(map(prices, string(# * 2)), ",")`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	s := got.(string)
-	if s != "19.98,39.98,9.98,59.98,29.98" {
-		t.Errorf("map(# * 2) = %q, want %q", s, "19.98,39.98,9.98,59.98,29.98")
-	}
+	assert.Equal(t, "19.98,39.98,9.98,59.98,29.98", s)
 }
 
 func TestArrayTransform_Sort(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`join(map(sort(prices), string(#)), ",")`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	s := got.(string)
-	if s != "4.99,9.99,14.99,19.99,29.99" {
-		t.Errorf("sort = %q, want %q", s, "4.99,9.99,14.99,19.99,29.99")
-	}
+	assert.Equal(t, "4.99,9.99,14.99,19.99,29.99", s)
 }
 
 func TestArrayTransform_SortBy(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`join(map(sortBy(products, #.price), #.name), ",")`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	s := got.(string)
-	if s != "Doohickey,Gadget,Gizmo,Widget,Thingamajig" {
-		t.Errorf("sortBy(#.price) = %q, want %q", s, "Doohickey,Gadget,Gizmo,Widget,Thingamajig")
-	}
+	assert.Equal(t, "Doohickey,Gadget,Gizmo,Widget,Thingamajig", s)
 }
 
 func TestArrayTransform_Reverse(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`join(reverse(names), ",")`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	s := got.(string)
-	if s != "Eve,Diana,Charlie,Bob,Alice" {
-		t.Errorf("reverse = %q, want %q", s, "Eve,Diana,Charlie,Bob,Alice")
-	}
+	assert.Equal(t, "Eve,Diana,Charlie,Bob,Alice", s)
 }
 
 func TestArrayTransform_UniqConcat(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`join(uniq(concat(tags, ["books", "games"])), ",")`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	s := got.(string)
 	// "books" already in tags so should appear once; "games" is new
 	parts := strings.Split(s, ",")
@@ -182,140 +152,96 @@ func TestArrayTransform_UniqConcat(t *testing.T) {
 	for _, p := range parts {
 		seen[p]++
 	}
-	if seen["books"] != 1 {
-		t.Errorf("uniq+concat: 'books' appears %d times, want 1", seen["books"])
-	}
-	if seen["games"] != 1 {
-		t.Errorf("uniq+concat: 'games' not found in result %q", s)
-	}
-	if len(parts) != 6 {
-		t.Errorf("uniq+concat: got %d elements, want 6", len(parts))
-	}
+	assert.Equal(t, 1, seen["books"])
+	assert.Equal(t, 1, seen["games"])
+	assert.Equal(t, 6, len(parts))
 }
 
 func TestArrayTransform_Flatten(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`join(map(flatten(matrix), string(#)), ",")`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	s := got.(string)
-	if s != "1,2,3,4,5,6" {
-		t.Errorf("flatten = %q, want %q", s, "1,2,3,4,5,6")
-	}
+	assert.Equal(t, "1,2,3,4,5,6", s)
 }
 
 func TestArrayAggregate_Reduce(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`reduce(prices, #acc + #, 0)`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	f := got.(float64)
 	want := 9.99 + 19.99 + 4.99 + 29.99 + 14.99
-	if fmt.Sprintf("%.2f", f) != fmt.Sprintf("%.2f", want) {
-		t.Errorf("reduce = %v, want %v", f, want)
-	}
+	assert.Equal(t, fmt.Sprintf("%.2f", want), fmt.Sprintf("%.2f", f))
 }
 
 func TestArrayAggregate_Mean(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`mean(prices)`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	f := got.(float64)
 	want := (9.99 + 19.99 + 4.99 + 29.99 + 14.99) / 5
-	if fmt.Sprintf("%.2f", f) != fmt.Sprintf("%.2f", want) {
-		t.Errorf("mean = %v, want %v", f, want)
-	}
+	assert.Equal(t, fmt.Sprintf("%.2f", want), fmt.Sprintf("%.2f", f))
 }
 
 func TestArrayAggregate_Median(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`median(prices)`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	f := got.(float64)
 	// sorted: 4.99, 9.99, 14.99, 19.99, 29.99 -> median is 14.99
-	if f != 14.99 {
-		t.Errorf("median = %v, want 14.99", f)
-	}
+	assert.Equal(t, 14.99, f)
 }
 
 func TestArrayAggregate_First(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`first(names)`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
-	if got != "Alice" {
-		t.Errorf("first = %v, want Alice", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "Alice", got)
 }
 
 func TestArrayAggregate_Last(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`last(names)`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
-	if got != "Eve" {
-		t.Errorf("last = %v, want Eve", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "Eve", got)
 }
 
 func TestArrayAggregate_Take(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`join(take(names, 3), ",")`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
-	if got != "Alice,Bob,Charlie" {
-		t.Errorf("take(3) = %v, want Alice,Bob,Charlie", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "Alice,Bob,Charlie", got)
 }
 
 func TestArrayAggregate_Len(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`len(names)`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
-	if got != 5 {
-		t.Errorf("len(names) = %v, want 5", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 5, got)
 }
 
 func TestMapFunctions_Keys(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`join(keys({a: 1, b: 2, c: 3}), ",")`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	s := got.(string)
 	parts := strings.Split(s, ",")
-	if len(parts) != 3 {
-		t.Fatalf("keys: got %d elements, want 3", len(parts))
-	}
+	require.Equal(t, 3, len(parts))
 	seen := map[string]bool{}
 	for _, p := range parts {
 		seen[p] = true
 	}
 	for _, k := range []string{"a", "b", "c"} {
-		if !seen[k] {
-			t.Errorf("keys: missing %q in %q", k, s)
-		}
+		assert.True(t, seen[k], "keys: missing %q in %q", k, s)
 	}
 }
 
@@ -323,22 +249,16 @@ func TestMapFunctions_Values(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`join(map(values({a: 1, b: 2, c: 3}), string(#)), ",")`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	s := got.(string)
 	parts := strings.Split(s, ",")
-	if len(parts) != 3 {
-		t.Fatalf("values: got %d elements, want 3", len(parts))
-	}
+	require.Equal(t, 3, len(parts))
 	seen := map[string]bool{}
 	for _, p := range parts {
 		seen[p] = true
 	}
 	for _, v := range []string{"1", "2", "3"} {
-		if !seen[v] {
-			t.Errorf("values: missing %q in %q", v, s)
-		}
+		assert.True(t, seen[v], "values: missing %q in %q", v, s)
 	}
 }
 
@@ -346,12 +266,8 @@ func TestMapFunctions_GroupBy(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`len(groupBy(products, #.category))`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
-	if got != 3 {
-		t.Errorf("len(groupBy) = %v, want 3", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 3, got)
 }
 
 func TestStringOperators(t *testing.T) {
@@ -377,12 +293,8 @@ func TestStringOperators(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := env.Eval(tt.expr)
-			if err != nil {
-				t.Fatalf("Eval(%q) error: %v", tt.expr, err)
-			}
-			if got != tt.want {
-				t.Errorf("Eval(%q) = %v, want %v", tt.expr, got, tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -406,12 +318,8 @@ func TestStringFunctions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := env.Eval(tt.expr)
-			if err != nil {
-				t.Fatalf("Eval(%q) error: %v", tt.expr, err)
-			}
-			if fmt.Sprint(got) != tt.want {
-				t.Errorf("Eval(%q) = %v, want %v", tt.expr, got, tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, fmt.Sprint(got))
 		})
 	}
 }
@@ -431,12 +339,8 @@ func TestStringFunctions_IndexOf(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := env.Eval(tt.expr)
-			if err != nil {
-				t.Fatalf("Eval(%q) error: %v", tt.expr, err)
-			}
-			if fmt.Sprint(got) != fmt.Sprint(tt.want) {
-				t.Errorf("Eval(%q) = %v, want %v", tt.expr, got, tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, fmt.Sprint(tt.want), fmt.Sprint(got))
 		})
 	}
 }
@@ -445,44 +349,28 @@ func TestTypeConversion_Type(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`type(42)`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
-	if got != "int" {
-		t.Errorf("type(42) = %v, want int", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "int", got)
 }
 
 func TestTypeConversion_ToJSON(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`toJSON({name: "test", value: 42})`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	s := got.(string)
 	var parsed map[string]any
-	if err := json.Unmarshal([]byte(s), &parsed); err != nil {
-		t.Fatalf("toJSON result is not valid JSON: %v", err)
-	}
-	if parsed["name"] != "test" {
-		t.Errorf("toJSON name = %v, want test", parsed["name"])
-	}
-	if parsed["value"] != float64(42) {
-		t.Errorf("toJSON value = %v, want 42", parsed["value"])
-	}
+	require.NoError(t, json.Unmarshal([]byte(s), &parsed))
+	assert.Equal(t, "test", parsed["name"])
+	assert.Equal(t, float64(42), parsed["value"])
 }
 
 func TestTypeConversion_FromJSON(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`string(fromJSON("{\"a\": 1}").a)`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
-	if fmt.Sprint(got) != "1" {
-		t.Errorf("fromJSON = %v, want 1", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "1", fmt.Sprint(got))
 }
 
 func TestTypeConversion_Base64(t *testing.T) {
@@ -490,22 +378,14 @@ func TestTypeConversion_Base64(t *testing.T) {
 
 	t.Run("toBase64", func(t *testing.T) {
 		got, err := env.Eval(`toBase64("hello")`)
-		if err != nil {
-			t.Fatalf("Eval error: %v", err)
-		}
-		if got != "aGVsbG8=" {
-			t.Errorf("toBase64 = %v, want aGVsbG8=", got)
-		}
+		require.NoError(t, err)
+		assert.Equal(t, "aGVsbG8=", got)
 	})
 
 	t.Run("fromBase64", func(t *testing.T) {
 		got, err := env.Eval(`fromBase64("aGVsbG8=")`)
-		if err != nil {
-			t.Fatalf("Eval error: %v", err)
-		}
-		if got != "hello" {
-			t.Errorf("fromBase64 = %v, want hello", got)
-		}
+		require.NoError(t, err)
+		assert.Equal(t, "hello", got)
 	})
 }
 
@@ -514,22 +394,14 @@ func TestTypeConversion_Pairs(t *testing.T) {
 
 	t.Run("toPairs", func(t *testing.T) {
 		got, err := env.Eval(`len(toPairs({x: 1, y: 2}))`)
-		if err != nil {
-			t.Fatalf("Eval error: %v", err)
-		}
-		if got != 2 {
-			t.Errorf("len(toPairs) = %v, want 2", got)
-		}
+		require.NoError(t, err)
+		assert.Equal(t, 2, got)
 	})
 
 	t.Run("fromPairs", func(t *testing.T) {
 		got, err := env.Eval(`len(fromPairs([["x", 1], ["y", 2]]))`)
-		if err != nil {
-			t.Fatalf("Eval error: %v", err)
-		}
-		if got != 2 {
-			t.Errorf("len(fromPairs) = %v, want 2", got)
-		}
+		require.NoError(t, err)
+		assert.Equal(t, 2, got)
 	})
 }
 
@@ -537,37 +409,25 @@ func TestOperators_Range(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`reduce(1..5, #acc + #, 0)`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	// 1..5 = [1,2,3,4,5] (inclusive), sum = 15
-	if fmt.Sprint(got) != "15" {
-		t.Errorf("reduce(1..5) = %v, want 15", got)
-	}
+	assert.Equal(t, "15", fmt.Sprint(got))
 }
 
 func TestOperators_Slice(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`join(names[1:3], ",")`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
-	if got != "Bob,Charlie" {
-		t.Errorf("names[1:3] = %v, want Bob,Charlie", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "Bob,Charlie", got)
 }
 
 func TestOperators_OptionalChaining_NilCoalescing(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`{name: "test"}?.missing ?? "default"`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
-	if got != "default" {
-		t.Errorf("?. + ?? = %v, want default", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "default", got)
 }
 
 func TestOperators_IfElse(t *testing.T) {
@@ -589,12 +449,8 @@ func TestOperators_IfElse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := env.Eval(tt.expr)
-			if err != nil {
-				t.Fatalf("Eval(%q) error: %v", tt.expr, err)
-			}
-			if got != tt.want {
-				t.Errorf("Eval(%q) = %v, want %v", tt.expr, got, tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -603,17 +459,11 @@ func TestOperators_LetBindings(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`sum_of_squares(3, 4)`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
+	require.NoError(t, err)
 	// 3^2 + 4^2 = 9 + 16 = 25
 	f, ok := got.(float64)
-	if !ok {
-		t.Fatalf("sum_of_squares = %v (%T), want float64", got, got)
-	}
-	if f != 25 {
-		t.Errorf("sum_of_squares(3, 4) = %v, want 25", f)
-	}
+	require.True(t, ok, "sum_of_squares = %v (%T), want float64", got, got)
+	assert.Equal(t, float64(25), f)
 }
 
 func TestBitwise(t *testing.T) {
@@ -637,12 +487,8 @@ func TestBitwise(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := env.Eval(tt.expr)
-			if err != nil {
-				t.Fatalf("Eval(%q) error: %v", tt.expr, err)
-			}
-			if fmt.Sprint(got) != fmt.Sprint(tt.want) {
-				t.Errorf("Eval(%q) = %v, want %v", tt.expr, got, tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, fmt.Sprint(tt.want), fmt.Sprint(got))
 		})
 	}
 }
@@ -651,34 +497,22 @@ func TestMisc_LenString(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`len("hello")`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
-	if got != 5 {
-		t.Errorf("len(\"hello\") = %v, want 5", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 5, got)
 }
 
 func TestMisc_GetWithDefault(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`get({a: 1, b: 2}, "c") ?? "missing"`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
-	if got != "missing" {
-		t.Errorf("get + ?? = %v, want missing", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "missing", got)
 }
 
 func TestMisc_GetExistingKey(t *testing.T) {
 	env := newExprEnv(t)
 
 	got, err := env.Eval(`get({a: 1, b: 2}, "a")`)
-	if err != nil {
-		t.Fatalf("Eval error: %v", err)
-	}
-	if fmt.Sprint(got) != "1" {
-		t.Errorf("get existing key = %v, want 1", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "1", fmt.Sprint(got))
 }

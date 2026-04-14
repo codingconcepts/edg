@@ -10,107 +10,73 @@ import (
 	"time"
 
 	"github.com/codingconcepts/edg/pkg/convert"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGen(t *testing.T) {
 	result, err := Gen("number:1,100")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result == nil {
-		t.Fatal("Gen returned nil for valid pattern")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, result)
 
 	result, err = Gen("{number:1,100}")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result == nil {
-		t.Fatal("Gen returned nil for already-wrapped pattern")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, result)
 }
 
 func TestGenBatch(t *testing.T) {
 	result, err := GenBatch(25, 10, "email")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result) != 3 {
-		t.Fatalf("GenBatch(25, 10) returned %d batches, want 3", len(result))
-	}
+	require.NoError(t, err)
+	require.Len(t, result, 3)
 
 	// First two batches should have 10 emails each.
 	for _, i := range []int{0, 1} {
 		csv := string(result[i][0].(convert.RawSQL))
 		parts := strings.Split(csv, "\x1f")
-		if len(parts) != 10 {
-			t.Errorf("batch %d has %d values, want 10", i, len(parts))
-		}
+		assert.Len(t, parts, 10, "batch %d has %d values, want 10", i, len(parts))
 	}
 
 	// Last batch should have 5 emails (remainder).
 	csv := string(result[2][0].(convert.RawSQL))
 	parts := strings.Split(csv, "\x1f")
-	if len(parts) != 5 {
-		t.Errorf("last batch has %d values, want 5", len(parts))
-	}
+	assert.Len(t, parts, 5, "last batch has %d values, want 5", len(parts))
 
 	// All emails across all batches should be unique.
 	seen := map[string]bool{}
 	for _, row := range result {
 		for _, v := range strings.Split(string(row[0].(convert.RawSQL)), "\x1f") {
-			if seen[v] {
-				t.Errorf("GenBatch produced duplicate: %s", v)
-			}
+			assert.False(t, seen[v], "GenBatch produced duplicate: %s", v)
 			seen[v] = true
 		}
 	}
-	if len(seen) != 25 {
-		t.Errorf("GenBatch produced %d unique values, want 25", len(seen))
-	}
+	assert.Equal(t, 25, len(seen), "GenBatch produced %d unique values, want 25", len(seen))
 }
 
 func TestGenBatch_ExactMultiple(t *testing.T) {
 	result, err := GenBatch(20, 10, "email")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result) != 2 {
-		t.Fatalf("GenBatch(20, 10) returned %d batches, want 2", len(result))
-	}
+	require.NoError(t, err)
+	require.Len(t, result, 2)
 	for i, row := range result {
 		parts := strings.Split(string(row[0].(convert.RawSQL)), "\x1f")
-		if len(parts) != 10 {
-			t.Errorf("batch %d has %d values, want 10", i, len(parts))
-		}
+		assert.Len(t, parts, 10, "batch %d has %d values, want 10", i, len(parts))
 	}
 }
 
 func TestFloatRand(t *testing.T) {
 	for range 1000 {
 		v, err := FloatRand(1.0, 10.0, 2)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v < 1.0 || v > 10.0 {
-			t.Fatalf("FloatRand(1.0, 10.0, 2) = %v, out of range", v)
-		}
+		require.NoError(t, err)
+		require.True(t, v >= 1.0 && v <= 10.0, "FloatRand(1.0, 10.0, 2) = %v, out of range", v)
 		scaled := v * 100
-		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
-			t.Fatalf("FloatRand precision 2: %v not rounded correctly", v)
-		}
+		require.True(t, math.Abs(scaled-math.Round(scaled)) <= 0.0001, "FloatRand precision 2: %v not rounded correctly", v)
 	}
 }
 
 func TestUniformRand(t *testing.T) {
 	for range 1000 {
 		v, err := UniformRand(5.0, 15.0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v < 5.0 || v >= 15.0 {
-			t.Fatalf("UniformRand(5.0, 15.0) = %v, out of range", v)
-		}
+		require.NoError(t, err)
+		require.True(t, v >= 5.0 && v < 15.0, "UniformRand(5.0, 15.0) = %v, out of range", v)
 	}
 }
 
@@ -118,17 +84,11 @@ func TestZipfRand(t *testing.T) {
 	bins := make([]int, 100)
 	for range 10000 {
 		v, err := ZipfRand(2.0, 1.0, 99)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v < 0 || v > 99 {
-			t.Fatalf("ZipfRand out of range: %d", v)
-		}
+		require.NoError(t, err)
+		require.True(t, v >= 0 && v <= 99, "ZipfRand out of range: %d", v)
 		bins[v]++
 	}
-	if bins[0] < bins[99] {
-		t.Errorf("ZipfRand not skewed: bin[0]=%d, bin[99]=%d", bins[0], bins[99])
-	}
+	assert.Greater(t, bins[0], bins[99], "ZipfRand not skewed: bin[0]=%d, bin[99]=%d", bins[0], bins[99])
 }
 
 func TestZipfRand_InvalidParams(t *testing.T) {
@@ -137,57 +97,39 @@ func TestZipfRand_InvalidParams(t *testing.T) {
 		// Invalid params returning an error is acceptable.
 		return
 	}
-	if v != 0 {
-		t.Errorf("ZipfRand with s <= 1 = %d, want 0", v)
-	}
+	assert.Equal(t, uint64(0), v, "ZipfRand with s <= 1 = %d, want 0", v)
 }
 
 func TestGenRegex(t *testing.T) {
 	result := GenRegex("[A-Z]{3}-[0-9]{4}")
 	matched, _ := regexp.MatchString(`^[A-Z]{3}-[0-9]{4}$`, result)
-	if !matched {
-		t.Errorf("GenRegex = %q, does not match pattern", result)
-	}
+	assert.True(t, matched, "GenRegex = %q, does not match pattern", result)
 }
 
 func TestJsonObj(t *testing.T) {
 	result, err := JsonObj("name", "alice", "age", 30)
-	if err != nil {
-		t.Fatalf("JsonObj error: %v", err)
-	}
+	require.NoError(t, err)
 
 	var m map[string]any
-	if err := json.Unmarshal([]byte(result), &m); err != nil {
-		t.Fatalf("JsonObj produced invalid JSON: %v", err)
-	}
-	if m["name"] != "alice" {
-		t.Errorf("name = %v, want alice", m["name"])
-	}
-	if m["age"] != float64(30) {
-		t.Errorf("age = %v, want 30", m["age"])
-	}
+	err = json.Unmarshal([]byte(result), &m)
+	require.NoError(t, err)
+	assert.Equal(t, "alice", m["name"])
+	assert.Equal(t, float64(30), m["age"])
 }
 
 func TestJsonObj_OddArgs(t *testing.T) {
 	_, err := JsonObj("key1", "val1", "key2")
-	if err == nil {
-		t.Fatal("JsonObj with odd args should return error")
-	}
+	require.Error(t, err)
 }
 
 func TestJsonArr(t *testing.T) {
 	result, err := JsonArr(3, 3, "email")
-	if err != nil {
-		t.Fatalf("JsonArr error: %v", err)
-	}
+	require.NoError(t, err)
 
 	var arr []any
-	if err := json.Unmarshal([]byte(result), &arr); err != nil {
-		t.Fatalf("JsonArr produced invalid JSON: %v", err)
-	}
-	if len(arr) != 3 {
-		t.Errorf("JsonArr length = %d, want 3", len(arr))
-	}
+	err = json.Unmarshal([]byte(result), &arr)
+	require.NoError(t, err)
+	assert.Len(t, arr, 3)
 }
 
 func TestGenPoint(t *testing.T) {
@@ -197,9 +139,7 @@ func TestGenPoint(t *testing.T) {
 
 	for range 100 {
 		p, err := GenPoint(centerLat, centerLon, radiusKM)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		lat := p["lat"].(float64)
 		lon := p["lon"].(float64)
 
@@ -209,9 +149,7 @@ func TestGenPoint(t *testing.T) {
 			math.Cos(centerLat*math.Pi/180)*math.Cos(lat*math.Pi/180)*
 				math.Sin(dLon/2)*math.Sin(dLon/2)
 		dist := 6371.0 * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
-		if dist > radiusKM+0.01 {
-			t.Fatalf("GenPoint distance %.4f km exceeds radius", dist)
-		}
+		require.True(t, dist <= radiusKM+0.01, "GenPoint distance %.4f km exceeds radius", dist)
 	}
 }
 
@@ -222,15 +160,11 @@ func TestGenPointWKT(t *testing.T) {
 
 	for range 100 {
 		wkt, err := GenPointWKT(centerLat, centerLon, radiusKM)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		var lon, lat float64
 		_, err = fmt.Sscanf(wkt, "POINT(%f %f)", &lon, &lat)
-		if err != nil {
-			t.Fatalf("GenPointWKT returned invalid WKT %q: %v", wkt, err)
-		}
+		require.NoError(t, err, "GenPointWKT returned invalid WKT %q", wkt)
 
 		dLat := (lat - centerLat) * math.Pi / 180
 		dLon := (lon - centerLon) * math.Pi / 180
@@ -238,9 +172,7 @@ func TestGenPointWKT(t *testing.T) {
 			math.Cos(centerLat*math.Pi/180)*math.Cos(lat*math.Pi/180)*
 				math.Sin(dLon/2)*math.Sin(dLon/2)
 		dist := 6371.0 * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
-		if dist > radiusKM+0.01 {
-			t.Fatalf("GenPointWKT distance %.4f km exceeds radius", dist)
-		}
+		require.True(t, dist <= radiusKM+0.01, "GenPointWKT distance %.4f km exceeds radius", dist)
 	}
 }
 
@@ -248,103 +180,65 @@ func TestRandTimestamp(t *testing.T) {
 	min := "2020-01-01T00:00:00Z"
 	max := "2025-01-01T00:00:00Z"
 	result, err := RandTimestamp(min, max)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result == "" {
-		t.Fatal("RandTimestamp returned empty string")
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, result)
 
 	ts, err := time.Parse(time.RFC3339, result)
-	if err != nil {
-		t.Fatalf("RandTimestamp produced invalid RFC3339: %v", err)
-	}
+	require.NoError(t, err)
 	minT, _ := time.Parse(time.RFC3339, min)
 	maxT, _ := time.Parse(time.RFC3339, max)
-	if ts.Before(minT) || ts.After(maxT) {
-		t.Errorf("RandTimestamp %v not in range [%v, %v]", ts, minT, maxT)
-	}
+	assert.True(t, !ts.Before(minT) && !ts.After(maxT), "RandTimestamp %v not in range [%v, %v]", ts, minT, maxT)
 }
 
 func TestRandTimestamp_InvalidInput(t *testing.T) {
 	_, err := RandTimestamp("bad", "2025-01-01T00:00:00Z")
-	if err == nil {
-		t.Fatal("RandTimestamp with bad min should return error")
-	}
+	require.Error(t, err)
 }
 
 func TestRandDuration(t *testing.T) {
 	result, err := RandDuration("1h", "24h")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result == "" {
-		t.Fatal("RandDuration returned empty string")
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, result)
 
 	d, err := time.ParseDuration(result)
-	if err != nil {
-		t.Fatalf("RandDuration produced invalid duration: %v", err)
-	}
-	if d < time.Hour || d > 24*time.Hour {
-		t.Errorf("RandDuration %v not in range [1h, 24h]", d)
-	}
+	require.NoError(t, err)
+	assert.True(t, d >= time.Hour && d <= 24*time.Hour, "RandDuration %v not in range [1h, 24h]", d)
 }
 
 func TestRandDuration_InvalidInput(t *testing.T) {
 	_, err := RandDuration("bad", "24h")
-	if err == nil {
-		t.Fatal("RandDuration with bad min should return error")
-	}
+	require.Error(t, err)
 }
 
 func TestDateRand(t *testing.T) {
 	result, err := DateRand("2006-01-02", "2020-01-01T00:00:00Z", "2025-01-01T00:00:00Z")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result == "" {
-		t.Fatal("DateRand returned empty string")
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, result)
 
 	ts, err := time.Parse("2006-01-02", result)
-	if err != nil {
-		t.Fatalf("DateRand produced invalid date: %v", err)
-	}
-	if ts.Year() < 2020 || ts.Year() > 2025 {
-		t.Errorf("DateRand year %d not in range [2020, 2025]", ts.Year())
-	}
+	require.NoError(t, err)
+	assert.True(t, ts.Year() >= 2020 && ts.Year() <= 2025, "DateRand year %d not in range [2020, 2025]", ts.Year())
 }
 
 func TestDateOffset(t *testing.T) {
 	result, err := DateOffset("1h")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result == "" {
-		t.Fatal("DateOffset returned empty string")
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, result)
 
 	ts, err := time.Parse(time.RFC3339, result)
-	if err != nil {
-		t.Fatalf("DateOffset produced invalid RFC3339: %v", err)
-	}
+	require.NoError(t, err)
 
 	expected := time.Now().Add(time.Hour).UTC()
 	diff := ts.Sub(expected)
 	if diff < 0 {
 		diff = -diff
 	}
-	if diff > 2*time.Second {
-		t.Errorf("DateOffset('1h') = %v, expected ~%v", ts, expected)
-	}
+	assert.True(t, diff <= 2*time.Second, "DateOffset('1h') = %v, expected ~%v", ts, expected)
 }
 
 func TestDateOffset_InvalidInput(t *testing.T) {
 	_, err := DateOffset("bad")
-	if err == nil {
-		t.Fatal("DateOffset with bad duration should return error")
-	}
+	require.Error(t, err)
 }
 
 func TestExpRand(t *testing.T) {
@@ -358,35 +252,23 @@ func TestExpRand(t *testing.T) {
 	sum := 0.0
 	for range n {
 		v, err := ExpRand(rate, min, max)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v < min || v > max {
-			t.Fatalf("ExpRand value %v outside [%.0f, %.0f]", v, min, max)
-		}
+		require.NoError(t, err)
+		require.True(t, v >= min && v <= max, "ExpRand value %v outside [%.0f, %.0f]", v, min, max)
 		sum += v
 	}
 
 	// Exponential with rate=1 has mean=1.
 	observedMean := sum / n
-	if observedMean < 0.5 || observedMean > 1.5 {
-		t.Errorf("observed mean = %.2f, want ~1.0", observedMean)
-	}
+	assert.True(t, observedMean >= 0.5 && observedMean <= 1.5, "observed mean = %.2f, want ~1.0", observedMean)
 }
 
 func TestExpRandF(t *testing.T) {
 	for range 100 {
 		v, err := ExpRandF(0.5, 0.0, 100.0, 2)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v < 0 || v > 100 {
-			t.Fatalf("ExpRandF value %v outside [0, 100]", v)
-		}
+		require.NoError(t, err)
+		require.True(t, v >= 0 && v <= 100, "ExpRandF value %v outside [0, 100]", v)
 		scaled := v * 100
-		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
-			t.Fatalf("ExpRandF precision 2: %v not rounded correctly", v)
-		}
+		require.True(t, math.Abs(scaled-math.Round(scaled)) <= 0.0001, "ExpRandF precision 2: %v not rounded correctly", v)
 	}
 }
 
@@ -401,66 +283,40 @@ func TestLognormRand(t *testing.T) {
 
 	for range n {
 		v, err := LognormRand(mu, sigma, min, max)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v < min || v > max {
-			t.Fatalf("LognormRand value %v outside [%.0f, %.0f]", v, min, max)
-		}
+		require.NoError(t, err)
+		require.True(t, v >= min && v <= max, "LognormRand value %v outside [%.0f, %.0f]", v, min, max)
 	}
 }
 
 func TestLognormRandF(t *testing.T) {
 	for range 100 {
 		v, err := LognormRandF(2.0, 0.5, 1.0, 100.0, 2)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v < 1 || v > 100 {
-			t.Fatalf("LognormRandF value %v outside [1, 100]", v)
-		}
+		require.NoError(t, err)
+		require.True(t, v >= 1 && v <= 100, "LognormRandF value %v outside [1, 100]", v)
 		scaled := v * 100
-		if math.Abs(scaled-math.Round(scaled)) > 0.0001 {
-			t.Fatalf("LognormRandF precision 2: %v not rounded correctly", v)
-		}
+		require.True(t, math.Abs(scaled-math.Round(scaled)) <= 0.0001, "LognormRandF precision 2: %v not rounded correctly", v)
 	}
 }
 
 func TestGenBytes(t *testing.T) {
 	result, err := GenBytes(8)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(result, `\x`) {
-		t.Fatalf("GenBytes(8) = %q, want \\x prefix", result)
-	}
-	if len(result) != 18 { // \x + 16 hex chars
-		t.Fatalf("GenBytes(8) length = %d, want 18", len(result))
-	}
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(result, `\x`), "GenBytes(8) = %q, want \\x prefix", result)
+	require.Equal(t, 18, len(result), "GenBytes(8) length = %d, want 18", len(result)) // \x + 16 hex chars
 }
 
 func TestGenBlob(t *testing.T) {
 	result, err := GenBlob(16)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result) != 16 {
-		t.Fatalf("GenBlob(16) length = %d, want 16", len(result))
-	}
+	require.NoError(t, err)
+	require.Len(t, result, 16)
 }
 
 func TestGenBit(t *testing.T) {
 	result, err := GenBit(8)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result) != 8 {
-		t.Fatalf("GenBit(8) length = %d, want 8", len(result))
-	}
+	require.NoError(t, err)
+	require.Equal(t, 8, len(result), "GenBit(8) length = %d, want 8", len(result))
 	matched, _ := regexp.MatchString(`^[01]+$`, result)
-	if !matched {
-		t.Fatalf("GenBit(8) = %q, contains non-bit characters", result)
-	}
+	require.True(t, matched, "GenBit(8) = %q, contains non-bit characters", result)
 }
 
 func TestGenBool(t *testing.T) {
@@ -470,120 +326,80 @@ func TestGenBool(t *testing.T) {
 			trueCount++
 		}
 	}
-	if trueCount == 0 || trueCount == 1000 {
-		t.Fatalf("GenBool returned the same value 1000 times (true=%d)", trueCount)
-	}
+	require.True(t, trueCount > 0 && trueCount < 1000, "GenBool returned the same value 1000 times (true=%d)", trueCount)
 }
 
 func TestGenVarBit(t *testing.T) {
 	for range 100 {
 		result, err := GenVarBit(16)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(result) < 1 || len(result) > 16 {
-			t.Fatalf("GenVarBit(16) length = %d, want 1-16", len(result))
-		}
+		require.NoError(t, err)
+		require.True(t, len(result) >= 1 && len(result) <= 16, "GenVarBit(16) length = %d, want 1-16", len(result))
 	}
 }
 
 func TestGenInet(t *testing.T) {
 	result, err := GenInet("10.0.0.0/8")
-	if err != nil {
-		t.Fatalf("GenInet error: %v", err)
-	}
-	if !strings.HasPrefix(result, "10.") {
-		t.Fatalf("GenInet('10.0.0.0/8') = %q, want 10.x.x.x", result)
-	}
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(result, "10."), "GenInet('10.0.0.0/8') = %q, want 10.x.x.x", result)
 }
 
 func TestGenInet_InvalidCIDR(t *testing.T) {
 	_, err := GenInet("bad")
-	if err == nil {
-		t.Fatal("GenInet with invalid CIDR should return error")
-	}
+	require.Error(t, err)
 }
 
 func TestGenArray(t *testing.T) {
 	result, err := GenArray(3, 3, "number:1,100")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(result, "{") || !strings.HasSuffix(result, "}") {
-		t.Fatalf("GenArray = %q, want {}-wrapped", result)
-	}
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(result, "{") && strings.HasSuffix(result, "}"), "GenArray = %q, want {}-wrapped", result)
 	inner := result[1 : len(result)-1]
 	parts := strings.Split(inner, ",")
-	if len(parts) != 3 {
-		t.Errorf("GenArray(3,3) produced %d elements, want 3", len(parts))
-	}
+	assert.Len(t, parts, 3, "GenArray(3,3) produced %d elements, want 3", len(parts))
 }
 
 func TestGenArray_Range(t *testing.T) {
 	for range 100 {
 		result, err := GenArray(2, 5, "letter")
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		inner := result[1 : len(result)-1]
 		parts := strings.Split(inner, ",")
-		if len(parts) < 2 || len(parts) > 5 {
-			t.Fatalf("GenArray(2,5) produced %d elements, want 2-5", len(parts))
-		}
+		require.True(t, len(parts) >= 2 && len(parts) <= 5, "GenArray(2,5) produced %d elements, want 2-5", len(parts))
 	}
 }
 
 func TestGenTime(t *testing.T) {
 	result, err := GenTime("08:00:00", "17:00:00")
-	if err != nil {
-		t.Fatalf("GenTime error: %v", err)
-	}
-	if result < "08:00:00" || result > "17:00:00" {
-		t.Fatalf("GenTime = %q, out of range", result)
-	}
+	require.NoError(t, err)
+	require.True(t, result >= "08:00:00" && result <= "17:00:00", "GenTime = %q, out of range", result)
 }
 
 func TestGenTime_InvalidInput(t *testing.T) {
 	_, err := GenTime("bad", "17:00:00")
-	if err == nil {
-		t.Fatal("GenTime with invalid min should return error")
-	}
+	require.Error(t, err)
 }
 
 func TestGenTimez(t *testing.T) {
 	result, err := GenTimez("08:00:00", "17:00:00")
-	if err != nil {
-		t.Fatalf("GenTimez error: %v", err)
-	}
-	if !strings.HasSuffix(result, "+00:00") {
-		t.Fatalf("GenTimez = %q, want +00:00 suffix", result)
-	}
+	require.NoError(t, err)
+	require.True(t, strings.HasSuffix(result, "+00:00"), "GenTimez = %q, want +00:00 suffix", result)
 	timePart := strings.TrimSuffix(result, "+00:00")
-	if timePart < "08:00:00" || timePart > "17:00:00" {
-		t.Fatalf("GenTimez time part = %q, out of range", timePart)
-	}
+	require.True(t, timePart >= "08:00:00" && timePart <= "17:00:00", "GenTimez time part = %q, out of range", timePart)
 }
 
 func TestGenTimez_InvalidInput(t *testing.T) {
 	_, err := GenTimez("bad", "17:00:00")
-	if err == nil {
-		t.Fatal("GenTimez with invalid min should return error")
-	}
+	require.Error(t, err)
 }
 
 func TestValidatePattern(t *testing.T) {
 	valid := []string{"email", "number:1,100", "firstname", "sentence:5", "lastname"}
 	for _, p := range valid {
-		if err := ValidatePattern(p); err != nil {
-			t.Errorf("ValidatePattern(%q) unexpected error: %v", p, err)
-		}
+		assert.NoError(t, ValidatePattern(p), "ValidatePattern(%q) unexpected error", p)
 	}
 
 	invalid := []string{"notafunction", "emaill", "nope:1,2"}
 	for _, p := range invalid {
-		if err := ValidatePattern(p); err == nil {
-			t.Errorf("ValidatePattern(%q) expected error, got nil", p)
-		}
+		assert.Error(t, ValidatePattern(p), "ValidatePattern(%q) expected error, got nil", p)
 	}
 }
 

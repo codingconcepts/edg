@@ -7,6 +7,8 @@ import (
 	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/codingconcepts/edg/pkg/convert"
 	"github.com/codingconcepts/edg/pkg/gen"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCompileArgs(t *testing.T) {
@@ -21,13 +23,8 @@ func TestCompileArgs(t *testing.T) {
 		Args: []string{"const(42)", "gen('number:1,10')"},
 	}
 
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
-
-	if len(q.CompiledArgs) != 2 {
-		t.Fatalf("expected 2 compiled args, got %d", len(q.CompiledArgs))
-	}
+	require.NoError(t, q.CompileArgs(env.env))
+	require.Len(t, q.CompiledArgs, 2)
 }
 
 func TestCompileArgs_InvalidExpr(t *testing.T) {
@@ -37,9 +34,7 @@ func TestCompileArgs_InvalidExpr(t *testing.T) {
 		Args: []string{"invalid_func()"},
 	}
 
-	if err := q.CompileArgs(env.env); err == nil {
-		t.Error("expected error for invalid expression, got nil")
-	}
+	assert.Error(t, q.CompileArgs(env.env))
 }
 
 func TestCompileArgs_Empty(t *testing.T) {
@@ -47,13 +42,8 @@ func TestCompileArgs_Empty(t *testing.T) {
 
 	q := &config.Query{}
 
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs with no args failed: %v", err)
-	}
-
-	if len(q.CompiledArgs) != 0 {
-		t.Errorf("expected 0 compiled args, got %d", len(q.CompiledArgs))
-	}
+	require.NoError(t, q.CompileArgs(env.env))
+	assert.Empty(t, q.CompiledArgs)
 }
 
 func TestGenerateArgs_NoArgs(t *testing.T) {
@@ -62,13 +52,10 @@ func TestGenerateArgs_NoArgs(t *testing.T) {
 	q := &config.Query{}
 
 	argSets, _, err := env.GenerateArgs(q)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(argSets) != 1 || argSets[0] != nil {
-		t.Errorf("expected [[nil]], got %v", argSets)
-	}
+	require.Len(t, argSets, 1)
+	assert.Nil(t, argSets[0])
 }
 
 func TestGenerateArgs_WithConst(t *testing.T) {
@@ -78,29 +65,17 @@ func TestGenerateArgs_WithConst(t *testing.T) {
 	q := &config.Query{
 		Args: []string{"const(42)", "const('hello')"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, _, err := env.GenerateArgs(q)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(argSets) != 1 {
-		t.Fatalf("expected 1 arg set, got %d", len(argSets))
-	}
+	require.Len(t, argSets, 1)
 
 	args := argSets[0]
-	if len(args) != 2 {
-		t.Fatalf("expected 2 args, got %d", len(args))
-	}
-	if args[0] != 42 {
-		t.Errorf("arg[0] = %v, want 42", args[0])
-	}
-	if args[1] != "hello" {
-		t.Errorf("arg[1] = %v, want 'hello'", args[1])
-	}
+	require.Len(t, args, 2)
+	assert.Equal(t, 42, args[0])
+	assert.Equal(t, "hello", args[1])
 }
 
 func TestGenerateArgs_ClearsOneCacheAfter(t *testing.T) {
@@ -109,17 +84,12 @@ func TestGenerateArgs_ClearsOneCacheAfter(t *testing.T) {
 	env.oneCache["test"] = "data"
 
 	q := &config.Query{Args: []string{"const(1)"}}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
-	if _, _, err := env.GenerateArgs(q); err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	_, _, err := env.GenerateArgs(q)
+	require.NoError(t, err)
 
-	if len(env.oneCache) != 0 {
-		t.Error("GenerateArgs did not clear oneCache")
-	}
+	assert.Empty(t, env.oneCache)
 }
 
 func TestGenerateArgs_ResetsUniqIndexAfter(t *testing.T) {
@@ -128,66 +98,60 @@ func TestGenerateArgs_ResetsUniqIndexAfter(t *testing.T) {
 	env.uniqIndex = 5
 
 	q := &config.Query{Args: []string{"const(1)"}}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
-	if _, _, err := env.GenerateArgs(q); err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	_, _, err := env.GenerateArgs(q)
+	require.NoError(t, err)
 
-	if env.uniqIndex != 0 {
-		t.Errorf("GenerateArgs did not reset uniqIndex: got %d", env.uniqIndex)
-	}
+	assert.Equal(t, 0, env.uniqIndex)
 }
 
 func TestNewEnv_RejectsUnknownQueryType(t *testing.T) {
 	tests := []struct {
-		name    string
-		req     *config.Request
-		wantErr bool
+		name   string
+		req    *config.Request
+		expErr string
 	}{
 		{
-			name:    "valid exec",
-			req:     &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: config.QueryTypeExec, Query: "SELECT 1"}}}},
-			wantErr: false,
+			name:   "valid exec",
+			req:    &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: config.QueryTypeExec, Query: "SELECT 1"}}}},
+			expErr: "",
 		},
 		{
-			name:    "valid query",
-			req:     &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: config.QueryTypeQuery, Query: "SELECT 1"}}}},
-			wantErr: false,
+			name:   "valid query",
+			req:    &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: config.QueryTypeQuery, Query: "SELECT 1"}}}},
+			expErr: "",
 		},
 		{
-			name:    "valid query_batch",
-			req:     &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: config.QueryTypeQueryBatch, Query: "SELECT 1"}}}},
-			wantErr: false,
+			name:   "valid query_batch",
+			req:    &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: config.QueryTypeQueryBatch, Query: "SELECT 1"}}}},
+			expErr: "",
 		},
 		{
-			name:    "valid exec_batch",
-			req:     &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: config.QueryTypeExecBatch, Query: "SELECT 1"}}}},
-			wantErr: false,
+			name:   "valid exec_batch",
+			req:    &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: config.QueryTypeExecBatch, Query: "SELECT 1"}}}},
+			expErr: "",
 		},
 		{
-			name:    "empty defaults to query",
-			req:     &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: "", Query: "SELECT 1"}}}},
-			wantErr: false,
+			name:   "empty defaults to query",
+			req:    &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: "", Query: "SELECT 1"}}}},
+			expErr: "",
 		},
 		{
-			name:    "unknown type",
-			req:     &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: "bogus", Query: "SELECT 1"}}}},
-			wantErr: true,
+			name:   "unknown type",
+			req:    &config.Request{Run: []*config.RunItem{{Query: &config.Query{Name: "q", Type: "bogus", Query: "SELECT 1"}}}},
+			expErr: `unknown query type "bogus" in run query 0 (q)`,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := NewEnv(nil, "", tt.req)
-			if tt.wantErr && err == nil {
-				t.Fatal("expected error, got nil")
+			if tt.expErr != "" {
+				require.EqualError(t, err, tt.expErr)
+				return
 			}
-			if !tt.wantErr && err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			require.NoError(t, err)
 		})
 	}
 }
@@ -266,32 +230,18 @@ func TestGenerateArgs_MixedBatchAndScalar(t *testing.T) {
 	env.env["test_batch"] = func() [][]any { return batchData }
 
 	q := &config.Query{Args: []string{"test_batch()", "const(10)", "const(3000)"}}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, _, err := env.GenerateArgs(q)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(argSets) != 3 {
-		t.Fatalf("expected 3 arg sets, got %d", len(argSets))
-	}
+	require.Len(t, argSets, 3)
 
 	for i, args := range argSets {
-		if len(args) != 3 {
-			t.Fatalf("arg set %d: expected 3 args, got %d", i, len(args))
-		}
-		if args[0] != i+1 {
-			t.Errorf("arg set %d: args[0] = %v, want %d", i, args[0], i+1)
-		}
-		if args[1] != 10 {
-			t.Errorf("arg set %d: args[1] = %v, want 10", i, args[1])
-		}
-		if args[2] != 3000 {
-			t.Errorf("arg set %d: args[2] = %v, want 3000", i, args[2])
-		}
+		require.Len(t, args, 3, "arg set %d", i)
+		assert.Equal(t, i+1, args[0], "arg set %d: args[0]", i)
+		assert.Equal(t, 10, args[1], "arg set %d: args[1]", i)
+		assert.Equal(t, 3000, args[2], "arg set %d: args[2]", i)
 	}
 }
 
@@ -304,18 +254,12 @@ func TestGenerateArgs_CartesianProduct(t *testing.T) {
 	env.env["batchB"] = func() [][]any { return batchB }
 
 	q := &config.Query{Args: []string{"batchA()", "batchB()"}}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, expanded, err := env.GenerateArgs(q)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if !expanded {
-		t.Fatal("expected batch expansion")
-	}
+	require.True(t, expanded, "expected batch expansion")
 
 	// 2 x 3 = 6 cartesian product rows.
 	want := [][]any{
@@ -327,18 +271,12 @@ func TestGenerateArgs_CartesianProduct(t *testing.T) {
 		{2, "z"},
 	}
 
-	if len(argSets) != len(want) {
-		t.Fatalf("expected %d arg sets, got %d", len(want), len(argSets))
-	}
+	require.Len(t, argSets, len(want))
 
 	for i, args := range argSets {
-		if len(args) != len(want[i]) {
-			t.Fatalf("arg set %d: expected %d args, got %d", i, len(want[i]), len(args))
-		}
+		require.Len(t, args, len(want[i]), "arg set %d", i)
 		for j, v := range args {
-			if v != want[i][j] {
-				t.Errorf("arg set %d[%d] = %v, want %v", i, j, v, want[i][j])
-			}
+			assert.Equal(t, want[i][j], v, "arg set %d[%d]", i, j)
 		}
 	}
 }
@@ -353,14 +291,10 @@ func TestGenerateArgs_CartesianWithScalars(t *testing.T) {
 	env.env["batchB"] = func() [][]any { return batchB }
 
 	q := &config.Query{Args: []string{"const(99)", "batchA()", "batchB()", "const(42)"}}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, _, err := env.GenerateArgs(q)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	want := [][]any{
 		{99, 1, "x", 42},
@@ -369,15 +303,11 @@ func TestGenerateArgs_CartesianWithScalars(t *testing.T) {
 		{99, 2, "y", 42},
 	}
 
-	if len(argSets) != len(want) {
-		t.Fatalf("expected %d arg sets, got %d", len(want), len(argSets))
-	}
+	require.Len(t, argSets, len(want))
 
 	for i, args := range argSets {
 		for j, v := range args {
-			if v != want[i][j] {
-				t.Errorf("arg set %d[%d] = %v, want %v", i, j, v, want[i][j])
-			}
+			assert.Equal(t, want[i][j], v, "arg set %d[%d]", i, j)
 		}
 	}
 }
@@ -399,40 +329,28 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 		Size:  4,
 		Args:  []string{"gen('noun')", "ref_same('categories').name", "ref_same('categories').markup"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, _, err := env.GenerateArgs(q)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// 10 total, batches of 4: expect 3 batches (4, 4, 2).
-	if len(argSets) != 3 {
-		t.Fatalf("expected 3 arg sets, got %d", len(argSets))
-	}
+	require.Len(t, argSets, 3)
 
 	// Each arg set should have 3 args (one per expression).
 	for i, args := range argSets {
-		if len(args) != 3 {
-			t.Fatalf("arg set %d: expected 3 args, got %d", i, len(args))
-		}
+		require.Len(t, args, 3, "arg set %d", i)
 	}
 
 	// First two batches should have 4 CSV values, last should have 2.
 	for _, args := range argSets[:2] {
 		csv := string(args[0].(convert.RawSQL))
 		parts := strings.Split(csv, "\x1f")
-		if len(parts) != 4 {
-			t.Errorf("expected 4 CSV values, got %d: %q", len(parts), csv)
-		}
+		assert.Len(t, parts, 4)
 	}
 	lastCSV := string(argSets[2][0].(convert.RawSQL))
 	parts := strings.Split(lastCSV, "\x1f")
-	if len(parts) != 2 {
-		t.Errorf("last batch: expected 2 CSV values, got %d: %q", len(parts), lastCSV)
-	}
+	assert.Len(t, parts, 2)
 
 	// Verify ref_same correlation: name and markup should match per row.
 	validPairs := map[string]string{
@@ -443,15 +361,11 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 	for _, args := range argSets {
 		names := strings.Split(string(args[1].(convert.RawSQL)), "\x1f")
 		markups := strings.Split(string(args[2].(convert.RawSQL)), "\x1f")
-		if len(names) != len(markups) {
-			t.Fatalf("name/markup length mismatch: %d vs %d", len(names), len(markups))
-		}
+		require.Len(t, names, len(markups), "name/markup length mismatch")
 		for j := range names {
 			want, ok := validPairs[names[j]]
-			if !ok {
-				t.Errorf("unexpected category name: %q", names[j])
-			} else if markups[j] != want {
-				t.Errorf("row %d: name=%q markup=%q, want markup=%q", j, names[j], markups[j], want)
+			if assert.True(t, ok, "unexpected category name: %q", names[j]) {
+				assert.Equal(t, want, markups[j], "row %d: name=%q", j, names[j])
 			}
 		}
 	}
@@ -469,32 +383,22 @@ func TestGenerateArgs_BatchType_GlobalRefs(t *testing.T) {
 		Size:  "batch_size",
 		Args:  []string{"const(42)"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, _, err := env.GenerateArgs(q)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// 7 / 3 = 3 batches (3, 3, 1).
-	if len(argSets) != 3 {
-		t.Fatalf("expected 3 batches, got %d", len(argSets))
-	}
+	require.Len(t, argSets, 3)
 
 	// First two batches: 3 values each.
 	for _, args := range argSets[:2] {
 		parts := strings.Split(string(args[0].(convert.RawSQL)), "\x1f")
-		if len(parts) != 3 {
-			t.Errorf("expected 3 CSV values, got %d", len(parts))
-		}
+		assert.Len(t, parts, 3)
 	}
 	// Last batch: 1 value.
 	parts := strings.Split(string(argSets[2][0].(convert.RawSQL)), "\x1f")
-	if len(parts) != 1 {
-		t.Errorf("last batch: expected 1 CSV value, got %d", len(parts))
-	}
+	assert.Len(t, parts, 1)
 }
 
 func TestGenerateArgs_BatchType_SizeDefaultsToCount(t *testing.T) {
@@ -506,22 +410,14 @@ func TestGenerateArgs_BatchType_SizeDefaultsToCount(t *testing.T) {
 		Count: 5,
 		Args:  []string{"const('x')"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, _, err := env.GenerateArgs(q)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// No size set, so all 5 in one batch.
-	if len(argSets) != 1 {
-		t.Fatalf("expected 1 batch, got %d", len(argSets))
-	}
+	require.Len(t, argSets, 1)
 
 	parts := strings.Split(string(argSets[0][0].(convert.RawSQL)), "\x1f")
-	if len(parts) != 5 {
-		t.Errorf("expected 5 CSV values, got %d", len(parts))
-	}
+	assert.Len(t, parts, 5)
 }

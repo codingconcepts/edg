@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRefRand(t *testing.T) {
@@ -13,27 +15,21 @@ func TestRefRand(t *testing.T) {
 	env := testEnv(map[string][]map[string]any{"items": rows})
 
 	result := env.refRand("items")
-	if result == nil {
-		t.Fatal("refRand returned nil")
-	}
+	require.NotNil(t, result)
 
-	if _, ok := result["id"]; !ok {
-		t.Error("refRand result missing 'id' key")
-	}
+	assert.Contains(t, result, "id")
 }
 
 func TestRefRand_UnknownName(t *testing.T) {
 	env := testEnv(nil)
-	if result := env.refRand("nonexistent"); result != nil {
-		t.Errorf("refRand for unknown name = %v, want nil", result)
-	}
+	result := env.refRand("nonexistent")
+	assert.Nil(t, result)
 }
 
 func TestRefRand_EmptyData(t *testing.T) {
 	env := testEnv(map[string][]map[string]any{"empty": {}})
-	if result := env.refRand("empty"); result != nil {
-		t.Errorf("refRand for empty data = %v, want nil", result)
-	}
+	result := env.refRand("empty")
+	assert.Nil(t, result)
 }
 
 func TestRefN(t *testing.T) {
@@ -41,9 +37,7 @@ func TestRefN(t *testing.T) {
 	env := testEnv(map[string][]map[string]any{"items": rows})
 
 	result := env.refN("items", "id", 2, 3)
-	if result == "" {
-		t.Fatal("refN returned empty string")
-	}
+	require.NotEmpty(t, result)
 
 	parts := strings.Split(result, ",")
 	if len(parts) < 2 || len(parts) > 3 {
@@ -53,9 +47,7 @@ func TestRefN(t *testing.T) {
 	// All values should be unique.
 	seen := map[string]bool{}
 	for _, v := range parts {
-		if seen[v] {
-			t.Errorf("refN returned duplicate value: %v", v)
-		}
+		assert.False(t, seen[v], "refN returned duplicate value: %v", v)
 		seen[v] = true
 	}
 }
@@ -66,16 +58,13 @@ func TestRefN_ClampsToDataSize(t *testing.T) {
 
 	result := env.refN("items", "id", 5, 10)
 	parts := strings.Split(result, ",")
-	if len(parts) != 3 {
-		t.Errorf("refN returned %d items, want 3 (clamped to data size)", len(parts))
-	}
+	assert.Equal(t, 3, len(parts), "refN returned %d items, want 3 (clamped to data size)", len(parts))
 }
 
 func TestRefN_UnknownName(t *testing.T) {
 	env := testEnv(nil)
-	if result := env.refN("nonexistent", "id", 1, 3); result != "" {
-		t.Errorf("refN for unknown name = %v, want empty string", result)
-	}
+	result := env.refN("nonexistent", "id", 1, 3)
+	assert.Empty(t, result)
 }
 
 func TestRefSame_ReturnsSameRow(t *testing.T) {
@@ -84,9 +73,7 @@ func TestRefSame_ReturnsSameRow(t *testing.T) {
 	first := env.refSame("users")
 	second := env.refSame("users")
 
-	if first["id"] != second["id"] {
-		t.Errorf("refSame returned different rows: %v vs %v", first["id"], second["id"])
-	}
+	assert.Equal(t, first["id"], second["id"])
 }
 
 func TestRefSame_ClearedBetweenCycles(t *testing.T) {
@@ -106,38 +93,30 @@ func TestRefSame_ClearedBetweenCycles(t *testing.T) {
 		}
 		env.clearOneCache()
 	}
-	if !different {
-		t.Error("refSame returned the same row 20 times after cache clears; expected variation")
-	}
+	assert.True(t, different, "refSame returned the same row 20 times after cache clears; expected variation")
 }
 
 func TestRefSame_UnknownName(t *testing.T) {
 	env := testEnv(nil)
-	if result := env.refSame("nonexistent"); result != nil {
-		t.Errorf("refSame for unknown name = %v, want nil", result)
-	}
+	result := env.refSame("nonexistent")
+	assert.Nil(t, result)
 }
 
 func TestRefSame_EmptyData(t *testing.T) {
 	env := testEnv(map[string][]map[string]any{"empty": {}})
-	if result := env.refSame("empty"); result != nil {
-		t.Errorf("refSame for empty data = %v, want nil", result)
-	}
+	result := env.refSame("empty")
+	assert.Nil(t, result)
 }
 
 func TestRefPerm_ReturnsSameRowForever(t *testing.T) {
 	env := testEnv(map[string][]map[string]any{"warehouses": sampleRows()})
 
 	first := env.refPerm("warehouses")
-	if first == nil {
-		t.Fatal("refPerm returned nil")
-	}
+	require.NotNil(t, first)
 
 	for range 10 {
 		got := env.refPerm("warehouses")
-		if got["id"] != first["id"] {
-			t.Errorf("refPerm changed: got %v, want %v", got["id"], first["id"])
-		}
+		assert.Equal(t, first["id"], got["id"])
 	}
 }
 
@@ -150,16 +129,13 @@ func TestRefPerm_SurvivesCacheClear(t *testing.T) {
 	env.clearOneCache()
 
 	got := env.refPerm("warehouses")
-	if got["id"] != first["id"] {
-		t.Errorf("refPerm changed after clearOneCache: got %v, want %v", got["id"], first["id"])
-	}
+	assert.Equal(t, first["id"], got["id"])
 }
 
 func TestRefPerm_UnknownName(t *testing.T) {
 	env := testEnv(nil)
-	if result := env.refPerm("nonexistent"); result != nil {
-		t.Errorf("refPerm for unknown name = %v, want nil", result)
-	}
+	result := env.refPerm("nonexistent")
+	assert.Nil(t, result)
 }
 
 func TestRefDiff_ReturnsUniqueRows(t *testing.T) {
@@ -168,19 +144,13 @@ func TestRefDiff_ReturnsUniqueRows(t *testing.T) {
 	seen := map[any]bool{}
 	for range 3 {
 		row := env.refDiff("items")
-		if row == nil {
-			t.Fatal("refDiff returned nil")
-		}
+		require.NotNil(t, row)
 		id := row["id"]
-		if seen[id] {
-			t.Errorf("refDiff returned duplicate id: %v", id)
-		}
+		assert.False(t, seen[id], "refDiff returned duplicate id: %v", id)
 		seen[id] = true
 	}
 
-	if len(seen) != 3 {
-		t.Errorf("expected 3 unique rows, got %d", len(seen))
-	}
+	assert.Equal(t, 3, len(seen))
 }
 
 func TestRefDiff_ResetsAfterCycle(t *testing.T) {
@@ -195,23 +165,18 @@ func TestRefDiff_ResetsAfterCycle(t *testing.T) {
 	env.resetUniqIndex()
 
 	row := env.refDiff("items")
-	if row == nil {
-		t.Fatal("refDiff returned nil after reset")
-	}
+	require.NotNil(t, row)
 }
 
 func TestRefDiff_UnknownName(t *testing.T) {
 	env := testEnv(nil)
-	if result := env.refDiff("nonexistent"); result != nil {
-		t.Errorf("refDiff for unknown name = %v, want nil", result)
-	}
+	result := env.refDiff("nonexistent")
+	assert.Nil(t, result)
 }
 
 func TestRefEach(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectQuery("SELECT").WillReturnRows(
@@ -223,31 +188,19 @@ func TestRefEach(t *testing.T) {
 
 	env := &Env{db: db}
 	got, err := env.refEach("SELECT id, name FROM items")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	if len(got) != 3 {
-		t.Fatalf("refEach returned %d rows, want 3", len(got))
-	}
+	require.Equal(t, 3, len(got))
 	for i, row := range got {
-		if len(row) != 2 {
-			t.Errorf("row %d has %d columns, want 2", i, len(row))
-		}
+		assert.Equal(t, 2, len(row), "row %d has %d columns, want 2", i, len(row))
 	}
-	if got[0][0] != int64(1) {
-		t.Errorf("row 0 col 0 = %v, want 1", got[0][0])
-	}
-	if got[2][1] != "charlie" {
-		t.Errorf("row 2 col 1 = %v, want charlie", got[2][1])
-	}
+	assert.Equal(t, int64(1), got[0][0])
+	assert.Equal(t, "charlie", got[2][1])
 }
 
 func TestRefEach_QueryError(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectQuery("SELECT").WillReturnError(fmt.Errorf("connection refused"))
@@ -255,19 +208,13 @@ func TestRefEach_QueryError(t *testing.T) {
 	env := &Env{db: db}
 	got, err := env.refEach("SELECT 1")
 
-	if err == nil {
-		t.Fatal("refEach with query error should return error")
-	}
-	if got != nil {
-		t.Errorf("refEach with query error = %v, want nil", got)
-	}
+	require.Error(t, err)
+	assert.Nil(t, got)
 }
 
 func TestRefEach_NoRows(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectQuery("SELECT").WillReturnRows(
@@ -276,13 +223,9 @@ func TestRefEach_NoRows(t *testing.T) {
 
 	env := &Env{db: db}
 	got, err := env.refEach("SELECT id, name FROM empty_table")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	if len(got) != 0 {
-		t.Errorf("refEach with no rows = %v, want empty", got)
-	}
+	assert.Equal(t, 0, len(got))
 }
 
 func BenchmarkRefRand(b *testing.B) {

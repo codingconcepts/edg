@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/codingconcepts/edg/pkg/test"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEnviron(t *testing.T) {
@@ -15,21 +17,21 @@ func TestEnviron(t *testing.T) {
 		envKeySet string
 		envKeyGet string
 		envVal    string
-		wantErr   bool
+		expErr    string
 	}{
 		{
 			name:      "missing env var",
 			envKeySet: "ABC",
 			envKeyGet: "DEF",
 			envVal:    "123",
-			wantErr:   true,
+			expErr:    `missing environment variable: "DEF"`,
 		},
 		{
 			name:      "valid env var",
 			envKeySet: "ABC",
 			envKeyGet: "ABC",
 			envVal:    "123",
-			wantErr:   false,
+			expErr:    "",
 		},
 	}
 
@@ -40,16 +42,13 @@ func TestEnviron(t *testing.T) {
 
 			act, err := environ(c.envKeyGet)
 
-			if err != nil {
-				if !c.wantErr {
-					t.Fatalf("expected no error but got: %v", err)
-				}
+			if c.expErr != "" {
+				require.EqualError(t, err, c.expErr)
 				return
 			}
+			require.NoError(t, err)
 
-			if act != c.envVal {
-				t.Fatalf("exp: %[1]q (%[1]T)\ngot: %[2]q (%[2]T)", c.envVal, act)
-			}
+			assert.Equal(t, c.envVal, act)
 		})
 	}
 }
@@ -60,12 +59,8 @@ func TestNURand_InRange(t *testing.T) {
 
 	for range 1000 {
 		v, err := env.nuRand(1023, 1, 3000)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v < 1 || v > 3000 {
-			t.Fatalf("nurand(1023, 1, 3000) = %d, out of range [1, 3000]", v)
-		}
+		require.NoError(t, err)
+		require.True(t, v >= 1 && v <= 3000, "nurand(1023, 1, 3000) = %d, out of range [1, 3000]", v)
 	}
 }
 
@@ -78,9 +73,7 @@ func TestNURand_NonUniform(t *testing.T) {
 	bins := make([]int, 10)
 	for range 10000 {
 		v, err := env.nuRand(1023, 1, 3000)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		bins[(v-1)*10/3000]++
 	}
 
@@ -91,9 +84,7 @@ func TestNURand_NonUniform(t *testing.T) {
 			break
 		}
 	}
-	if allSame {
-		t.Error("nurand produced perfectly uniform distribution; expected non-uniform")
-	}
+	assert.False(t, allSame, "nurand produced perfectly uniform distribution; expected non-uniform")
 }
 
 func TestNURand_ConstantC(t *testing.T) {
@@ -101,18 +92,14 @@ func TestNURand_ConstantC(t *testing.T) {
 	env.nurandC = map[int]int{}
 
 	_, err := env.nuRand(1023, 1, 3000)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	c1 := env.nurandC[1023]
 
 	// Subsequent calls should use the same C.
 	for range 100 {
 		_, _ = env.nuRand(1023, 1, 3000)
 	}
-	if env.nurandC[1023] != c1 {
-		t.Errorf("NURand C changed: got %d, want %d", env.nurandC[1023], c1)
-	}
+	assert.Equal(t, c1, env.nurandC[1023], "NURand C changed")
 }
 
 func TestNURandN(t *testing.T) {
@@ -120,20 +107,14 @@ func TestNURandN(t *testing.T) {
 	env.nurandC = map[int]int{}
 
 	result, err := env.nuRandN(8191, 1, 100000, 5, 15)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	parts := strings.Split(result, ",")
 
-	if len(parts) < 5 || len(parts) > 15 {
-		t.Errorf("nurandN returned %d items, want 5-15", len(parts))
-	}
+	assert.True(t, len(parts) >= 5 && len(parts) <= 15, "nurandN returned %d items, want 5-15", len(parts))
 
 	seen := map[string]bool{}
 	for _, v := range parts {
-		if seen[v] {
-			t.Errorf("nurandN returned duplicate value: %v", v)
-		}
+		assert.False(t, seen[v], "nurandN returned duplicate value: %v", v)
 		seen[v] = true
 	}
 }
@@ -156,12 +137,8 @@ func TestNormRand_Distribution(t *testing.T) {
 
 	for range n {
 		v, err := env.normRand(mean, stddev, min, max)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v < min || v > max {
-			t.Fatalf("normRand value %v outside [%d, %d]", v, min, max)
-		}
+		require.NoError(t, err)
+		require.True(t, v >= min && v <= max, "normRand value %v outside [%d, %d]", v, min, max)
 		sum += v
 
 		dist := v - mean
@@ -183,51 +160,35 @@ func TestNormRand_Distribution(t *testing.T) {
 
 	// Observed mean should be close to the configured mean.
 	observedMean := sum / n
-	if observedMean < mean-2 || observedMean > mean+2 {
-		t.Errorf("observed mean = %.1f, want ~%d", observedMean, mean)
-	}
+	assert.True(t, observedMean >= mean-2 && observedMean <= mean+2, "observed mean = %.1f, want ~%d", observedMean, mean)
 
 	// Empirical rule: ~68 / ~95 / ~99.7 within 1 / 2 / 3 stddevs.
 	pct1 := float64(within1) / n
 	pct2 := float64(within2) / n
 	pct3 := float64(within3) / n
 
-	if pct1 < 0.65 || pct1 > 0.71 {
-		t.Errorf("within 1 stddev = %.1f%%, want ~68%%", pct1*100)
-	}
-	if pct2 < 0.93 || pct2 > 0.97 {
-		t.Errorf("within 2 stddevs = %.1f%%, want ~95%%", pct2*100)
-	}
-	if pct3 < 0.99 {
-		t.Errorf("within 3 stddevs = %.1f%%, want ~99.7%%", pct3*100)
-	}
+	assert.True(t, pct1 >= 0.65 && pct1 <= 0.71, "within 1 stddev = %.1f%%, want ~68%%", pct1*100)
+	assert.True(t, pct2 >= 0.93 && pct2 <= 0.97, "within 2 stddevs = %.1f%%, want ~95%%", pct2*100)
+	assert.True(t, pct3 >= 0.99, "within 3 stddevs = %.1f%%, want ~99.7%%", pct3*100)
 }
 
 func TestNormRandN(t *testing.T) {
 	env := testEnv(nil)
 
 	result, err := env.normRandN(500, 50, 1, 1000, 5, 15)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	parts := strings.Split(result, ",")
 
-	if len(parts) < 5 || len(parts) > 15 {
-		t.Errorf("normRandN returned %d items, want 5-15", len(parts))
-	}
+	assert.True(t, len(parts) >= 5 && len(parts) <= 15, "normRandN returned %d items, want 5-15", len(parts))
 
 	seen := map[string]bool{}
 	for _, v := range parts {
-		if seen[v] {
-			t.Errorf("normRandN returned duplicate value: %v", v)
-		}
+		assert.False(t, seen[v], "normRandN returned duplicate value: %v", v)
 		seen[v] = true
 
 		var num int
 		fmt.Sscanf(v, "%d", &num)
-		if num < 1 || num > 1000 {
-			t.Errorf("normRandN value %d outside [1, 1000]", num)
-		}
+		assert.True(t, num >= 1 && num <= 1000, "normRandN value %d outside [1, 1000]", num)
 	}
 }
 
@@ -236,13 +197,9 @@ func TestSeq(t *testing.T) {
 
 	for i := range 5 {
 		got, err := env.seq(1, 1)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		want := int64(1 + i)
-		if got != want {
-			t.Errorf("seq(1, 1) call %d = %d, want %d", i, got, want)
-		}
+		assert.Equal(t, want, got, "seq(1, 1) call %d", i)
 	}
 }
 
@@ -251,13 +208,9 @@ func TestSeq_StepAndStart(t *testing.T) {
 
 	for i := range 3 {
 		got, err := env.seq(100, 10)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		want := int64(100 + i*10)
-		if got != want {
-			t.Errorf("seq(100, 10) call %d = %d, want %d", i, got, want)
-		}
+		assert.Equal(t, want, got, "seq(100, 10) call %d", i)
 	}
 }
 
@@ -270,21 +223,15 @@ func TestWeightedSampleN(t *testing.T) {
 	env := testEnv(map[string][]map[string]any{"items": rows})
 
 	result, err := env.weightedSampleN("items", "name", "weight", 2, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result == "" {
-		t.Fatal("weightedSampleN returned empty string")
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, result, "weightedSampleN returned empty string")
 
 	parts := strings.Split(result, ",")
-	if len(parts) != 2 {
-		t.Errorf("weightedSampleN returned %d items, want 2", len(parts))
-	}
+	assert.Equal(t, 2, len(parts), "weightedSampleN returned %d items, want 2", len(parts))
 
 	// Verify uniqueness.
-	if len(parts) == 2 && parts[0] == parts[1] {
-		t.Error("weightedSampleN returned duplicate values")
+	if len(parts) == 2 {
+		assert.NotEqual(t, parts[0], parts[1], "weightedSampleN returned duplicate values")
 	}
 }
 
@@ -298,26 +245,18 @@ func TestWeightedSampleN_Weighted(t *testing.T) {
 	counts := map[string]int{}
 	for range 1000 {
 		result, err := env.weightedSampleN("items", "name", "weight", 1, 1)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		counts[result]++
 	}
 
-	if counts["heavy"] < 900 {
-		t.Errorf("heavy picked %d/1000, expected ~999", counts["heavy"])
-	}
+	assert.GreaterOrEqual(t, counts["heavy"], 900, "heavy picked %d/1000, expected ~999", counts["heavy"])
 }
 
 func TestWeightedSampleN_UnknownName(t *testing.T) {
 	env := testEnv(nil)
 	result, err := env.weightedSampleN("nonexistent", "id", "weight", 1, 3)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result != "" {
-		t.Errorf("weightedSampleN for unknown name = %v, want empty", result)
-	}
+	require.NoError(t, err)
+	assert.Empty(t, result, "weightedSampleN for unknown name = %v, want empty", result)
 }
 
 func TestWeightedSampleN_ZeroWeights(t *testing.T) {
@@ -328,12 +267,8 @@ func TestWeightedSampleN_ZeroWeights(t *testing.T) {
 	env := testEnv(map[string][]map[string]any{"items": rows})
 
 	result, err := env.weightedSampleN("items", "id", "weight", 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result != "" {
-		t.Errorf("weightedSampleN with zero weights = %v, want empty", result)
-	}
+	require.NoError(t, err)
+	assert.Empty(t, result, "weightedSampleN with zero weights = %v, want empty", result)
 }
 
 func BenchmarkNurand(b *testing.B) {

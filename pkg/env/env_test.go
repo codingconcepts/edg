@@ -14,6 +14,8 @@ import (
 	"github.com/codingconcepts/edg/pkg/convert"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testEnv(data map[string][]map[string]any) *Env {
@@ -63,22 +65,14 @@ func TestExpr(t *testing.T) {
 	q := &config.Query{
 		Args: []string{"expr(warehouses * 10)", "expr(warehouses + 1)"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, _, err := env.GenerateArgs(q)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	args := argSets[0]
-	if args[0] != 50 {
-		t.Errorf("expr(warehouses * 10) = %v, want 50", args[0])
-	}
-	if args[1] != 6 {
-		t.Errorf("expr(warehouses + 1) = %v, want 6", args[1])
-	}
+	assert.Equal(t, 50, args[0])
+	assert.Equal(t, 6, args[1])
 }
 
 func TestBareArithmetic(t *testing.T) {
@@ -89,22 +83,14 @@ func TestBareArithmetic(t *testing.T) {
 	q := &config.Query{
 		Args: []string{"orders / districts"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, _, err := env.GenerateArgs(q)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	got, ok := argSets[0][0].(float64)
-	if !ok {
-		t.Fatalf("orders / districts = %v (%T), want float64", argSets[0][0], argSets[0][0])
-	}
-	if got != 3000 {
-		t.Errorf("orders / districts = %v, want 3000", got)
-	}
+	require.True(t, ok, "orders / districts = %v (%T), want float64", argSets[0][0], argSets[0][0])
+	assert.Equal(t, float64(3000), got)
 }
 
 func TestSeedArgsCompiled(t *testing.T) {
@@ -116,25 +102,15 @@ func TestSeedArgsCompiled(t *testing.T) {
 		Name: "populate_items",
 		Args: []string{"items"},
 	}
-	if err := seedQuery.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs for seed query failed: %v", err)
-	}
+	require.NoError(t, seedQuery.CompileArgs(env.env))
 
-	if len(seedQuery.CompiledArgs) != 1 {
-		t.Fatalf("expected 1 compiled arg, got %d", len(seedQuery.CompiledArgs))
-	}
+	require.Len(t, seedQuery.CompiledArgs, 1)
 
 	argSets, _, err := env.GenerateArgs(seedQuery)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(argSets) != 1 {
-		t.Fatalf("expected 1 arg set, got %d", len(argSets))
-	}
-	if argSets[0][0] != 100 {
-		t.Errorf("seed arg = %v, want 100", argSets[0][0])
-	}
+	require.Len(t, argSets, 1)
+	assert.Equal(t, 100, argSets[0][0])
 }
 
 func TestExpressions(t *testing.T) {
@@ -152,22 +128,14 @@ func TestExpressions(t *testing.T) {
 	}
 
 	env, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	argSets, _, err := env.GenerateArgs(req.Run[0].Query)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	got, ok := argSets[0][0].(float64)
-	if !ok {
-		t.Fatalf("cust_per_district() = %v (%T), want float64", argSets[0][0], argSets[0][0])
-	}
-	if got != 3000 {
-		t.Errorf("cust_per_district() = %v, want 3000", got)
-	}
+	require.True(t, ok, "cust_per_district() = %v (%T), want float64", argSets[0][0], argSets[0][0])
+	assert.Equal(t, float64(3000), got)
 }
 
 func TestExpressions_WithArgs(t *testing.T) {
@@ -184,22 +152,14 @@ func TestExpressions_WithArgs(t *testing.T) {
 	}
 
 	env, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	argSets, _, err := env.GenerateArgs(req.Run[0].Query)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	got, ok := argSets[0][0].(float64)
-	if !ok {
-		t.Fatalf("divide(10) = %v (%T), want float64", argSets[0][0], argSets[0][0])
-	}
-	if got != 3000 {
-		t.Errorf("divide(10) = %v, want 3000", got)
-	}
+	require.True(t, ok, "divide(10) = %v (%T), want float64", argSets[0][0], argSets[0][0])
+	assert.Equal(t, float64(3000), got)
 }
 
 func TestExpressions_InvalidBody(t *testing.T) {
@@ -210,9 +170,7 @@ func TestExpressions_InvalidBody(t *testing.T) {
 	}
 
 	_, err := NewEnv(nil, "", req)
-	if err == nil {
-		t.Fatal("expected error for invalid expression, got nil")
-	}
+	require.Error(t, err)
 }
 
 func TestGenerateArgs_Batch(t *testing.T) {
@@ -222,26 +180,16 @@ func TestGenerateArgs_Batch(t *testing.T) {
 	env.env["items"] = 30
 
 	q := &config.Query{Args: []string{"batch(items / 10)", "const(10)"}}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, _, err := env.GenerateArgs(q)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(argSets) != 3 {
-		t.Fatalf("expected 3 arg sets, got %d", len(argSets))
-	}
+	require.Len(t, argSets, 3)
 
 	for i, args := range argSets {
-		if args[0] != i {
-			t.Errorf("arg set %d: args[0] = %v, want %d", i, args[0], i)
-		}
-		if args[1] != 10 {
-			t.Errorf("arg set %d: args[1] = %v, want 10", i, args[1])
-		}
+		assert.Equal(t, i, args[0], "arg set %d: args[0]", i)
+		assert.Equal(t, 10, args[1], "arg set %d: args[1]", i)
 	}
 }
 
@@ -252,14 +200,10 @@ func TestSetEnv(t *testing.T) {
 	env.SetEnv("test_data", data)
 
 	raw, ok := env.env["test_data"]
-	if !ok {
-		t.Fatal("SetEnv did not set the key")
-	}
+	require.True(t, ok, "SetEnv did not set the key")
 
 	got := raw.([]map[string]any)
-	if len(got) != len(data) {
-		t.Errorf("SetEnv stored %d rows, want %d", len(got), len(data))
-	}
+	assert.Len(t, got, len(data))
 }
 
 func TestPickWeighted(t *testing.T) {
@@ -280,20 +224,14 @@ func TestPickWeighted(t *testing.T) {
 	counts := map[string]int{}
 	for range 1000 {
 		item := env.pickWeighted()
-		if item == nil {
-			t.Fatal("pickWeighted returned nil")
-		}
+		require.NotNil(t, item)
 		counts[item.Name()]++
 	}
 
 	// With 90/10 weights over 1000 iterations, "heavy" should
 	// appear significantly more than "light".
-	if counts["heavy"] < 800 {
-		t.Errorf("heavy picked %d/1000 times, expected ~900", counts["heavy"])
-	}
-	if counts["light"] < 50 {
-		t.Errorf("light picked %d/1000 times, expected ~100", counts["light"])
-	}
+	assert.GreaterOrEqual(t, counts["heavy"], 800, "heavy picked %d/1000 times, expected ~900", counts["heavy"])
+	assert.GreaterOrEqual(t, counts["light"], 50, "light picked %d/1000 times, expected ~100", counts["light"])
 }
 
 func TestPickWeighted_NoWeights(t *testing.T) {
@@ -304,9 +242,7 @@ func TestPickWeighted_NoWeights(t *testing.T) {
 		},
 	}
 
-	if item := env.pickWeighted(); item != nil {
-		t.Errorf("pickWeighted with no weights returned %v, want nil", item.Name())
-	}
+	assert.Nil(t, env.pickWeighted(), "pickWeighted with no weights should return nil")
 }
 
 func TestPickWeighted_SkipsUnweightedQueries(t *testing.T) {
@@ -324,12 +260,8 @@ func TestPickWeighted_SkipsUnweightedQueries(t *testing.T) {
 
 	for range 100 {
 		item := env.pickWeighted()
-		if item == nil {
-			t.Fatal("pickWeighted returned nil")
-		}
-		if item.Name() != "weighted" {
-			t.Errorf("pickWeighted returned %q, want only 'weighted'", item.Name())
-		}
+		require.NotNil(t, item)
+		assert.Equal(t, "weighted", item.Name(), "pickWeighted should only return 'weighted'")
 	}
 }
 
@@ -339,9 +271,7 @@ func TestClearOneCache(t *testing.T) {
 
 	env.clearOneCache()
 
-	if len(env.oneCache) != 0 {
-		t.Errorf("clearOneCache left %d entries", len(env.oneCache))
-	}
+	assert.Empty(t, env.oneCache)
 }
 
 func TestResetUniqIndex(t *testing.T) {
@@ -350,16 +280,12 @@ func TestResetUniqIndex(t *testing.T) {
 
 	env.resetUniqIndex()
 
-	if env.uniqIndex != 0 {
-		t.Errorf("resetUniqIndex left index at %d", env.uniqIndex)
-	}
+	assert.Equal(t, 0, env.uniqIndex)
 }
 
 func TestRunIteration_NoWeights(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectExec("INSERT INTO t1").WillReturnResult(driver.ResultNoRows)
@@ -378,19 +304,13 @@ func TestRunIteration_NoWeights(t *testing.T) {
 		},
 	}
 
-	if err := env.RunIteration(context.Background()); err != nil {
-		t.Fatalf("RunIteration error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.NoError(t, env.RunIteration(context.Background()))
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestRunIteration_WithWeights(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	// Only one query should run per call.
@@ -413,12 +333,8 @@ func TestRunIteration_WithWeights(t *testing.T) {
 		},
 	}
 
-	if err := env.RunIteration(context.Background()); err != nil {
-		t.Fatalf("RunIteration error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.NoError(t, env.RunIteration(context.Background()))
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestInitFrom(t *testing.T) {
@@ -448,16 +364,10 @@ func TestInitFrom(t *testing.T) {
 	target.InitFrom(source)
 
 	raw, ok := target.env["load_items"]
-	if !ok {
-		t.Fatal("InitFrom did not copy data")
-	}
+	require.True(t, ok, "InitFrom did not copy data")
 	copied := raw.([]map[string]any)
-	if len(copied) != 2 {
-		t.Fatalf("InitFrom copied %d rows, want 2", len(copied))
-	}
-	if copied[0]["id"] != 1 {
-		t.Errorf("copied row 0 id = %v, want 1", copied[0]["id"])
-	}
+	require.Len(t, copied, 2)
+	assert.Equal(t, 1, copied[0]["id"])
 }
 
 func TestInitFrom_SkipsExecQueries(t *testing.T) {
@@ -481,9 +391,8 @@ func TestInitFrom_SkipsExecQueries(t *testing.T) {
 
 	target.InitFrom(source)
 
-	if _, ok := target.env["setup"]; ok {
-		t.Error("InitFrom should skip exec-type queries")
-	}
+	_, ok := target.env["setup"]
+	assert.False(t, ok, "InitFrom should skip exec-type queries")
 }
 
 func TestInitFrom_IndependentCopies(t *testing.T) {
@@ -517,9 +426,7 @@ func TestInitFrom_IndependentCopies(t *testing.T) {
 	targetData := target.env["items"].([]map[string]any)
 	targetData[0] = map[string]any{"id": 999}
 
-	if sourceRows[0]["id"] != 1 {
-		t.Error("InitFrom did not create an independent copy; source was mutated")
-	}
+	assert.Equal(t, 1, sourceRows[0]["id"], "InitFrom did not create an independent copy; source was mutated")
 }
 
 func TestNewEnv_GlobalShadowsBuiltin(t *testing.T) {
@@ -530,14 +437,9 @@ func TestNewEnv_GlobalShadowsBuiltin(t *testing.T) {
 	}
 
 	_, err := NewEnv(nil, "", req)
-	if err == nil {
-		t.Fatal("expected error when global shadows a built-in, got nil")
-	}
+	require.Error(t, err)
 
-	want := `global "ref_rand" shadows a built-in function`
-	if err.Error() != want {
-		t.Errorf("error = %q, want %q", err.Error(), want)
-	}
+	assert.EqualError(t, err, `global "ref_rand" shadows a built-in function`)
 }
 
 func TestReference_LoadedIntoEnv(t *testing.T) {
@@ -551,25 +453,15 @@ func TestReference_LoadedIntoEnv(t *testing.T) {
 	}
 
 	env, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	raw, ok := env.env["regions"]
-	if !ok {
-		t.Fatal("reference data not loaded into env")
-	}
+	require.True(t, ok, "reference data not loaded into env")
 
 	rows := raw.([]map[string]any)
-	if len(rows) != 2 {
-		t.Fatalf("loaded %d rows, want 2", len(rows))
-	}
-	if rows[0]["name"] != "eu" {
-		t.Errorf("row 0 name = %v, want eu", rows[0]["name"])
-	}
-	if rows[1]["region"] != "us-east-1" {
-		t.Errorf("row 1 region = %v, want us-east-1", rows[1]["region"])
-	}
+	require.Len(t, rows, 2)
+	assert.Equal(t, "eu", rows[0]["name"])
+	assert.Equal(t, "us-east-1", rows[1]["region"])
 }
 
 func TestReference_IndependentCopies(t *testing.T) {
@@ -583,36 +475,27 @@ func TestReference_IndependentCopies(t *testing.T) {
 	}
 
 	env1, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv env1 failed: %v", err)
-	}
+	require.NoError(t, err)
 	env2, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv env2 failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Mutating env1's copy should not affect env2.
 	data1 := env1.env["items"].([]map[string]any)
 	data1[0] = map[string]any{"id": 999}
 
 	data2 := env2.env["items"].([]map[string]any)
-	if data2[0]["id"] != 1 {
-		t.Error("reference data is shared between envs; expected independent copies")
-	}
+	assert.Equal(t, 1, data2[0]["id"], "reference data is shared between envs; expected independent copies")
 }
 
 func TestReference_NilIsNoOp(t *testing.T) {
 	req := &config.Request{}
 
 	env, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Should not panic or add unexpected keys.
-	if _, ok := env.env["regions"]; ok {
-		t.Error("unexpected 'regions' key in env with nil reference")
-	}
+	_, ok := env.env["regions"]
+	assert.False(t, ok, "unexpected 'regions' key in env with nil reference")
 }
 
 func TestReference_RefRand(t *testing.T) {
@@ -630,31 +513,21 @@ func TestReference_RefRand(t *testing.T) {
 	}
 
 	env, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	argSets, _, err := env.GenerateArgs(req.Run[0].Query)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	got, ok := argSets[0][0].(string)
-	if !ok {
-		t.Fatalf("ref_rand('colors').name = %v (%T), want string", argSets[0][0], argSets[0][0])
-	}
+	require.True(t, ok, "ref_rand('colors').name = %v (%T), want string", argSets[0][0], argSets[0][0])
 
 	valid := got == "red" || got == "blue" || got == "green"
-	if !valid {
-		t.Errorf("ref_rand('colors').name = %q, want one of red/blue/green", got)
-	}
+	assert.True(t, valid, "ref_rand('colors').name = %q, want one of red/blue/green", got)
 }
 
 func TestRunSection_Exec(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectExec("CREATE TABLE").WillReturnResult(driver.ResultNoRows)
@@ -671,19 +544,13 @@ func TestRunSection_Exec(t *testing.T) {
 		{Name: "create_t", Type: config.QueryTypeExec, Query: "CREATE TABLE t (id INT)"},
 	}
 
-	if err := env.runSection(context.Background(), queries, config.ConfigSectionUp, db); err != nil {
-		t.Fatalf("runSection error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.NoError(t, env.runSection(context.Background(), queries, config.ConfigSectionUp, db))
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestRunSection_SeedUsesBindParams(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	// $N placeholders are always inlined for cross-driver compatibility.
@@ -707,23 +574,15 @@ func TestRunSection_SeedUsesBindParams(t *testing.T) {
 		Query: "INSERT INTO items SELECT generate_series(1, $1)",
 		Args:  []string{"items"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionSeed, db); err != nil {
-		t.Fatalf("runSection error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionSeed, db))
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestRunSection_RunSectionPassesArgs(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectExec("INSERT INTO orders").
@@ -745,23 +604,15 @@ func TestRunSection_RunSectionPassesArgs(t *testing.T) {
 		Query: "INSERT INTO orders VALUES ($1)",
 		Args:  []string{"const(42)"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
-		t.Fatalf("runSection error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestRunSection_WaitRespectsContextCancel(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectExec("INSERT").WillReturnResult(driver.ResultNoRows)
@@ -785,16 +636,12 @@ func TestRunSection_WaitRespectsContextCancel(t *testing.T) {
 	cancel() // cancel immediately
 
 	err = env.runSection(ctx, []*config.Query{q}, config.ConfigSectionRun, db)
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("runSection error = %v, want context.Canceled", err)
-	}
+	require.True(t, errors.Is(err, context.Canceled), "runSection error = %v, want context.Canceled", err)
 }
 
 func TestRunSection_QueryStoresResults(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectQuery("SELECT").WillReturnRows(
@@ -813,17 +660,11 @@ func TestRunSection_QueryStoresResults(t *testing.T) {
 		{Name: "items", Type: config.QueryTypeQuery, Query: "SELECT id FROM items"},
 	}
 
-	if err := env.runSection(context.Background(), queries, config.ConfigSectionInit, db); err != nil {
-		t.Fatalf("runSection error: %v", err)
-	}
+	require.NoError(t, env.runSection(context.Background(), queries, config.ConfigSectionInit, db))
 
 	data, ok := env.env["items"].([]map[string]any)
-	if !ok {
-		t.Fatal("runSection did not store query results")
-	}
-	if len(data) != 2 {
-		t.Errorf("stored %d rows, want 2", len(data))
-	}
+	require.True(t, ok, "runSection did not store query results")
+	assert.Len(t, data, 2)
 }
 
 func TestArg_DependentColumn(t *testing.T) {
@@ -838,22 +679,16 @@ func TestArg_DependentColumn(t *testing.T) {
 	}
 
 	env, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	argSets, _, err := env.GenerateArgs(req.Run[0].Query)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	first := argSets[0][0].(string)
 	last := argSets[0][1].(string)
 	full := argSets[0][2].(string)
 	want := first + " " + last
-	if full != want {
-		t.Errorf("arg(0) + arg(1) = %q, want %q", full, want)
-	}
+	assert.Equal(t, want, full)
 }
 
 func TestArg_OutOfRange(t *testing.T) {
@@ -864,14 +699,10 @@ func TestArg_OutOfRange(t *testing.T) {
 	}
 
 	env, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	_, _, err = env.GenerateArgs(req.Run[0].Query)
-	if err == nil {
-		t.Fatal("expected error for arg(0) with no prior args, got nil")
-	}
+	require.Error(t, err)
 }
 
 func TestArg_Batch(t *testing.T) {
@@ -892,14 +723,10 @@ func TestArg_Batch(t *testing.T) {
 	}
 
 	env, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	argSets, _, err := env.GenerateArgs(req.Seed[0])
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Single batch of 3 rows, each arg is a CSV string.
 	// sqlFormatValue wraps strings in quotes, so the full name
@@ -914,9 +741,7 @@ func TestArg_Batch(t *testing.T) {
 		last := strings.Trim(lasts[i], "'")
 		full := strings.Trim(fulls[i], "'")
 		want := first + " " + last
-		if full != want {
-			t.Errorf("row %d: full = %q, want %q", i, full, want)
-		}
+		assert.Equal(t, want, full, "row %d", i)
 	}
 }
 
@@ -931,30 +756,18 @@ func TestRow_ExpandsIntoArgs(t *testing.T) {
 	}
 
 	env, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	argSets, _, err := env.GenerateArgs(req.Run[0].Query)
-	if err != nil {
-		t.Fatalf("GenerateArgs failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(argSets) != 1 {
-		t.Fatalf("expected 1 arg set, got %d", len(argSets))
-	}
-	if len(argSets[0]) != 2 {
-		t.Fatalf("expected 2 args, got %d", len(argSets[0]))
-	}
+	require.Len(t, argSets, 1)
+	require.Len(t, argSets[0], 2)
 
 	email, ok := argSets[0][0].(string)
-	if !ok || email == "" {
-		t.Errorf("arg 0 = %v (%T), want non-empty string", argSets[0][0], argSets[0][0])
-	}
+	assert.True(t, ok && email != "", "arg 0 = %v (%T), want non-empty string", argSets[0][0], argSets[0][0])
 	name, ok := argSets[0][1].(string)
-	if !ok || name == "" {
-		t.Errorf("arg 1 = %v (%T), want non-empty string", argSets[0][1], argSets[0][1])
-	}
+	assert.True(t, ok && name != "", "arg 1 = %v (%T), want non-empty string", argSets[0][1], argSets[0][1])
 }
 
 func TestRow_UsedAcrossSections(t *testing.T) {
@@ -971,23 +784,15 @@ func TestRow_UsedAcrossSections(t *testing.T) {
 	}
 
 	env, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Both queries should have compiled args from the row.
 	for _, q := range []*config.Query{req.Seed[0], req.Run[0].Query} {
-		if len(q.CompiledArgs) != 1 {
-			t.Errorf("query %s: expected 1 compiled arg, got %d", q.Name, len(q.CompiledArgs))
-		}
+		assert.Len(t, q.CompiledArgs, 1, "query %s", q.Name)
 
 		argSets, _, err := env.GenerateArgs(q)
-		if err != nil {
-			t.Fatalf("GenerateArgs for %s failed: %v", q.Name, err)
-		}
-		if len(argSets[0]) != 1 {
-			t.Errorf("query %s: expected 1 arg, got %d", q.Name, len(argSets[0]))
-		}
+		require.NoError(t, err)
+		assert.Len(t, argSets[0], 1, "query %s", q.Name)
 	}
 }
 
@@ -999,9 +804,7 @@ func TestRow_UnknownRowName(t *testing.T) {
 	}
 
 	_, err := NewEnv(nil, "", req)
-	if err == nil {
-		t.Fatal("expected error for unknown row name, got nil")
-	}
+	require.Error(t, err)
 }
 
 func TestRow_MutuallyExclusiveWithArgs(t *testing.T) {
@@ -1015,16 +818,12 @@ func TestRow_MutuallyExclusiveWithArgs(t *testing.T) {
 	}
 
 	_, err := NewEnv(nil, "", req)
-	if err == nil {
-		t.Fatal("expected error when both row and args are set, got nil")
-	}
+	require.Error(t, err)
 }
 
 func TestRunSection_PreparedExec(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectPrepare("INSERT INTO t").
@@ -1048,23 +847,15 @@ func TestRunSection_PreparedExec(t *testing.T) {
 		Query:    "INSERT INTO t VALUES ($1)",
 		Args:     []string{"const(42)"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
-		t.Fatalf("runSection error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestRunSection_PreparedQuery(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectPrepare("SELECT id, name FROM t").
@@ -1088,31 +879,20 @@ func TestRunSection_PreparedQuery(t *testing.T) {
 		Query:    "SELECT id, name FROM t WHERE id = $1",
 		Args:     []string{"const(1)"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
-		t.Fatalf("runSection error: %v", err)
-	}
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
 
 	data, ok := env.env["lookup"].([]map[string]any)
-	if !ok {
-		t.Fatal("prepared query did not store results")
-	}
-	if len(data) != 1 || data[0]["name"] != "alice" {
-		t.Errorf("got %v, want [{id:1 name:alice}]", data)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.True(t, ok, "prepared query did not store results")
+	require.Len(t, data, 1)
+	assert.Equal(t, "alice", data[0]["name"])
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestRunSection_PreparedCachesStmt(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	// Expect a single Prepare, but two Exec calls.
@@ -1136,34 +916,22 @@ func TestRunSection_PreparedCachesStmt(t *testing.T) {
 		Query:    "INSERT INTO t VALUES ($1)",
 		Args:     []string{"const(1)"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
-		t.Fatalf("first runSection error: %v", err)
-	}
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
 
 	// Change arg for second call, re-compile.
 	q.Args = []string{"const(2)"}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
-		t.Fatalf("second runSection error: %v", err)
-	}
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
 
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestRunSection_PreparedIgnoredForBatch(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	// Batch queries should NOT prepare. Expect a regular exec.
@@ -1186,23 +954,15 @@ func TestRunSection_PreparedIgnoredForBatch(t *testing.T) {
 		Query:    "INSERT INTO t VALUES ($1)",
 		Args:     []string{"const(42)"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
-		t.Fatalf("runSection error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestEnvClose(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectPrepare("SELECT 1")
@@ -1210,9 +970,7 @@ func TestEnvClose(t *testing.T) {
 
 	q := &config.Query{Name: "test", Query: "SELECT 1"}
 	stmt, err := db.Prepare("SELECT 1")
-	if err != nil {
-		t.Fatalf("preparing: %v", err)
-	}
+	require.NoError(t, err)
 
 	env := &Env{
 		stmtCache: map[*config.Query]*sql.Stmt{q: stmt},
@@ -1220,9 +978,7 @@ func TestEnvClose(t *testing.T) {
 
 	env.Close()
 
-	if len(env.stmtCache) != 0 {
-		t.Errorf("Close() left %d cached statements", len(env.stmtCache))
-	}
+	assert.Empty(t, env.stmtCache)
 }
 
 func TestTranslatePlaceholders(t *testing.T) {
@@ -1247,18 +1003,14 @@ func TestTranslatePlaceholders(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := translatePlaceholders(tt.query, tt.driver)
-			if got != tt.want {
-				t.Errorf("translatePlaceholders(%q, %q) = %q, want %q", tt.query, tt.driver, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
 
 func TestRunSection_PreparedTranslatesPlaceholders(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	// sqlmock sees the translated query (? for mysql).
@@ -1284,23 +1036,15 @@ func TestRunSection_PreparedTranslatesPlaceholders(t *testing.T) {
 		Query:    "INSERT INTO t VALUES ($1)",
 		Args:     []string{"const(42)"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
-	if err := env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db); err != nil {
-		t.Fatalf("runSection error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestRunTransaction_RollbackIfTrue(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectBegin()
@@ -1322,9 +1066,7 @@ func TestRunTransaction_RollbackIfTrue(t *testing.T) {
 	env.env["ref_same"] = env.refSame
 
 	rollbackCheck := &config.Query{RollbackIf: "ref_same('read_source').balance < 100"}
-	if err := rollbackCheck.CompileRollbackIf(env.env); err != nil {
-		t.Fatalf("CompileRollbackIf failed: %v", err)
-	}
+	require.NoError(t, rollbackCheck.CompileRollbackIf(env.env))
 
 	tx := &config.Transaction{
 		Name: "test_tx",
@@ -1335,13 +1077,9 @@ func TestRunTransaction_RollbackIfTrue(t *testing.T) {
 	}
 
 	err = env.runTransaction(context.Background(), tx)
-	if err != nil {
-		t.Fatalf("runTransaction returned error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.NoError(t, mock.ExpectationsWereMet())
 
 	// Check result was reported as a rollback.
 	close(results)
@@ -1351,16 +1089,12 @@ func TestRunTransaction_RollbackIfTrue(t *testing.T) {
 			gotRollback = r.Rollback
 		}
 	}
-	if !gotRollback {
-		t.Error("expected result with Rollback=true")
-	}
+	assert.True(t, gotRollback, "expected result with Rollback=true")
 }
 
 func TestRunTransaction_RollbackIfFalse(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectBegin()
@@ -1382,9 +1116,7 @@ func TestRunTransaction_RollbackIfFalse(t *testing.T) {
 	env.env["ref_same"] = env.refSame
 
 	rollbackCheck := &config.Query{RollbackIf: "ref_same('read_source').balance < 100"}
-	if err := rollbackCheck.CompileRollbackIf(env.env); err != nil {
-		t.Fatalf("CompileRollbackIf failed: %v", err)
-	}
+	require.NoError(t, rollbackCheck.CompileRollbackIf(env.env))
 
 	tx := &config.Transaction{
 		Name: "test_tx",
@@ -1395,28 +1127,22 @@ func TestRunTransaction_RollbackIfFalse(t *testing.T) {
 	}
 
 	err = env.runTransaction(context.Background(), tx)
-	if err != nil {
-		t.Fatalf("runTransaction returned error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.NoError(t, mock.ExpectationsWereMet())
 
 	// Check result was NOT a rollback.
 	close(results)
 	for r := range results {
-		if r.IsTransaction && r.Name == "test_tx" && r.Rollback {
-			t.Error("expected result with Rollback=false, got true")
+		if r.IsTransaction && r.Name == "test_tx" {
+			assert.False(t, r.Rollback, "expected result with Rollback=false, got true")
 		}
 	}
 }
 
 func TestRunTransaction_NoRollbackIf(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectBegin()
@@ -1438,12 +1164,8 @@ func TestRunTransaction_NoRollbackIf(t *testing.T) {
 		},
 	}
 
-	if err := env.runTransaction(context.Background(), tx); err != nil {
-		t.Fatalf("runTransaction error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.NoError(t, env.runTransaction(context.Background(), tx))
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestNewEnv_CompilesTransactionRollbackIf(t *testing.T) {
@@ -1461,14 +1183,10 @@ func TestNewEnv_CompilesTransactionRollbackIf(t *testing.T) {
 	}
 
 	env, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	rollbackQ := env.request.Run[0].Transaction.Queries[1]
-	if rollbackQ.CompiledRollbackIf == nil {
-		t.Fatal("expected CompiledRollbackIf to be set")
-	}
+	require.NotNil(t, rollbackQ.CompiledRollbackIf)
 }
 
 func TestNewEnv_InvalidTransactionRollbackIf(t *testing.T) {
@@ -1485,9 +1203,7 @@ func TestNewEnv_InvalidTransactionRollbackIf(t *testing.T) {
 	}
 
 	_, err := NewEnv(nil, "", req)
-	if err == nil {
-		t.Fatal("expected error for invalid rollback_if, got nil")
-	}
+	require.Error(t, err)
 }
 
 func TestLocal_ReturnsValue(t *testing.T) {
@@ -1495,24 +1211,16 @@ func TestLocal_ReturnsValue(t *testing.T) {
 	env.txLocals = map[string]any{"amount": 42}
 
 	got, err := env.local("amount")
-	if err != nil {
-		t.Fatalf("local() error: %v", err)
-	}
-	if got != 42 {
-		t.Errorf("local('amount') = %v, want 42", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 42, got)
 }
 
 func TestLocal_NotInTransaction(t *testing.T) {
 	env := testEnv(nil)
 
 	_, err := env.local("amount")
-	if err == nil {
-		t.Fatal("expected error when not in transaction, got nil")
-	}
-	if !strings.Contains(err.Error(), "not inside a transaction") {
-		t.Errorf("unexpected error: %v", err)
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not inside a transaction")
 }
 
 func TestLocal_Undefined(t *testing.T) {
@@ -1520,12 +1228,8 @@ func TestLocal_Undefined(t *testing.T) {
 	env.txLocals = map[string]any{}
 
 	_, err := env.local("missing")
-	if err == nil {
-		t.Fatal("expected error for undefined local, got nil")
-	}
-	if !strings.Contains(err.Error(), "not defined") {
-		t.Errorf("unexpected error: %v", err)
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not defined")
 }
 
 func TestEvalLocals(t *testing.T) {
@@ -1536,17 +1240,11 @@ func TestEvalLocals(t *testing.T) {
 		Name:   "test_tx",
 		Locals: map[string]string{"amount": "const(99)"},
 	}
-	if err := tx.CompileLocals(env.env); err != nil {
-		t.Fatalf("CompileLocals failed: %v", err)
-	}
+	require.NoError(t, tx.CompileLocals(env.env))
 
-	if err := env.evalLocals(tx); err != nil {
-		t.Fatalf("evalLocals failed: %v", err)
-	}
+	require.NoError(t, env.evalLocals(tx))
 
-	if env.txLocals["amount"] != 99 {
-		t.Errorf("txLocals[amount] = %v, want 99", env.txLocals["amount"])
-	}
+	assert.Equal(t, 99, env.txLocals["amount"])
 }
 
 func TestClearLocals(t *testing.T) {
@@ -1555,9 +1253,7 @@ func TestClearLocals(t *testing.T) {
 
 	env.clearLocals()
 
-	if env.txLocals != nil {
-		t.Error("clearLocals did not nil out txLocals")
-	}
+	assert.Nil(t, env.txLocals)
 }
 
 func TestNewEnv_CompilesTransactionLocals(t *testing.T) {
@@ -1575,17 +1271,11 @@ func TestNewEnv_CompilesTransactionLocals(t *testing.T) {
 	}
 
 	_, err := NewEnv(nil, "", req)
-	if err != nil {
-		t.Fatalf("NewEnv failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	tx := req.Run[0].Transaction
-	if len(tx.CompiledLocals) != 1 {
-		t.Fatalf("expected 1 compiled local, got %d", len(tx.CompiledLocals))
-	}
-	if tx.CompiledLocals["amount"] == nil {
-		t.Fatal("compiled local 'amount' is nil")
-	}
+	require.Len(t, tx.CompiledLocals, 1)
+	require.NotNil(t, tx.CompiledLocals["amount"])
 }
 
 func TestNewEnv_InvalidTransactionLocal(t *testing.T) {
@@ -1602,16 +1292,12 @@ func TestNewEnv_InvalidTransactionLocal(t *testing.T) {
 	}
 
 	_, err := NewEnv(nil, "", req)
-	if err == nil {
-		t.Fatal("expected error for invalid local expression, got nil")
-	}
+	require.Error(t, err)
 }
 
 func TestRunTransaction_WithLocals(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("creating sqlmock: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
 	mock.ExpectBegin()
@@ -1635,30 +1321,20 @@ func TestRunTransaction_WithLocals(t *testing.T) {
 		Query: "INSERT INTO t VALUES ($1)",
 		Args:  []string{"local('amount')"},
 	}
-	if err := q.CompileArgs(env.env); err != nil {
-		t.Fatalf("CompileArgs failed: %v", err)
-	}
+	require.NoError(t, q.CompileArgs(env.env))
 
 	tx := &config.Transaction{
 		Name:    "test_tx",
 		Locals:  map[string]string{"amount": "const(77)"},
 		Queries: []*config.Query{q},
 	}
-	if err := tx.CompileLocals(env.env); err != nil {
-		t.Fatalf("CompileLocals failed: %v", err)
-	}
+	require.NoError(t, tx.CompileLocals(env.env))
 
-	if err := env.runTransaction(context.Background(), tx); err != nil {
-		t.Fatalf("runTransaction error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
-	}
+	require.NoError(t, env.runTransaction(context.Background(), tx))
+	require.NoError(t, mock.ExpectationsWereMet())
 
 	// Verify locals were cleared after transaction.
-	if env.txLocals != nil {
-		t.Error("txLocals not cleared after transaction")
-	}
+	assert.Nil(t, env.txLocals, "txLocals not cleared after transaction")
 }
 
 func BenchmarkPickWeighted(b *testing.B) {
