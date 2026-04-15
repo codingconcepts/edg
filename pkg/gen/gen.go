@@ -57,7 +57,7 @@ func GenBatch(totalCount, batchSize any, pattern string) ([][]any, error) {
 			}
 			parts[j] = fmt.Sprintf("%v", val)
 		}
-		result[i] = []any{convert.RawSQL(strings.Join(parts, "\x1f"))}
+		result[i] = []any{convert.RawSQL(strings.Join(parts, convert.Sep))}
 	}
 	return result, nil
 }

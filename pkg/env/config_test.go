@@ -345,11 +345,11 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 	// First two batches should have 4 CSV values, last should have 2.
 	for _, args := range argSets[:2] {
 		csv := string(args[0].(convert.RawSQL))
-		parts := strings.Split(csv, "\x1f")
+		parts := strings.Split(csv, convert.Sep)
 		assert.Len(t, parts, 4)
 	}
 	lastCSV := string(argSets[2][0].(convert.RawSQL))
-	parts := strings.Split(lastCSV, "\x1f")
+	parts := strings.Split(lastCSV, convert.Sep)
 	assert.Len(t, parts, 2)
 
 	// Verify ref_same correlation: name and markup should match per row.
@@ -359,8 +359,8 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 		"'books'":       "1.1",
 	}
 	for _, args := range argSets {
-		names := strings.Split(string(args[1].(convert.RawSQL)), "\x1f")
-		markups := strings.Split(string(args[2].(convert.RawSQL)), "\x1f")
+		names := strings.Split(string(args[1].(convert.RawSQL)), convert.Sep)
+		markups := strings.Split(string(args[2].(convert.RawSQL)), convert.Sep)
 		require.Len(t, names, len(markups), "name/markup length mismatch")
 		for j := range names {
 			want, ok := validPairs[names[j]]
@@ -393,11 +393,11 @@ func TestGenerateArgs_BatchType_GlobalRefs(t *testing.T) {
 
 	// First two batches: 3 values each.
 	for _, args := range argSets[:2] {
-		parts := strings.Split(string(args[0].(convert.RawSQL)), "\x1f")
+		parts := strings.Split(string(args[0].(convert.RawSQL)), convert.Sep)
 		assert.Len(t, parts, 3)
 	}
 	// Last batch: 1 value.
-	parts := strings.Split(string(argSets[2][0].(convert.RawSQL)), "\x1f")
+	parts := strings.Split(string(argSets[2][0].(convert.RawSQL)), convert.Sep)
 	assert.Len(t, parts, 1)
 }
 
@@ -418,6 +418,6 @@ func TestGenerateArgs_BatchType_SizeDefaultsToCount(t *testing.T) {
 	// No size set, so all 5 in one batch.
 	require.Len(t, argSets, 1)
 
-	parts := strings.Split(string(argSets[0][0].(convert.RawSQL)), "\x1f")
+	parts := strings.Split(string(argSets[0][0].(convert.RawSQL)), convert.Sep)
 	assert.Len(t, parts, 5)
 }

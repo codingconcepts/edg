@@ -10,6 +10,10 @@ import (
 	"github.com/codingconcepts/edg/pkg/random"
 )
 
+// Sep is the batch field separator (ASCII unit separator, char 31).
+// Used to delimit values within a single batch-expanded SQL placeholder.
+const Sep = "\x1f"
+
 func Constant(v any) any {
 	return v
 }
@@ -140,7 +144,7 @@ func Tmpl(format string, args ...any) string {
 
 // BatchFormatValue formats a value for use inside a batch-delimited string
 // that will be placed within an already-quoted SQL context (e.g.
-// string_to_array('$1', chr(31))). Values are not wrapped in quotes;
+// string_to_array('$1', sep)). Values are not wrapped in quotes;
 // embedded single quotes are escaped for SQL safety. []byte values
 // are hex-encoded.
 func BatchFormatValue(v any) string {

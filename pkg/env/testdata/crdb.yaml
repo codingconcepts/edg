@@ -202,7 +202,7 @@ seed:
       - gen_batch(10, 5, 'email')
     query: |-
       INSERT INTO test_gen_batch (email)
-      SELECT e FROM unnest(string_to_array('$1', chr(31))) AS e
+      SELECT e FROM unnest(string_to_array('$1', sep)) AS e
 
   # Test batch: sequential integers.
   - name: seed_batch

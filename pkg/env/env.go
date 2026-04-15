@@ -123,6 +123,7 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		"ref_rand":          env.refRand,         // Use a random row.
 		"ref_same":          env.refSame,         // Use the same random row across multiple arguments.
 		"regex":             gen.GenRegex,        // Generate a string matching a regex pattern.
+		"sep":               env.sep(),           // Batch field separator, driver-aware (evaluated once at init).
 		"seq":               env.seq,             // Auto-incrementing sequence (start + counter * step).
 		"set_exp":           setExp,              // Pick from a set using exponential distribution.
 		"set_lognorm":       setLognormal,        // Pick from a set using log-normal distribution.
@@ -409,7 +410,7 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 			if useJSON {
 				args[i] = convert.RawSQL(convert.BatchJoinJSON(parts))
 			} else {
-				args[i] = convert.RawSQL(strings.Join(parts, "\x1f"))
+				args[i] = convert.RawSQL(strings.Join(parts, convert.Sep))
 			}
 		}
 		result[b] = args
@@ -491,7 +492,7 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 		// Inline $N placeholders when batch expansion occurred
 		// (gen_batch/batch/ref_each/query_batch/exec_batch), when
 		// placeholders appear inside quoted strings (e.g.
-		// string_to_array('$1', chr(31))) where the driver can't see them,
+		// string_to_array('$1', sep)) where the driver can't see them,
 		// or when the query uses $N placeholders at all. The last case
 		// ensures cross-driver compatibility: only PostgreSQL/CockroachDB
 		// understand $N natively; MySQL, Oracle, and SQL Server do not.

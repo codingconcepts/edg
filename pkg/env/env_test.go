@@ -731,9 +731,9 @@ func TestArg_Batch(t *testing.T) {
 	// Single batch of 3 rows, each arg is a CSV string.
 	// sqlFormatValue wraps strings in quotes, so the full name
 	// is computed from raw values then formatted: 'First Last'.
-	firsts := strings.Split(string(argSets[0][0].(convert.RawSQL)), "\x1f")
-	lasts := strings.Split(string(argSets[0][1].(convert.RawSQL)), "\x1f")
-	fulls := strings.Split(string(argSets[0][2].(convert.RawSQL)), "\x1f")
+	firsts := strings.Split(string(argSets[0][0].(convert.RawSQL)), convert.Sep)
+	lasts := strings.Split(string(argSets[0][1].(convert.RawSQL)), convert.Sep)
+	fulls := strings.Split(string(argSets[0][2].(convert.RawSQL)), convert.Sep)
 
 	for i := range 3 {
 		// Strip quotes added by sqlFormatValue.

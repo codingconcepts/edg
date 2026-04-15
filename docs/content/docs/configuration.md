@@ -144,9 +144,9 @@ seed:
       INSERT INTO customer (email, name, created_at)
       SELECT e, n, t
       FROM unnest(
-        string_to_array('$1', chr(31)),
-        string_to_array('$2', chr(31)),
-        string_to_array('$3', chr(31))
+        string_to_array('$1', sep),
+        string_to_array('$2', sep),
+        string_to_array('$3', sep)
       ) AS t(e, n, t)
 
 run:
@@ -181,7 +181,7 @@ seed:
       - gen_batch(1000, 100, 'email')
     query: |-
       INSERT INTO users (email)
-      SELECT unnest(string_to_array('$1', chr(31)))
+      SELECT unnest(string_to_array('$1', sep))
 ```
 
 - **`up`** and **`down`** manage schema (CREATE/DROP).
@@ -224,7 +224,7 @@ seed:
       - gen('email')
     query: |-
       INSERT INTO users (email)
-      SELECT unnest(string_to_array('$1', chr(31)))
+      SELECT unnest(string_to_array('$1', sep))
 ```
 
 Which resolves to the following query automatically by edg:
@@ -549,7 +549,7 @@ args:
   - gen_batch(1000, 100, 'email')
 query: |-
   INSERT INTO users (email)
-  SELECT unnest(string_to_array('$1', chr(31)))
+  SELECT unnest(string_to_array('$1', sep))
 ```
 
 If `$1` evaluates to `alice@x.com\x1fbob@y.com\x1f...`, the SQL sent to the database becomes:

@@ -237,7 +237,7 @@ Apply these patterns based on the target driver.
 - **Row generation in seed**: Use `generate_series(1, $1)` for bulk generation inside SQL
 - **Array columns**: Use `ARRAY[...]` type and `array(minN, maxN, pattern)` expression
 - **Vector columns**: Use `VECTOR(n)` type (pgvector) and `vector(dims, clusters, spread)` expression for clustered, unit-length vectors that support realistic similarity search
-- **Batch expansion**: Use `unnest(string_to_array('$1', chr(31)))` to expand batch args into rows (values are delimited by ASCII unit separator, char 31)
+- **Batch expansion**: Use `unnest(string_to_array('$1', sep))` to expand batch args into rows. `sep` is a built-in variable that emits the correct SQL separator function for the target driver (`chr(31)` for pgx/Oracle, `CHAR(31)` for MySQL/MSSQL)
 - **Upsert**: `ON CONFLICT (col) DO UPDATE SET ...`
 - **Pagination**: `LIMIT $1 OFFSET $2`
 - **Random ordering**: `ORDER BY random()`

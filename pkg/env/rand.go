@@ -178,6 +178,15 @@ func (e *Env) normRandN(rawMean, rawStddev, rawMin, rawMax, rawMinN, rawMaxN any
 	return strings.Join(parts, ","), nil
 }
 
+func (e *Env) sep() convert.RawSQL {
+	switch e.driver {
+	case "mysql", "mssql":
+		return convert.RawSQL("CHAR(31)")
+	default:
+		return convert.RawSQL("chr(31)")
+	}
+}
+
 // seq returns a monotonically increasing value: start + counter * step.
 // The counter is shared across all seq calls for a worker.
 //

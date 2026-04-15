@@ -32,19 +32,19 @@ func TestGenBatch(t *testing.T) {
 	// First two batches should have 10 emails each.
 	for _, i := range []int{0, 1} {
 		csv := string(result[i][0].(convert.RawSQL))
-		parts := strings.Split(csv, "\x1f")
+		parts := strings.Split(csv, convert.Sep)
 		assert.Len(t, parts, 10, "batch %d has %d values, want 10", i, len(parts))
 	}
 
 	// Last batch should have 5 emails (remainder).
 	csv := string(result[2][0].(convert.RawSQL))
-	parts := strings.Split(csv, "\x1f")
+	parts := strings.Split(csv, convert.Sep)
 	assert.Len(t, parts, 5, "last batch has %d values, want 5", len(parts))
 
 	// All emails across all batches should be unique.
 	seen := map[string]bool{}
 	for _, row := range result {
-		for _, v := range strings.Split(string(row[0].(convert.RawSQL)), "\x1f") {
+		for _, v := range strings.Split(string(row[0].(convert.RawSQL)), convert.Sep) {
 			assert.False(t, seen[v], "GenBatch produced duplicate: %s", v)
 			seen[v] = true
 		}
@@ -57,7 +57,7 @@ func TestGenBatch_ExactMultiple(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result, 2)
 	for i, row := range result {
-		parts := strings.Split(string(row[0].(convert.RawSQL)), "\x1f")
+		parts := strings.Split(string(row[0].(convert.RawSQL)), convert.Sep)
 		assert.Len(t, parts, 10, "batch %d has %d values, want 10", i, len(parts))
 	}
 }

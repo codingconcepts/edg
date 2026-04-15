@@ -62,7 +62,7 @@ seed:
       - gen_batch(users, batch_size, 'email')
     query: |-
       INSERT INTO users (email)
-      SELECT unnest(string_to_array('$1', chr(31)))
+      SELECT unnest(string_to_array('$1', sep))
 
 init:
   - name: fetch_users

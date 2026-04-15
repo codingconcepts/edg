@@ -113,7 +113,7 @@ seed:
     query: |-
       INSERT INTO customer (email, name)
       SELECT e, substr(md5(e), 1, 12)
-      FROM unnest(string_to_array('$1', chr(31))) AS e
+      FROM unnest(string_to_array('$1', sep)) AS e
 
 deseed:
 

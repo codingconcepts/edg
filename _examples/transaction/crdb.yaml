@@ -33,7 +33,7 @@ seed:
       - gen_batch(customers, batch_size, 'email')
     query: |-
       INSERT INTO customer (email)
-      SELECT unnest(string_to_array('$1', chr(31)))
+      SELECT unnest(string_to_array('$1', sep))
 
   - name: populate_account
     args:
