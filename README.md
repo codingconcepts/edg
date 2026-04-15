@@ -39,7 +39,6 @@ View the docs [here](https://edg.run/docs).
 
 ## Todos
 
-* Make gofakeit table in expressions.md collapsible and sorted
 * Cleanup things like Global tests being in rand_test.go
 * Collapse multiple tests into table-driven tests where possible
 * Consolidate pkg/config/config_test.go and pkg/env/config_test.go
