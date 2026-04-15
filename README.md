@@ -6,7 +6,7 @@
 
 A database workload runner driven by YAML configuration. Define your schema, seed data, and transactional workloads in a single config file, then run them against any supported database with concurrent workers and real-time throughput reporting.
 
-Query arguments are written as expressions compiled at startup, giving you access to global constants, random data generation, reference lookups, and TPC-C-compliant non-uniform random distributions.
+Query arguments are written as expressions compiled at startup time, giving you access to global constants, random data generators, inter-table referencing, and a variety of random distribution generators (normal, exp, Zipfian, etc.)
 
 ## Supported Databases
 
