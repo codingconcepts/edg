@@ -143,12 +143,21 @@ seed:
 	assert.Equal(t, 50, q.Size)
 }
 
-func TestConfigSectionSeedValue(t *testing.T) {
-	assert.Equal(t, ConfigSection("seed"), ConfigSectionSeed)
-}
+func TestConfigSectionValues(t *testing.T) {
+	cases := []struct {
+		name string
+		got  ConfigSection
+		want ConfigSection
+	}{
+		{"seed", ConfigSection("seed"), ConfigSectionSeed},
+		{"deseed", ConfigSection("deseed"), ConfigSectionDeseed},
+	}
 
-func TestConfigSectionDeseedValue(t *testing.T) {
-	assert.Equal(t, ConfigSection("deseed"), ConfigSectionDeseed)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, c.got)
+		})
+	}
 }
 
 func TestLoadConfig_NoIncludes(t *testing.T) {
@@ -274,7 +283,15 @@ globals: !include nonexistent.yaml
 }
 
 func TestTransactionParsesRollbackIf(t *testing.T) {
-	input := `
+	cases := []struct {
+		name         string
+		input        string
+		wantRollback bool
+		rollbackExpr string
+	}{
+		{
+			name: "with rollback_if",
+			input: `
 run:
   - transaction: make_transfer
     queries:
@@ -282,64 +299,94 @@ run:
         type: query
         query: SELECT id, balance FROM account WHERE id = 1
       - rollback_if: "ref_same('read_source').balance < 100"
-`
-	var req Request
-	require.NoError(t, yaml.Unmarshal([]byte(input), &req))
-
-	require.Len(t, req.Run, 1)
-	require.True(t, req.Run[0].IsTransaction())
-
-	tx := req.Run[0].Transaction
-	assert.Equal(t, "make_transfer", tx.Name)
-	require.Len(t, tx.Queries, 2)
-	require.True(t, tx.Queries[1].IsRollbackIf())
-	assert.Equal(t, "ref_same('read_source').balance < 100", tx.Queries[1].RollbackIf)
-}
-
-func TestTransactionParsesWithoutRollbackIf(t *testing.T) {
-	input := `
+`,
+			wantRollback: true,
+			rollbackExpr: "ref_same('read_source').balance < 100",
+		},
+		{
+			name: "without rollback_if",
+			input: `
 run:
   - transaction: simple
     queries:
       - name: q1
         type: exec
         query: INSERT INTO t VALUES (1)
-`
-	var req Request
-	require.NoError(t, yaml.Unmarshal([]byte(input), &req))
+`,
+			wantRollback: false,
+		},
+	}
 
-	for _, q := range req.Run[0].Transaction.Queries {
-		assert.False(t, q.IsRollbackIf())
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var req Request
+			require.NoError(t, yaml.Unmarshal([]byte(c.input), &req))
+
+			require.Len(t, req.Run, 1)
+			require.True(t, req.Run[0].IsTransaction())
+
+			tx := req.Run[0].Transaction
+			if c.wantRollback {
+				require.True(t, tx.Queries[len(tx.Queries)-1].IsRollbackIf())
+				assert.Equal(t, c.rollbackExpr, tx.Queries[len(tx.Queries)-1].RollbackIf)
+			} else {
+				for _, q := range tx.Queries {
+					assert.False(t, q.IsRollbackIf())
+				}
+			}
+		})
 	}
 }
 
-func TestCompileRollbackIf_Valid(t *testing.T) {
-	q := &Query{RollbackIf: "balance < 100"}
+func TestCompileRollbackIf(t *testing.T) {
+	cases := []struct {
+		name       string
+		rollbackIf string
+		env        map[string]any
+		wantErr    bool
+		wantNil    bool
+	}{
+		{
+			name:       "valid expression",
+			rollbackIf: "balance < 100",
+			env:        map[string]any{"balance": 50},
+		},
+		{
+			name:    "empty expression",
+			env:     map[string]any{},
+			wantNil: true,
+		},
+		{
+			name:       "invalid syntax",
+			rollbackIf: "invalid +++",
+			env:        map[string]any{},
+			wantErr:    true,
+		},
+		{
+			name:       "non-bool return",
+			rollbackIf: "42",
+			env:        map[string]any{},
+			wantErr:    true,
+		},
+	}
 
-	envMap := map[string]any{"balance": 50}
-	require.NoError(t, q.CompileRollbackIf(envMap))
-	require.NotNil(t, q.CompiledRollbackIf)
-}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			q := &Query{RollbackIf: c.rollbackIf}
+			err := q.CompileRollbackIf(c.env)
 
-func TestCompileRollbackIf_Empty(t *testing.T) {
-	q := &Query{}
-
-	require.NoError(t, q.CompileRollbackIf(map[string]any{}))
-	require.Nil(t, q.CompiledRollbackIf)
-}
-
-func TestCompileRollbackIf_Invalid(t *testing.T) {
-	q := &Query{RollbackIf: "invalid +++"}
-
-	err := q.CompileRollbackIf(map[string]any{})
-	require.Error(t, err)
-}
-
-func TestCompileRollbackIf_NonBoolReturnsError(t *testing.T) {
-	q := &Query{RollbackIf: "42"}
-
-	err := q.CompileRollbackIf(map[string]any{})
-	require.Error(t, err)
+			switch {
+			case c.wantErr:
+				require.Error(t, err)
+			case c.wantNil:
+				require.NoError(t, err)
+				require.Nil(t, q.CompiledRollbackIf)
+			default:
+				require.NoError(t, err)
+				require.NotNil(t, q.CompiledRollbackIf)
+			}
+		})
+	}
 }
 
 func TestTransactionParsesLocals(t *testing.T) {
@@ -381,74 +428,103 @@ func TestValidate_LocalShadowsQueryName(t *testing.T) {
 	assert.Contains(t, err.Error(), `local "debit" shadows query name`)
 }
 
-func TestCompileLocals_Valid(t *testing.T) {
-	envMap := map[string]any{
-		"const": func(v any) any { return v },
-	}
-	tx := &Transaction{
-		Locals: map[string]string{"amount": "const(42)"},
-	}
-
-	require.NoError(t, tx.CompileLocals(envMap))
-	require.Len(t, tx.CompiledLocals, 1)
-	require.NotNil(t, tx.CompiledLocals["amount"])
-}
-
-func TestCompileLocals_Invalid(t *testing.T) {
-	tx := &Transaction{
-		Locals: map[string]string{"bad": "invalid +++"},
-	}
-
-	err := tx.CompileLocals(map[string]any{})
-	require.Error(t, err)
-}
-
-func TestValidate_GenPatternValid(t *testing.T) {
-	req := &Request{
-		Run: []*RunItem{
-			{Query: &Query{Name: "q1", Args: []string{"gen('email')", "gen('number:1,100')"}}},
+func TestCompileLocals(t *testing.T) {
+	cases := []struct {
+		name    string
+		locals  map[string]string
+		env     map[string]any
+		wantErr bool
+		wantLen int
+	}{
+		{
+			name:    "valid expression",
+			locals:  map[string]string{"amount": "const(42)"},
+			env:     map[string]any{"const": func(v any) any { return v }},
+			wantLen: 1,
+		},
+		{
+			name:    "invalid syntax",
+			locals:  map[string]string{"bad": "invalid +++"},
+			env:     map[string]any{},
+			wantErr: true,
 		},
 	}
-	require.NoError(t, req.Validate())
-}
 
-func TestValidate_GenPatternInvalid(t *testing.T) {
-	req := &Request{
-		Run: []*RunItem{
-			{Query: &Query{Name: "q1", Args: []string{"gen('notafunction')"}}},
-		},
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tx := &Transaction{Locals: c.locals}
+			err := tx.CompileLocals(c.env)
+
+			if c.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, tx.CompiledLocals, c.wantLen)
+		})
 	}
-	err := req.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "notafunction")
 }
 
-func TestValidate_GenPatternInRow(t *testing.T) {
-	req := &Request{
-		Rows: map[string][]string{
-			"user": {"gen('email')", "gen('bogusxyz')"},
-		},
-	}
-	err := req.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "bogusxyz")
-}
-
-func TestValidate_GenPatternInLocals(t *testing.T) {
-	req := &Request{
-		Run: []*RunItem{
-			{Transaction: &Transaction{
-				Name:   "tx",
-				Locals: map[string]string{"amount": "gen('notreal')"},
-				Queries: []*Query{
-					{Name: "q1", Type: QueryTypeExec, Query: "SELECT 1"},
+func TestValidate_GenPattern(t *testing.T) {
+	cases := []struct {
+		name    string
+		req     *Request
+		wantErr string
+	}{
+		{
+			name: "valid args",
+			req: &Request{
+				Run: []*RunItem{
+					{Query: &Query{Name: "q1", Args: []string{"gen('email')", "gen('number:1,100')"}}},
 				},
-			}},
+			},
+		},
+		{
+			name: "invalid arg",
+			req: &Request{
+				Run: []*RunItem{
+					{Query: &Query{Name: "q1", Args: []string{"gen('notafunction')"}}},
+				},
+			},
+			wantErr: "notafunction",
+		},
+		{
+			name: "invalid row",
+			req: &Request{
+				Rows: map[string][]string{
+					"user": {"gen('email')", "gen('bogusxyz')"},
+				},
+			},
+			wantErr: "bogusxyz",
+		},
+		{
+			name: "invalid local",
+			req: &Request{
+				Run: []*RunItem{
+					{Transaction: &Transaction{
+						Name:   "tx",
+						Locals: map[string]string{"amount": "gen('notreal')"},
+						Queries: []*Query{
+							{Name: "q1", Type: QueryTypeExec, Query: "SELECT 1"},
+						},
+					}},
+				},
+			},
+			wantErr: "notreal",
 		},
 	}
-	err := req.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "notreal")
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.req.Validate()
+			if c.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), c.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestValidate_EnvPattern(t *testing.T) {

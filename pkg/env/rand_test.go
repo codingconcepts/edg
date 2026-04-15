@@ -2,56 +2,12 @@ package env
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/codingconcepts/edg/pkg/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestEnviron(t *testing.T) {
-	cases := []struct {
-		name      string
-		envKeySet string
-		envKeyGet string
-		envVal    string
-		expErr    string
-	}{
-		{
-			name:      "missing env var",
-			envKeySet: "ABC",
-			envKeyGet: "DEF",
-			envVal:    "123",
-			expErr:    `missing environment variable: "DEF"`,
-		},
-		{
-			name:      "valid env var",
-			envKeySet: "ABC",
-			envKeyGet: "ABC",
-			envVal:    "123",
-			expErr:    "",
-		},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			test.CleanupEnv(t, c.envKeySet)
-			os.Setenv(c.envKeySet, c.envVal)
-
-			act, err := environ(c.envKeyGet)
-
-			if c.expErr != "" {
-				require.EqualError(t, err, c.expErr)
-				return
-			}
-			require.NoError(t, err)
-
-			assert.Equal(t, c.envVal, act)
-		})
-	}
-}
 
 func TestNURand_InRange(t *testing.T) {
 	env := testEnv(nil)
@@ -193,24 +149,34 @@ func TestNormRandN(t *testing.T) {
 }
 
 func TestSeq(t *testing.T) {
-	env := testEnv(nil)
-
-	for i := range 5 {
-		got, err := env.seq(1, 1)
-		require.NoError(t, err)
-		want := int64(1 + i)
-		assert.Equal(t, want, got, "seq(1, 1) call %d", i)
+	cases := []struct {
+		name  string
+		start int
+		step  int
+		calls int
+		want  []int64
+	}{
+		{
+			name:  "start 1 step 1",
+			start: 1, step: 1, calls: 5,
+			want: []int64{1, 2, 3, 4, 5},
+		},
+		{
+			name:  "start 100 step 10",
+			start: 100, step: 10, calls: 3,
+			want: []int64{100, 110, 120},
+		},
 	}
-}
 
-func TestSeq_StepAndStart(t *testing.T) {
-	env := testEnv(nil)
-
-	for i := range 3 {
-		got, err := env.seq(100, 10)
-		require.NoError(t, err)
-		want := int64(100 + i*10)
-		assert.Equal(t, want, got, "seq(100, 10) call %d", i)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			env := testEnv(nil)
+			for i, want := range c.want {
+				got, err := env.seq(c.start, c.step)
+				require.NoError(t, err)
+				assert.Equal(t, want, got, "call %d", i)
+			}
+		})
 	}
 }
 
@@ -252,23 +218,38 @@ func TestWeightedSampleN_Weighted(t *testing.T) {
 	assert.GreaterOrEqual(t, counts["heavy"], 900, "heavy picked %d/1000, expected ~999", counts["heavy"])
 }
 
-func TestWeightedSampleN_UnknownName(t *testing.T) {
-	env := testEnv(nil)
-	result, err := env.weightedSampleN("nonexistent", "id", "weight", 1, 3)
-	require.NoError(t, err)
-	assert.Empty(t, result, "weightedSampleN for unknown name = %v, want empty", result)
-}
-
-func TestWeightedSampleN_ZeroWeights(t *testing.T) {
-	rows := []map[string]any{
-		{"id": 1, "weight": 0},
-		{"id": 2, "weight": 0},
+func TestWeightedSampleN_EdgeCases(t *testing.T) {
+	cases := []struct {
+		name  string
+		data  map[string][]map[string]any
+		table string
+		field string
+		minN  int
+		maxN  int
+	}{
+		{
+			name:  "unknown name",
+			table: "nonexistent", field: "id",
+			minN: 1, maxN: 3,
+		},
+		{
+			name: "zero weights",
+			data: map[string][]map[string]any{
+				"items": {{"id": 1, "weight": 0}, {"id": 2, "weight": 0}},
+			},
+			table: "items", field: "id",
+			minN: 1, maxN: 1,
+		},
 	}
-	env := testEnv(map[string][]map[string]any{"items": rows})
 
-	result, err := env.weightedSampleN("items", "id", "weight", 1, 1)
-	require.NoError(t, err)
-	assert.Empty(t, result, "weightedSampleN with zero weights = %v, want empty", result)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			env := testEnv(c.data)
+			result, err := env.weightedSampleN(c.table, c.field, "weight", c.minN, c.maxN)
+			require.NoError(t, err)
+			assert.Empty(t, result)
+		})
+	}
 }
 
 func BenchmarkNurand(b *testing.B) {

@@ -2,26 +2,12 @@ package env
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"sync/atomic"
 
 	"github.com/codingconcepts/edg/pkg/convert"
 	"github.com/codingconcepts/edg/pkg/random"
 )
-
-func environ(name string) (string, error) {
-	val, ok := os.LookupEnv(name)
-	if !ok {
-		return "", fmt.Errorf("missing environment variable: %q", name)
-	}
-
-	return val, nil
-}
-
-func (e *Env) global(name string) any {
-	return e.request.Globals[name]
-}
 
 // getNurandC returns the run-time constant C for a given A value,
 // generating it on first access. C is fixed for the lifetime of the
@@ -176,15 +162,6 @@ func (e *Env) normRandN(rawMean, rawStddev, rawMin, rawMax, rawMinN, rawMaxN any
 		return "", fmt.Errorf("norm_n: could not find %d unique values after %d iterations", n, random.MaxIter)
 	}
 	return strings.Join(parts, ","), nil
-}
-
-func (e *Env) sep() convert.RawSQL {
-	switch e.driver {
-	case "mysql", "mssql":
-		return convert.RawSQL("CHAR(31)")
-	default:
-		return convert.RawSQL("chr(31)")
-	}
 }
 
 // seq returns a monotonically increasing value: start + counter * step.

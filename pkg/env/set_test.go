@@ -33,20 +33,30 @@ func TestSetRand_Weighted(t *testing.T) {
 	assert.GreaterOrEqual(t, counts["light"], 500, "light picked %d/10000 times, expected ~1000", counts["light"])
 }
 
-func TestSetRand_SingleItem(t *testing.T) {
-	v, err := setRand([]any{"only"}, []any{})
-	require.NoError(t, err)
-	assert.Equal(t, "only", v)
-}
+func TestSetRand_EdgeCases(t *testing.T) {
+	cases := []struct {
+		name    string
+		items   []any
+		weights []any
+		want    any
+		wantErr bool
+	}{
+		{"single item", []any{"only"}, []any{}, "only", false},
+		{"empty", []any{}, []any{}, nil, true},
+		{"mismatched weights", []any{"a", "b", "c"}, []any{50, 30}, nil, true},
+	}
 
-func TestSetRand_Empty(t *testing.T) {
-	_, err := setRand([]any{}, []any{})
-	require.Error(t, err)
-}
-
-func TestSetRand_MismatchedWeights(t *testing.T) {
-	_, err := setRand([]any{"a", "b", "c"}, []any{50, 30})
-	require.Error(t, err)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			v, err := setRand(c.items, c.weights)
+			if c.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, c.want, v)
+		})
+	}
 }
 
 func TestSetNormal_CenterBias(t *testing.T) {
@@ -63,15 +73,28 @@ func TestSetNormal_CenterBias(t *testing.T) {
 	assert.Greater(t, counts["c"], counts["e"], "center item 'c' (%d) should be picked more than edge 'e' (%d)", counts["c"], counts["e"])
 }
 
-func TestSetNormal_SingleItem(t *testing.T) {
-	v, err := setNormal([]any{"only"}, 0, 1)
-	require.NoError(t, err)
-	assert.Equal(t, "only", v)
-}
+func TestSetNormal_EdgeCases(t *testing.T) {
+	cases := []struct {
+		name    string
+		items   []any
+		want    any
+		wantErr bool
+	}{
+		{"single item", []any{"only"}, "only", false},
+		{"empty", []any{}, nil, true},
+	}
 
-func TestSetNormal_Empty(t *testing.T) {
-	_, err := setNormal([]any{}, 0, 1)
-	require.Error(t, err)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			v, err := setNormal(c.items, 0, 1)
+			if c.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, c.want, v)
+		})
+	}
 }
 
 func TestSetExp_LowIndexBias(t *testing.T) {
@@ -87,15 +110,28 @@ func TestSetExp_LowIndexBias(t *testing.T) {
 	assert.Greater(t, counts["a"], counts["e"], "first item 'a' (%d) should be picked more than last 'e' (%d)", counts["a"], counts["e"])
 }
 
-func TestSetExp_SingleItem(t *testing.T) {
-	v, err := setExp([]any{"only"}, 0.5)
-	require.NoError(t, err)
-	assert.Equal(t, "only", v)
-}
+func TestSetExp_EdgeCases(t *testing.T) {
+	cases := []struct {
+		name    string
+		items   []any
+		want    any
+		wantErr bool
+	}{
+		{"single item", []any{"only"}, "only", false},
+		{"empty", []any{}, nil, true},
+	}
 
-func TestSetExp_Empty(t *testing.T) {
-	_, err := setExp([]any{}, 0.5)
-	require.Error(t, err)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			v, err := setExp(c.items, 0.5)
+			if c.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, c.want, v)
+		})
+	}
 }
 
 func TestSetLognormal_LowIndexBias(t *testing.T) {
@@ -113,15 +149,28 @@ func TestSetLognormal_LowIndexBias(t *testing.T) {
 		counts["a"]+counts["b"], counts["d"]+counts["e"])
 }
 
-func TestSetLognormal_SingleItem(t *testing.T) {
-	v, err := setLognormal([]any{"only"}, 0, 1)
-	require.NoError(t, err)
-	assert.Equal(t, "only", v)
-}
+func TestSetLognormal_EdgeCases(t *testing.T) {
+	cases := []struct {
+		name    string
+		items   []any
+		want    any
+		wantErr bool
+	}{
+		{"single item", []any{"only"}, "only", false},
+		{"empty", []any{}, nil, true},
+	}
 
-func TestSetLognormal_Empty(t *testing.T) {
-	_, err := setLognormal([]any{}, 0, 1)
-	require.Error(t, err)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			v, err := setLognormal(c.items, 0, 1)
+			if c.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, c.want, v)
+		})
+	}
 }
 
 func TestSetZipfian_LowIndexBias(t *testing.T) {
@@ -137,15 +186,28 @@ func TestSetZipfian_LowIndexBias(t *testing.T) {
 	assert.Greater(t, counts["a"], counts["e"], "first item 'a' (%d) should be picked more than last 'e' (%d)", counts["a"], counts["e"])
 }
 
-func TestSetZipfian_SingleItem(t *testing.T) {
-	v, err := setZipfian([]any{"only"}, 2.0, 1.0)
-	require.NoError(t, err)
-	assert.Equal(t, "only", v)
-}
+func TestSetZipfian_EdgeCases(t *testing.T) {
+	cases := []struct {
+		name    string
+		items   []any
+		want    any
+		wantErr bool
+	}{
+		{"single item", []any{"only"}, "only", false},
+		{"empty", []any{}, nil, true},
+	}
 
-func TestSetZipfian_Empty(t *testing.T) {
-	_, err := setZipfian([]any{}, 2.0, 1.0)
-	require.Error(t, err)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			v, err := setZipfian(c.items, 2.0, 1.0)
+			if c.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, c.want, v)
+		})
+	}
 }
 
 func TestWeightedItems_Choose(t *testing.T) {

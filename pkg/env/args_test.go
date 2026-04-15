@@ -12,38 +12,54 @@ import (
 )
 
 func TestCompileArgs(t *testing.T) {
-	env := testEnv(map[string][]map[string]any{
-		"items": sampleRows(),
-	})
-	env.env["const"] = convert.Constant
-	env.env["gen"] = gen.Gen
-	env.env["ref_rand"] = env.refRand
-
-	q := &config.Query{
-		Args: []string{"const(42)", "gen('number:1,10')"},
+	cases := []struct {
+		name    string
+		data    map[string][]map[string]any
+		setup   func(*Env)
+		args    []string
+		wantErr bool
+		wantLen int
+	}{
+		{
+			name: "valid expressions",
+			data: map[string][]map[string]any{"items": sampleRows()},
+			setup: func(e *Env) {
+				e.env["const"] = convert.Constant
+				e.env["gen"] = gen.Gen
+				e.env["ref_rand"] = e.refRand
+			},
+			args:    []string{"const(42)", "gen('number:1,10')"},
+			wantLen: 2,
+		},
+		{
+			name:    "invalid expression",
+			args:    []string{"invalid_func()"},
+			wantErr: true,
+		},
+		{
+			name:    "empty args",
+			wantLen: 0,
+		},
 	}
 
-	require.NoError(t, q.CompileArgs(env.env))
-	require.Len(t, q.CompiledArgs, 2)
-}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			env := testEnv(c.data)
+			if c.setup != nil {
+				c.setup(env)
+			}
 
-func TestCompileArgs_InvalidExpr(t *testing.T) {
-	env := testEnv(nil)
+			q := &config.Query{Args: c.args}
+			err := q.CompileArgs(env.env)
 
-	q := &config.Query{
-		Args: []string{"invalid_func()"},
+			if c.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Len(t, q.CompiledArgs, c.wantLen)
+		})
 	}
-
-	assert.Error(t, q.CompileArgs(env.env))
-}
-
-func TestCompileArgs_Empty(t *testing.T) {
-	env := testEnv(nil)
-
-	q := &config.Query{}
-
-	require.NoError(t, q.CompileArgs(env.env))
-	assert.Empty(t, q.CompiledArgs)
 }
 
 func TestGenerateArgs_NoArgs(t *testing.T) {

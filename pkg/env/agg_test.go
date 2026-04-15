@@ -1,7 +1,6 @@
 package env
 
 import (
-	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,140 +23,139 @@ var ordersData = []map[string]any{
 }
 
 func TestAggSum(t *testing.T) {
-	e := testEnvWithDataset("orders", ordersData)
-	got := e.aggSum("orders", "amount")
-	assert.Equal(t, 100.0, got)
-}
+	cases := []struct {
+		name    string
+		dataset string
+		data    map[string][]map[string]any
+		field   string
+		want    float64
+	}{
+		{"orders", "orders", map[string][]map[string]any{"orders": ordersData}, "amount", 100.0},
+		{"missing dataset", "missing", map[string][]map[string]any{"orders": ordersData}, "amount", 0.0},
+		{"int values", "d", map[string][]map[string]any{"d": {{"v": 1}, {"v": 2}, {"v": 3}}}, "v", 6.0},
+		{"empty dataset", "empty", map[string][]map[string]any{"empty": {}}, "v", 0.0},
+	}
 
-func TestAggSum_MissingDataset(t *testing.T) {
-	e := testEnvWithDataset("orders", ordersData)
-	got := e.aggSum("missing", "amount")
-	assert.Equal(t, 0.0, got)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := &Env{env: map[string]any{}}
+			for k, v := range c.data {
+				e.env[k] = v
+			}
+			assert.Equal(t, c.want, e.aggSum(c.dataset, c.field))
+		})
+	}
 }
 
 func TestAggAvg(t *testing.T) {
-	e := testEnvWithDataset("orders", ordersData)
-	got := e.aggAvg("orders", "amount")
-	assert.Equal(t, 25.0, got)
-}
+	cases := []struct {
+		name    string
+		dataset string
+		want    float64
+	}{
+		{"orders", "orders", 25.0},
+		{"missing dataset", "missing", 0.0},
+	}
 
-func TestAggAvg_MissingDataset(t *testing.T) {
-	e := testEnvWithDataset("orders", ordersData)
-	got := e.aggAvg("missing", "amount")
-	assert.Equal(t, 0.0, got)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := testEnvWithDataset("orders", ordersData)
+			assert.Equal(t, c.want, e.aggAvg(c.dataset, "amount"))
+		})
+	}
 }
 
 func TestAggMin(t *testing.T) {
-	e := testEnvWithDataset("orders", ordersData)
-	got := e.aggMin("orders", "amount")
-	assert.Equal(t, 10.0, got)
-}
+	cases := []struct {
+		name    string
+		dataset string
+		data    map[string][]map[string]any
+		field   string
+		want    float64
+	}{
+		{"orders", "orders", map[string][]map[string]any{"orders": ordersData}, "amount", 10.0},
+		{"missing dataset", "missing", map[string][]map[string]any{"orders": ordersData}, "amount", 0.0},
+		{"single row", "d", map[string][]map[string]any{"d": {{"v": 42.0}}}, "v", 42.0},
+		{"negative values", "d", map[string][]map[string]any{"d": {{"v": -5.0}, {"v": -10.0}, {"v": 3.0}}}, "v", -10.0},
+		{"empty dataset", "empty", map[string][]map[string]any{"empty": {}}, "v", 0.0},
+	}
 
-func TestAggMin_MissingDataset(t *testing.T) {
-	e := testEnvWithDataset("orders", ordersData)
-	got := e.aggMin("missing", "amount")
-	assert.Equal(t, 0.0, got)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := &Env{env: map[string]any{}}
+			for k, v := range c.data {
+				e.env[k] = v
+			}
+			assert.Equal(t, c.want, e.aggMin(c.dataset, c.field))
+		})
+	}
 }
 
 func TestAggMax(t *testing.T) {
-	e := testEnvWithDataset("orders", ordersData)
-	got := e.aggMax("orders", "amount")
-	assert.Equal(t, 40.0, got)
-}
+	cases := []struct {
+		name    string
+		dataset string
+		data    map[string][]map[string]any
+		field   string
+		want    float64
+	}{
+		{"orders", "orders", map[string][]map[string]any{"orders": ordersData}, "amount", 40.0},
+		{"missing dataset", "missing", map[string][]map[string]any{"orders": ordersData}, "amount", 0.0},
+		{"single row", "d", map[string][]map[string]any{"d": {{"v": 42.0}}}, "v", 42.0},
+		{"negative values", "d", map[string][]map[string]any{"d": {{"v": -5.0}, {"v": -10.0}, {"v": -1.0}}}, "v", -1.0},
+		{"empty dataset", "empty", map[string][]map[string]any{"empty": {}}, "v", 0.0},
+	}
 
-func TestAggMax_MissingDataset(t *testing.T) {
-	e := testEnvWithDataset("orders", ordersData)
-	got := e.aggMax("missing", "amount")
-	assert.Equal(t, 0.0, got)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := &Env{env: map[string]any{}}
+			for k, v := range c.data {
+				e.env[k] = v
+			}
+			assert.Equal(t, c.want, e.aggMax(c.dataset, c.field))
+		})
+	}
 }
 
 func TestAggCount(t *testing.T) {
-	e := testEnvWithDataset("orders", ordersData)
-	got := e.aggCount("orders")
-	assert.Equal(t, 4, got)
-}
+	cases := []struct {
+		name    string
+		dataset string
+		want    int
+	}{
+		{"orders", "orders", 4},
+		{"missing dataset", "missing", 0},
+		{"empty dataset", "empty", 0},
+	}
 
-func TestAggCount_MissingDataset(t *testing.T) {
-	e := testEnvWithDataset("orders", ordersData)
-	got := e.aggCount("missing")
-	assert.Equal(t, 0, got)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := testEnvWithDataset("orders", ordersData)
+			e.env["empty"] = []map[string]any{}
+			assert.Equal(t, c.want, e.aggCount(c.dataset))
+		})
+	}
 }
 
 func TestAggDistinct(t *testing.T) {
-	e := testEnvWithDataset("orders", ordersData)
-	got := e.aggDistinct("orders", "status")
-	assert.Equal(t, 3, got)
-}
-
-func TestAggDistinct_MissingDataset(t *testing.T) {
-	e := testEnvWithDataset("orders", ordersData)
-	got := e.aggDistinct("missing", "status")
-	assert.Equal(t, 0, got)
-}
-
-func TestAggSum_IntValues(t *testing.T) {
-	data := []map[string]any{
-		{"v": 1},
-		{"v": 2},
-		{"v": 3},
+	cases := []struct {
+		name    string
+		dataset string
+		field   string
+		want    int
+	}{
+		{"orders", "orders", "status", 3},
+		{"missing dataset", "missing", "status", 0},
+		{"empty dataset", "empty", "v", 0},
 	}
-	e := testEnvWithDataset("d", data)
-	got := e.aggSum("d", "v")
-	assert.Equal(t, 6.0, got)
-}
 
-func TestAggMin_SingleRow(t *testing.T) {
-	data := []map[string]any{
-		{"v": 42.0},
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := testEnvWithDataset("orders", ordersData)
+			e.env["empty"] = []map[string]any{}
+			assert.Equal(t, c.want, e.aggDistinct(c.dataset, c.field))
+		})
 	}
-	e := testEnvWithDataset("d", data)
-	got := e.aggMin("d", "v")
-	assert.Equal(t, 42.0, got)
-}
-
-func TestAggMax_SingleRow(t *testing.T) {
-	data := []map[string]any{
-		{"v": 42.0},
-	}
-	e := testEnvWithDataset("d", data)
-	got := e.aggMax("d", "v")
-	assert.Equal(t, 42.0, got)
-}
-
-func TestAggMin_NegativeValues(t *testing.T) {
-	data := []map[string]any{
-		{"v": -5.0},
-		{"v": -10.0},
-		{"v": 3.0},
-	}
-	e := testEnvWithDataset("d", data)
-	got := e.aggMin("d", "v")
-	assert.Equal(t, -10.0, got)
-}
-
-func TestAggMax_NegativeValues(t *testing.T) {
-	data := []map[string]any{
-		{"v": -5.0},
-		{"v": -10.0},
-		{"v": -1.0},
-	}
-	e := testEnvWithDataset("d", data)
-	got := e.aggMax("d", "v")
-	assert.Equal(t, -1.0, got)
-}
-
-// Verify empty datasets return 0 for all functions.
-func TestAgg_EmptyDataset(t *testing.T) {
-	e := &Env{env: map[string]any{
-		"empty": []map[string]any{},
-	}}
-
-	assert.Equal(t, 0.0, e.aggSum("empty", "v"))
-	assert.Equal(t, 0.0, e.aggAvg("empty", "v"))
-	assert.Equal(t, 0.0, e.aggMin("empty", "v"))
-	assert.Equal(t, 0.0, e.aggMax("empty", "v"))
-	assert.Equal(t, 0, e.aggCount("empty"))
-	assert.Equal(t, 0, e.aggDistinct("empty", "v"))
 }
 
 func BenchmarkAggSum(b *testing.B) {
@@ -183,6 +181,3 @@ func BenchmarkAggDistinct(b *testing.B) {
 		e.aggDistinct("d", "v")
 	}
 }
-
-// Ensure math is imported (used for test expectations if needed).
-var _ = math.Inf

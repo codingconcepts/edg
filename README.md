@@ -39,9 +39,6 @@ View the docs [here](https://edg.run/docs).
 
 ## Todos
 
-* Cleanup things like Global tests being in rand_test.go
-* Collapse multiple tests into table-driven tests where possible
-* Consolidate pkg/config/config_test.go and pkg/env/config_test.go
 * Spanner support
 * Better error output
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences
