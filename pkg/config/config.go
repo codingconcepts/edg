@@ -269,7 +269,7 @@ func (r *Request) Validate() error {
 
 	// Validate row references: row name must exist, and row + args are mutually exclusive.
 	runQueries := r.RunAllQueries()
-	for _, group := range []struct {
+	groups := []struct {
 		name    string
 		queries []*Query
 	}{
@@ -279,7 +279,9 @@ func (r *Request) Validate() error {
 		{"down", r.Down},
 		{"init", r.Init},
 		{"run", runQueries},
-	} {
+	}
+
+	for _, group := range groups {
 		for i, q := range group.queries {
 			if q.Row == "" {
 				continue
@@ -294,17 +296,7 @@ func (r *Request) Validate() error {
 	}
 
 	// Check for duplicate query names within each section.
-	for _, group := range []struct {
-		name    string
-		queries []*Query
-	}{
-		{"up", r.Up},
-		{"seed", r.Seed},
-		{"deseed", r.Deseed},
-		{"down", r.Down},
-		{"init", r.Init},
-		{"run", runQueries},
-	} {
+	for _, group := range groups {
 		seen := make(map[string]bool)
 		for i, q := range group.queries {
 			if q.Name == "" {
@@ -397,17 +389,7 @@ func (r *Request) Validate() error {
 			}
 		}
 	}
-	for _, group := range []struct {
-		name    string
-		queries []*Query
-	}{
-		{"up", r.Up},
-		{"seed", r.Seed},
-		{"deseed", r.Deseed},
-		{"down", r.Down},
-		{"init", r.Init},
-		{"run", runQueries},
-	} {
+	for _, group := range groups {
 		for _, q := range group.queries {
 			for _, arg := range q.Args {
 				if err := validateExpr(arg); err != nil {

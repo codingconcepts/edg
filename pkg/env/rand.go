@@ -187,12 +187,8 @@ func (e *Env) seq(rawStart, rawStep any) (int64, error) {
 //
 //	weighted_sample_n('products', 'id', 'popularity', 3, 8)
 func (e *Env) weightedSampleN(name, field, weightField string, rawMinN, rawMaxN any) (string, error) {
-	raw, ok := e.env[name]
+	data, ok := e.getDataset(name)
 	if !ok {
-		return "", nil
-	}
-	data, ok := raw.([]map[string]any)
-	if !ok || len(data) == 0 {
 		return "", nil
 	}
 

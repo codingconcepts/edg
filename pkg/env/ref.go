@@ -19,12 +19,8 @@ const (
 
 // refRand returns a random row from a named dataset.
 func (e *Env) refRand(name string) map[string]any {
-	raw, ok := e.env[name]
+	data, ok := e.getDataset(name)
 	if !ok {
-		return nil
-	}
-	data, ok := raw.([]map[string]any)
-	if !ok || len(data) == 0 {
 		return nil
 	}
 	return data[random.Rng.IntN(len(data))]
@@ -35,12 +31,8 @@ func (e *Env) refRand(name string) map[string]any {
 // and returns a comma-separated string (e.g. "42,17,93") for portable
 // use across database drivers.
 func (e *Env) refN(name string, field string, lo, hi int) string {
-	raw, ok := e.env[name]
+	data, ok := e.getDataset(name)
 	if !ok {
-		return ""
-	}
-	data, ok := raw.([]map[string]any)
-	if !ok || len(data) == 0 {
 		return ""
 	}
 
@@ -130,12 +122,8 @@ func (e *Env) refCached(name, label string, mu *sync.RWMutex, cache map[string]a
 }
 
 func (e *Env) refDiff(name string) map[string]any {
-	raw, ok := e.env[name]
+	data, ok := e.getDataset(name)
 	if !ok {
-		return nil
-	}
-	data, ok := raw.([]map[string]any)
-	if !ok || len(data) == 0 {
 		return nil
 	}
 

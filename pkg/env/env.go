@@ -598,22 +598,19 @@ func (e *Env) getOrPrepare(ctx context.Context, q *config.Query) (*sql.Stmt, err
 // native format expected by the given driver. pgx and dsql use $N
 // natively, so the query is returned unchanged for those drivers.
 func translatePlaceholders(query, driver string) string {
+	var replaceFn func(int) string
 	switch driver {
 	case "mysql":
-		// $N -> ? (positional, unnumbered)
-		for i := 1; strings.Contains(query, fmt.Sprintf("$%d", i)); i++ {
-			query = strings.Replace(query, fmt.Sprintf("$%d", i), "?", 1)
-		}
+		replaceFn = func(int) string { return "?" }
 	case "oracle":
-		// $N -> :N
-		for i := 1; strings.Contains(query, fmt.Sprintf("$%d", i)); i++ {
-			query = strings.Replace(query, fmt.Sprintf("$%d", i), fmt.Sprintf(":%d", i), 1)
-		}
+		replaceFn = func(i int) string { return fmt.Sprintf(":%d", i) }
 	case "mssql":
-		// $N -> @pN
-		for i := 1; strings.Contains(query, fmt.Sprintf("$%d", i)); i++ {
-			query = strings.Replace(query, fmt.Sprintf("$%d", i), fmt.Sprintf("@p%d", i), 1)
-		}
+		replaceFn = func(i int) string { return fmt.Sprintf("@p%d", i) }
+	default:
+		return query
+	}
+	for i := 1; strings.Contains(query, fmt.Sprintf("$%d", i)); i++ {
+		query = strings.Replace(query, fmt.Sprintf("$%d", i), replaceFn(i), 1)
 	}
 	return query
 }

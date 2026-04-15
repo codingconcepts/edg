@@ -46,7 +46,7 @@ func printResults(results <-chan config.QueryResult, interval time.Duration, sta
 				s.count += int64(r.Count)
 				s.totalLatency += r.Latency
 				s.latencies = append(s.latencies, r.Latency)
-				if r.IsTransaction && r.Err == nil {
+				if r.IsTransaction {
 					if r.Rollback {
 						s.rollbacks++
 					} else {
