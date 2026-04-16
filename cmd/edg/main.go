@@ -67,7 +67,7 @@ func main() {
 		return nil
 	}
 
-	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd(), allCmd(), replCmd(), validateCmd(), versionCmd())
+	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd(), allCmd(), replCmd(), validateCmd(), versionCmd(), initCmd())
 	root.SilenceUsage = true
 	root.SilenceErrors = true
 

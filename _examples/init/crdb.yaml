@@ -1,0 +1,53 @@
+globals:
+  rows: 100
+  batch_size: 100
+up:
+  - name: create_product
+    query: |-
+      CREATE TABLE public.product (
+      	id INT8 NOT NULL,
+      	name STRING NOT NULL,
+      	price DECIMAL(10,2) NOT NULL,
+      	CONSTRAINT product_pkey PRIMARY KEY (id ASC)
+      ) WITH (schema_locked = true)
+  - name: create_review
+    query: |-
+      CREATE TABLE public.review (
+      	id UUID NOT NULL DEFAULT gen_random_uuid(),
+      	product_id INT8 NOT NULL,
+      	rating INT8 NOT NULL,
+      	created_at TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+      	CONSTRAINT review_pkey PRIMARY KEY (id ASC),
+      	CONSTRAINT review_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.product(id),
+      	CONSTRAINT check_rating CHECK (rating BETWEEN 1:::INT8 AND 5:::INT8)
+      ) WITH (schema_locked = true)
+seed:
+  - name: populate_product
+    type: exec
+    count: rows
+    args:
+      - uniform(1, 1000)
+      - gen('sentence:3')
+      - uniform(1.0, 100.0)
+    query: INSERT INTO product (id, name, price) VALUES ($1, $2, $3)
+  - name: populate_review
+    type: exec
+    count: rows
+    args:
+      - uniform(1, 1000)
+      - uniform(1, 1000)
+    query: INSERT INTO review (product_id, rating) VALUES ($1, $2)
+deseed:
+  - name: truncate_review
+    type: exec
+    query: TRUNCATE TABLE review
+  - name: truncate_product
+    type: exec
+    query: TRUNCATE TABLE product CASCADE
+down:
+  - name: drop_review
+    type: exec
+    query: DROP TABLE IF EXISTS review
+  - name: drop_product
+    type: exec
+    query: DROP TABLE IF EXISTS product

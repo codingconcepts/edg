@@ -324,10 +324,35 @@ Apply these patterns based on the target driver.
 - Follows the same patterns as `pgx` (uses PostgreSQL wire protocol)
 - Note: Some CockroachDB-specific SQL (e.g., `STRING` type) may not be available; prefer standard PostgreSQL types
 
+## Generating from an existing database
+
+If the user already has a database with tables, suggest `edg init` to generate a starting config:
+
+```sh
+# PostgreSQL / CockroachDB
+edg init --driver pgx --url "postgres://..." --schema public > workload.yaml
+
+# MySQL (use --database for the database name)
+edg init --driver mysql --url "root:pass@tcp(localhost:3306)/dbname?parseTime=true" --database dbname > workload.yaml
+
+# MSSQL
+edg init --driver mssql --url "sqlserver://..." --schema dbo > workload.yaml
+
+# Oracle
+edg init --driver oracle --url "oracle://..." --schema SYSTEM > workload.yaml
+
+# Aurora DSQL
+edg init --driver dsql --url "clusterid.dsql.us-east-1.on.aws" --schema public > workload.yaml
+```
+
+The `--schema` and `--database` flags are interchangeable. Use `--schema` for drivers where the value is a schema name (pgx, dsql, mssql, oracle) and `--database` for drivers where it's a database name (mysql).
+
+The generated config is a starting point, seed expressions will match column types and constraints but won't produce realistic data. The user should refine the config after generation.
+
 ## Validation
 
 After generating the config, remind the user to validate it:
 
 ```sh
-edg validate --driver <driver> --config <path>
+edg validate config --config <path>
 ```

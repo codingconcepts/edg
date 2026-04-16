@@ -37,6 +37,60 @@ edg all \
 
 View the docs [here](https://edg.run/docs).
 
+## Local development
+
+### Running integration tests
+
+Start the database with docker compose, then run the corresponding test target.
+
+**Workload tests** (`pkg/env`):
+
+```sh
+# CockroachDB
+docker compose -f _examples/compose_crdb.yml up -d
+make integration_test_crdb
+docker compose -f _examples/compose_crdb.yml down
+
+# MySQL
+docker compose -f _examples/compose_mysql.yml up -d
+make integration_test_mysql
+docker compose -f _examples/compose_mysql.yml down
+
+# MSSQL
+docker compose -f _examples/compose_mssql.yml up -d
+make integration_test_mssql
+docker compose -f _examples/compose_mssql.yml down
+
+# Oracle
+docker compose -f _examples/compose_oracle.yml up -d
+make integration_test_oracle
+docker compose -f _examples/compose_oracle.yml down
+```
+
+**Schema tests** (`pkg/schema`):
+
+```sh
+# CockroachDB
+docker compose -f _examples/compose_crdb.yml up -d
+make integration_test_schema_crdb
+docker compose -f _examples/compose_crdb.yml down
+
+# MySQL
+docker compose -f _examples/compose_mysql.yml up -d
+make integration_test_schema_mysql
+docker compose -f _examples/compose_mysql.yml down
+
+# MSSQL
+docker compose -f _examples/compose_mssql.yml up -d
+make integration_test_schema_mssql
+docker compose -f _examples/compose_mssql.yml down
+
+# Oracle
+docker compose -f _examples/compose_oracle.yml up -d
+make integration_test_schema_oracle
+docker compose -f _examples/compose_oracle.yml down
+```
+
 ## Todos
 
 * Spanner support

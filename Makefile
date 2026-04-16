@@ -47,6 +47,26 @@ integration_test_mssql:
 	DRIVER="mssql" \
 	go test ./pkg -v -db -rng-seed 42
 
+integration_test_schema_crdb:
+	URL="postgres://root@localhost:26257?sslmode=disable" \
+	DRIVER="pgx" \
+	go test ./pkg/schema -v -db
+
+integration_test_schema_mysql:
+	URL="root:password@tcp(localhost:3306)/defaultdb" \
+	DRIVER="mysql" \
+	go test ./pkg/schema -v -db
+
+integration_test_schema_mssql:
+	URL="sqlserver://sa:P4ssw0rd@localhost:1433?database=master&encrypt=disable" \
+	DRIVER="mssql" \
+	go test ./pkg/schema -v -db
+
+integration_test_schema_oracle:
+	URL="oracle://system:password@localhost:1521/defaultdb" \
+	DRIVER="oracle" \
+	go test ./pkg/schema -v -db
+
 harness_crdb:
 	go run ./cmd/harness -db crdb
 
