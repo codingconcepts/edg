@@ -11,7 +11,7 @@ import (
 )
 
 // EnterpriseDrivers lists the driver names that require a license.
-var EnterpriseDrivers = []string{"oracle", "mssql", "dsql"}
+var EnterpriseDrivers = []string{"oracle", "mssql", "dsql", "spanner"}
 
 // License represents a signed license payload.
 type License struct {

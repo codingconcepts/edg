@@ -37,11 +37,12 @@ func Cmd() *cobra.Command {
 }
 
 var driverFile = map[string]string{
-	"pgx":    "crdb.yaml",
-	"dsql":   "crdb.yaml",
-	"mysql":  "mysql.yaml",
-	"oracle": "oracle.yaml",
-	"mssql":  "mssql.yaml",
+	"pgx":     "crdb.yaml",
+	"dsql":    "crdb.yaml",
+	"mysql":   "mysql.yaml",
+	"oracle":  "oracle.yaml",
+	"mssql":   "mssql.yaml",
+	"spanner": "spanner.yaml",
 }
 
 // LoadWorkload reads the correct embedded YAML for the given driver.

@@ -1,0 +1,90 @@
+# TTL Logger Workload for Google Cloud Spanner
+#
+# Spanner has no native row-level TTL. This workload uses a
+# manual expiry pattern with a cleanup query.
+#
+# Connection URL format:
+#   projects/PROJECT/instances/INSTANCE/databases/DATABASE
+
+globals:
+  message_size: 256
+
+up:
+
+  - name: create_events
+    query: |-
+      CREATE TABLE IF NOT EXISTS events (
+        id STRING(36) NOT NULL DEFAULT (GENERATE_UUID()),
+        level STRING(10) NOT NULL,
+        source STRING(50) NOT NULL,
+        message STRING(MAX) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP())
+      ) PRIMARY KEY (id)
+
+  - name: create_idx_events_level_created
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_events_level_created
+      ON events (level, created_at DESC)
+
+  - name: create_idx_events_created
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_events_created
+      ON events (created_at DESC)
+
+seed: []
+
+deseed:
+
+  - name: delete_events
+    type: exec
+    query: DELETE FROM events WHERE TRUE
+
+down:
+
+  - name: drop_events
+    type: exec
+    query: DROP TABLE IF EXISTS events
+
+run_weights:
+  write_log: 60
+  read_recent: 15
+  read_by_level: 15
+  cleanup_expired: 10
+
+run:
+
+  - name: write_log
+    type: exec
+    args:
+      - set_rand(['DEBUG','INFO','WARN','ERROR','FATAL'], [10,50,25,12,3])
+      - set_rand(['api','worker','scheduler','auth','billing'], [])
+      - regex('[a-zA-Z0-9 ]{64,256}')
+    query: |-
+      INSERT INTO events (level, source, message)
+      VALUES (@p1, @p2, @p3)
+
+  - name: read_recent
+    type: query
+    query: |-
+      SELECT id, level, source, message, created_at
+      FROM events
+      ORDER BY created_at DESC
+      LIMIT 20
+
+  - name: read_by_level
+    type: query
+    args:
+      - set_rand(['ERROR','WARN','FATAL'], [60,30,10])
+    query: |-
+      SELECT id, source, message, created_at
+      FROM events
+      WHERE level = @p1
+        AND created_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE)
+      ORDER BY created_at DESC
+      LIMIT 20
+
+  - name: cleanup_expired
+    type: exec
+    query: |-
+      DELETE FROM events
+      WHERE created_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 10 MINUTE)

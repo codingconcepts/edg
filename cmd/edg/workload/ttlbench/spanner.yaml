@@ -1,0 +1,69 @@
+# TTL Bench Workload for Google Cloud Spanner
+#
+# Spanner has no native row-level TTL. This workload uses a
+# manual expiry pattern: an inserted_at column is written on
+# insert and a cleanup query deletes expired rows.
+#
+# Connection URL format:
+#   projects/PROJECT/instances/INSTANCE/databases/DATABASE
+
+globals:
+  payload_size: 256
+
+up:
+
+  - name: create_ttlbench
+    query: |-
+      CREATE TABLE IF NOT EXISTS ttlbench (
+        id STRING(36) NOT NULL DEFAULT (GENERATE_UUID()),
+        payload BYTES(MAX) NOT NULL,
+        inserted_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP())
+      ) PRIMARY KEY (id)
+
+  - name: create_idx_ttlbench_inserted
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_ttlbench_inserted
+      ON ttlbench (inserted_at DESC)
+
+seed: []
+
+deseed:
+
+  - name: delete_ttlbench
+    type: exec
+    query: DELETE FROM ttlbench WHERE TRUE
+
+down:
+
+  - name: drop_ttlbench
+    type: exec
+    query: DROP TABLE IF EXISTS ttlbench
+
+run_weights:
+  insert_row: 70
+  read_recent: 20
+  cleanup_expired: 10
+
+run:
+
+  - name: insert_row
+    type: exec
+    args:
+      - blob(payload_size)
+    query: |-
+      INSERT INTO ttlbench (payload) VALUES (@p1)
+
+  - name: read_recent
+    type: query
+    query: |-
+      SELECT id, inserted_at
+      FROM ttlbench
+      WHERE inserted_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE)
+      ORDER BY inserted_at DESC
+      LIMIT 10
+
+  - name: cleanup_expired
+    type: exec
+    query: |-
+      DELETE FROM ttlbench
+      WHERE inserted_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 MINUTE)

@@ -1,0 +1,65 @@
+# KV Workload for Google Cloud Spanner
+#
+# Connection URL format:
+#   projects/PROJECT/instances/INSTANCE/databases/DATABASE
+
+globals:
+  keys: 10000
+  batch_size: 1000
+  value_size: 256
+
+up:
+
+  - name: create_kv
+    query: |-
+      CREATE TABLE IF NOT EXISTS kv (
+        k INT64 NOT NULL,
+        v BYTES(MAX) NOT NULL
+      ) PRIMARY KEY (k)
+
+seed:
+
+  - name: populate_kv
+    args:
+      - batch(keys / batch_size)
+      - batch_size
+      - value_size
+    query: |-
+      INSERT INTO kv (k, v)
+      SELECT
+        $1 * $2 + s,
+        REPEAT(CAST(GENERATE_UUID() AS BYTES), CAST(CEIL($3 / 36) AS INT64))
+      FROM UNNEST(GENERATE_ARRAY(1, $2)) AS s
+
+deseed:
+
+  - name: delete_kv
+    type: exec
+    query: DELETE FROM kv WHERE TRUE
+
+down:
+
+  - name: drop_kv
+    type: exec
+    query: DROP TABLE IF EXISTS kv
+
+run_weights:
+  read: 50
+  write: 50
+
+run:
+
+  - name: read
+    type: query
+    args:
+      - gen('number:1,' + string(keys))
+    query: |-
+      SELECT k, v FROM kv WHERE k = @p1
+
+  - name: write
+    type: exec
+    args:
+      - gen('number:1,' + string(keys))
+      - blob(value_size)
+    query: |-
+      INSERT OR UPDATE INTO kv (k, v) VALUES (@p1, @p2)

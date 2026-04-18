@@ -24,6 +24,8 @@ func (e *Env) sep() convert.RawSQL {
 	switch e.driver {
 	case "mysql", "mssql":
 		return convert.RawSQL("CHAR(31)")
+	case "spanner":
+		return convert.RawSQL("CODE_POINTS_TO_STRING([31])")
 	default:
 		return convert.RawSQL("chr(31)")
 	}

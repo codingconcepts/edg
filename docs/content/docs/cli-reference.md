@@ -32,7 +32,7 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 |---|---|---|---|
 | `--url` | | | Database connection URL (or set `URL` env var) |
 | `--config` | | | Path to the workload YAML config file (required for database commands, optional for `repl`) |
-| `--driver` | | `pgx` | database/sql driver name (`pgx`, `dsql`, `oracle`, `mysql`, or `mssql`) |
+| `--driver` | | `pgx` | database/sql driver name (`pgx`, `dsql`, `oracle`, `mysql`, `mssql`, or `spanner`) |
 | `--rng-seed` | | | PRNG seed for deterministic output (useful for regression testing) |
 | `--duration` | `-d` | `1m` | Benchmark duration (run and all commands) |
 | `--workers` | `-w` | `1` | Number of concurrent workers (run and all commands) |
@@ -85,6 +85,8 @@ edg all \
 
 The `workload` command runs a built-in workload without needing a config file. Eight benchmarks are embedded in the binary. Each workload supports all six lifecycle commands (`up`, `seed`, `run`, `deseed`, `down`, `all`) and selects the correct config for the `--driver` automatically.
 
+Built-in workloads:
+
 | Workload | Description |
 |---|---|
 | `bank` | Bank account operations for contention and correctness testing |
@@ -96,12 +98,15 @@ The `workload` command runs a built-in workload without needing a config file. E
 | `ttllogger` | Structured log ingestion with TTL-based expiry |
 | `ycsb` | Yahoo! Cloud Serving Benchmark with configurable workload profiles |
 
+Supported drivers:
+
 | Driver | Config used |
 |---|---|
 | `pgx`, `dsql` | CockroachDB/PostgreSQL variant |
 | `mysql` | MySQL variant |
 | `oracle` | Oracle variant |
 | `mssql` | SQL Server variant |
+| `spanner` | Google Cloud Spanner variant |
 
 ```sh
 # Create the bank schema
@@ -163,6 +168,14 @@ edg workload ycsb all \
 --url "sqlserver://sa:P4ssw0rd@localhost:1433?database=ycsb&encrypt=disable" \
 -w 20 \
 -d 5m
+
+# Run KV benchmark against Spanner
+edg workload kv all \
+--driver spanner \
+--url "projects/my-project/instances/my-instance/databases/my-db" \
+--license "$EDG_LICENSE" \
+-w 10 \
+-d 5m
 ```
 
 The `--config` flag is not required (and ignored) for workload commands. All other flags (`--duration`, `--workers`, `--print-interval`, `--rng-seed`, `--license`) work as normal.
@@ -175,7 +188,7 @@ The `init` command connects to an existing database, inspects its schema, and pr
 |---|---|---|
 | `--schema` | Yes (or `--database`) | Schema or database name to introspect (e.g. `public`, `defaultdb`, `dbo`, `SYSTEM`) |
 | `--database` | Yes (or `--schema`) | Alias for `--schema` |
-| `--driver` | Yes | Database driver (`pgx`, `mysql`, `mssql`, `oracle`, `dsql`) |
+| `--driver` | Yes | Database driver (`pgx`, `mysql`, `mssql`, `oracle`, `dsql`, `spanner`) |
 | `--url` | Yes | Connection URL for the source database |
 
 ```sh
@@ -189,7 +202,7 @@ The generated config:
 
 - **`up`** `CREATE TABLE` statements derived from the database's own DDL (CockroachDB's `SHOW CREATE TABLE`, MySQL's `SHOW CREATE TABLE`, Oracle's `DBMS_METADATA.GET_DDL`, or reconstructed from `sys` catalog views for MSSQL).
 - **`seed`** One `INSERT` per table with an expression for each non-generated column. Columns with auto-increment, identity, or default functions like `gen_random_uuid()` and `now()` are skipped. Expressions are chosen by data type (e.g. `uuid_v4()` for UUID, `uniform(1, 1000)` for INT, `gen('sentence:3')` for VARCHAR). `CHECK BETWEEN` constraints are detected and used to narrow the range.
-- **`deseed`** `TRUNCATE` (pgx, oracle) or `DELETE FROM` (mysql, mssql) in reverse dependency order.
+- **`deseed`** `TRUNCATE` (pgx, oracle) or `DELETE FROM` (mysql, mssql, spanner) in reverse dependency order.
 - **`down`** `DROP TABLE` in reverse dependency order.
 - Tables are topologically sorted so parent tables are created before children.
 
@@ -238,6 +251,15 @@ edg init \
 --schema SYSTEM > workload.yaml
 ```
 
+**Google Cloud Spanner**
+```sh
+edg init \
+--driver spanner \
+--url "projects/my-project/instances/my-instance/databases/my-db" \
+--license "$EDG_LICENSE" \
+--schema "" > workload.yaml
+```
+
 ### Aurora DSQL
 
 The `dsql` driver uses AWS IAM authentication instead of a username and password. Pass the cluster endpoint as the `--url` value:
@@ -257,7 +279,7 @@ DSQL uses PostgreSQL-compatible SQL, so use `$1`, `$2` placeholders in your quer
 
 ## Licensing
 
-The `pgx` and `mysql` drivers are free to use. Enterprise drivers (`oracle`, `mssql`, `dsql`) require a license key passed via `--license` or the `EDG_LICENSE` environment variable. The license is validated before connecting to the database. See the [Licensing](/docs/licensing/) page for full details.
+The `pgx` and `mysql` drivers are free to use. Enterprise drivers (`oracle`, `mssql`, `dsql`, `spanner`) require a license key passed via `--license` or the `EDG_LICENSE` environment variable. The license is validated before connecting to the database. See the [Licensing](/docs/licensing/) page for full details.
 
 ## Validating Config
 

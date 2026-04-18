@@ -614,7 +614,7 @@ func translatePlaceholders(query, driver string) string {
 		replaceFn = func(int) string { return "?" }
 	case "oracle":
 		replaceFn = func(i int) string { return fmt.Sprintf(":%d", i) }
-	case "mssql":
+	case "mssql", "spanner":
 		replaceFn = func(i int) string { return fmt.Sprintf("@p%d", i) }
 	default:
 		return query

@@ -115,6 +115,8 @@ func buildDeseed(tables []Table, driver string) []initQuery {
 			}
 		case "oracle":
 			q.Query = "TRUNCATE TABLE " + t.Name
+		case "spanner":
+			q.Query = "DELETE FROM " + t.Name + " WHERE TRUE"
 		default:
 			q.Query = "DELETE FROM " + t.Name
 		}
@@ -127,6 +129,8 @@ func deseedVerb(driver string) string {
 	switch driver {
 	case "pgx", "dsql", "oracle":
 		return "truncate"
+	case "spanner":
+		return "delete"
 	default:
 		return "delete"
 	}
@@ -282,7 +286,7 @@ func placeholder(driver string, n int) string {
 		return fmt.Sprintf("$%d", n)
 	case "mysql":
 		return "?"
-	case "mssql":
+	case "mssql", "spanner":
 		return fmt.Sprintf("@p%d", n)
 	case "oracle":
 		return fmt.Sprintf(":%d", n)

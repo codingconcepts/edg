@@ -65,7 +65,7 @@ func main() {
 
 	root.PersistentFlags().StringVar(&flagURL, "url", "", "database connection URL (env: URL)")
 	root.PersistentFlags().StringVar(&configFile, "config", "", "workload YAML config file")
-	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql, mssql, dsql]")
+	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql, mssql, dsql, spanner]")
 	root.PersistentFlags().StringVar(&flagLicense, "license", "", "license key for enterprise drivers (env: EDG_LICENSE)")
 	root.PersistentFlags().Uint64Var(&flagRngSeed, "rng-seed", 0, "PRNG seed for deterministic output")
 

@@ -1,0 +1,436 @@
+# TPC-H Workload for Google Cloud Spanner
+#
+# Connection URL format:
+#   projects/PROJECT/instances/INSTANCE/databases/DATABASE
+
+globals:
+  scale_factor: 1
+  regions: 5
+  nations: 25
+  suppliers: 1000
+  parts: 20000
+  customers: 15000
+  orders: 150000
+  batch_size: 10000
+
+up:
+
+  - name: create_region
+    query: |-
+      CREATE TABLE IF NOT EXISTS region (
+        r_regionkey INT64 NOT NULL,
+        r_name STRING(25) NOT NULL,
+        r_comment STRING(152)
+      ) PRIMARY KEY (r_regionkey)
+
+  - name: create_nation
+    query: |-
+      CREATE TABLE IF NOT EXISTS nation (
+        n_nationkey INT64 NOT NULL,
+        n_name STRING(25) NOT NULL,
+        n_regionkey INT64 NOT NULL,
+        n_comment STRING(152)
+      ) PRIMARY KEY (n_nationkey)
+
+  - name: create_supplier
+    query: |-
+      CREATE TABLE IF NOT EXISTS supplier (
+        s_suppkey INT64 NOT NULL,
+        s_name STRING(25) NOT NULL,
+        s_address STRING(40) NOT NULL,
+        s_nationkey INT64 NOT NULL,
+        s_phone STRING(15) NOT NULL,
+        s_acctbal NUMERIC NOT NULL,
+        s_comment STRING(101)
+      ) PRIMARY KEY (s_suppkey)
+
+  - name: create_part
+    query: |-
+      CREATE TABLE IF NOT EXISTS part (
+        p_partkey INT64 NOT NULL,
+        p_name STRING(55) NOT NULL,
+        p_mfgr STRING(25) NOT NULL,
+        p_brand STRING(10) NOT NULL,
+        p_type STRING(25) NOT NULL,
+        p_size INT64 NOT NULL,
+        p_container STRING(10) NOT NULL,
+        p_retailprice NUMERIC NOT NULL,
+        p_comment STRING(23)
+      ) PRIMARY KEY (p_partkey)
+
+  - name: create_partsupp
+    query: |-
+      CREATE TABLE IF NOT EXISTS partsupp (
+        ps_partkey INT64 NOT NULL,
+        ps_suppkey INT64 NOT NULL,
+        ps_availqty INT64 NOT NULL,
+        ps_supplycost NUMERIC NOT NULL,
+        ps_comment STRING(199)
+      ) PRIMARY KEY (ps_partkey, ps_suppkey)
+
+  - name: create_customer
+    query: |-
+      CREATE TABLE IF NOT EXISTS customer (
+        c_custkey INT64 NOT NULL,
+        c_name STRING(25) NOT NULL,
+        c_address STRING(40) NOT NULL,
+        c_nationkey INT64 NOT NULL,
+        c_phone STRING(15) NOT NULL,
+        c_acctbal NUMERIC NOT NULL,
+        c_mktsegment STRING(10) NOT NULL,
+        c_comment STRING(117)
+      ) PRIMARY KEY (c_custkey)
+
+  - name: create_orders
+    query: |-
+      CREATE TABLE IF NOT EXISTS orders (
+        o_orderkey INT64 NOT NULL,
+        o_custkey INT64 NOT NULL,
+        o_orderstatus STRING(1) NOT NULL,
+        o_totalprice NUMERIC NOT NULL,
+        o_orderdate DATE NOT NULL,
+        o_orderpriority STRING(15) NOT NULL,
+        o_clerk STRING(15) NOT NULL,
+        o_shippriority INT64 NOT NULL,
+        o_comment STRING(79)
+      ) PRIMARY KEY (o_orderkey)
+
+  - name: create_lineitem
+    query: |-
+      CREATE TABLE IF NOT EXISTS lineitem (
+        l_orderkey INT64 NOT NULL,
+        l_partkey INT64 NOT NULL,
+        l_suppkey INT64 NOT NULL,
+        l_linenumber INT64 NOT NULL,
+        l_quantity NUMERIC NOT NULL,
+        l_extendedprice NUMERIC NOT NULL,
+        l_discount NUMERIC NOT NULL,
+        l_tax NUMERIC NOT NULL,
+        l_returnflag STRING(1) NOT NULL,
+        l_linestatus STRING(1) NOT NULL,
+        l_shipdate DATE NOT NULL,
+        l_commitdate DATE NOT NULL,
+        l_receiptdate DATE NOT NULL,
+        l_shipinstruct STRING(25) NOT NULL,
+        l_shipmode STRING(10) NOT NULL,
+        l_comment STRING(44)
+      ) PRIMARY KEY (l_orderkey, l_linenumber)
+
+seed:
+
+  - name: populate_region
+    query: |-
+      INSERT INTO region (r_regionkey, r_name, r_comment)
+      VALUES
+        (0, 'AFRICA', ''), (1, 'AMERICA', ''), (2, 'ASIA', ''),
+        (3, 'EUROPE', ''), (4, 'MIDDLE EAST', '')
+
+  - name: populate_nation
+    query: |-
+      INSERT INTO nation (n_nationkey, n_name, n_regionkey, n_comment)
+      VALUES
+        (0,'ALGERIA',0,''),    (1,'ARGENTINA',1,''),  (2,'BRAZIL',1,''),
+        (3,'CANADA',1,''),     (4,'EGYPT',4,''),      (5,'ETHIOPIA',0,''),
+        (6,'FRANCE',3,''),     (7,'GERMANY',3,''),    (8,'INDIA',2,''),
+        (9,'INDONESIA',2,''),  (10,'IRAN',4,''),      (11,'IRAQ',4,''),
+        (12,'JAPAN',2,''),     (13,'JORDAN',4,''),    (14,'KENYA',0,''),
+        (15,'MOROCCO',0,''),   (16,'MOZAMBIQUE',0,''), (17,'PERU',1,''),
+        (18,'CHINA',2,''),     (19,'ROMANIA',3,''),   (20,'SAUDI ARABIA',4,''),
+        (21,'VIETNAM',2,''),   (22,'RUSSIA',3,''),    (23,'UNITED KINGDOM',3,''),
+        (24,'UNITED STATES',1,'')
+
+  - name: populate_supplier
+    args:
+      - suppliers
+    query: |-
+      INSERT INTO supplier (s_suppkey, s_name, s_address, s_nationkey,
+        s_phone, s_acctbal, s_comment)
+      SELECT
+        s,
+        CONCAT('Supplier#', LPAD(CAST(s AS STRING), 9, '0')),
+        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 25 + 15) AS INT64)),
+        CAST(FLOOR(RAND() * 25) AS INT64),
+        CONCAT(
+          LPAD(CAST(CAST(FLOOR(RAND() * 90 + 10) AS INT64) AS STRING), 2, '0'), '-',
+          LPAD(CAST(CAST(FLOOR(RAND() * 1000) AS INT64) AS STRING), 3, '0'), '-',
+          LPAD(CAST(CAST(FLOOR(RAND() * 1000) AS INT64) AS STRING), 3, '0'), '-',
+          LPAD(CAST(CAST(FLOOR(RAND() * 10000) AS INT64) AS STRING), 4, '0')
+        ),
+        CAST(ROUND(RAND() * 10000 - 1000, 2) AS NUMERIC),
+        SUBSTR(GENERATE_UUID(), 1, 30)
+      FROM UNNEST(GENERATE_ARRAY(1, $1)) AS s
+
+  - name: populate_part
+    args:
+      - parts
+    query: |-
+      INSERT INTO part (p_partkey, p_name, p_mfgr, p_brand, p_type,
+        p_size, p_container, p_retailprice, p_comment)
+      SELECT
+        s,
+        CONCAT(GENERATE_UUID(), SUBSTR(GENERATE_UUID(), 1, 19)),
+        CONCAT('Manufacturer#', CAST(CAST(FLOOR(RAND() * 5 + 1) AS INT64) AS STRING)),
+        CONCAT('Brand#',
+          CAST(CAST(FLOOR(RAND() * 5 + 1) AS INT64) AS STRING),
+          CAST(CAST(FLOOR(RAND() * 5 + 1) AS INT64) AS STRING)),
+        CONCAT(
+          (ARRAY<STRING>['STANDARD','SMALL','MEDIUM','LARGE','ECONOMY','PROMO'])[CAST(FLOOR(RAND() * 6) AS INT64)],
+          ' ',
+          (ARRAY<STRING>['ANODIZED','BURNISHED','PLATED','POLISHED','BRUSHED'])[CAST(FLOOR(RAND() * 5) AS INT64)],
+          ' ',
+          (ARRAY<STRING>['TIN','NICKEL','BRASS','STEEL','COPPER'])[CAST(FLOOR(RAND() * 5) AS INT64)]
+        ),
+        CAST(FLOOR(RAND() * 50 + 1) AS INT64),
+        (ARRAY<STRING>['SM CASE','SM BOX','SM PACK','SM PKG','SM BAG',
+               'MED CASE','MED BOX','MED PACK','MED PKG','MED BAG',
+               'LG CASE','LG BOX','LG PACK','LG PKG','LG BAG',
+               'JUMBO CASE','JUMBO BOX','JUMBO PACK','JUMBO PKG',
+               'WRAP CASE','WRAP BOX','WRAP PACK','WRAP PKG',
+               'WRAP BAG'])[CAST(FLOOR(RAND() * 24) AS INT64)],
+        CAST(ROUND((90000 + s / 10 + RAND() * 100) / 100.0, 2) AS NUMERIC),
+        SUBSTR(GENERATE_UUID(), 1, 15)
+      FROM UNNEST(GENERATE_ARRAY(1, $1)) AS s
+
+  - name: populate_partsupp
+    args:
+      - parts
+      - suppliers
+    query: |-
+      INSERT INTO partsupp (ps_partkey, ps_suppkey, ps_availqty,
+        ps_supplycost, ps_comment)
+      SELECT
+        p, MOD(p + si * CAST($2 / 4 AS INT64) - 1, $2) + 1,
+        CAST(FLOOR(RAND() * 9999 + 1) AS INT64),
+        CAST(ROUND(RAND() * 1000 + 1, 2) AS NUMERIC),
+        SUBSTR(GENERATE_UUID(), 1, 36)
+      FROM UNNEST(GENERATE_ARRAY(1, $1)) AS p
+      CROSS JOIN UNNEST(GENERATE_ARRAY(0, 3)) AS si
+
+  - name: populate_customer
+    args:
+      - customers
+    query: |-
+      INSERT INTO customer (c_custkey, c_name, c_address, c_nationkey,
+        c_phone, c_acctbal, c_mktsegment, c_comment)
+      SELECT
+        s,
+        CONCAT('Customer#', LPAD(CAST(s AS STRING), 9, '0')),
+        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 25 + 15) AS INT64)),
+        CAST(FLOOR(RAND() * 25) AS INT64),
+        CONCAT(
+          LPAD(CAST(CAST(FLOOR(RAND() * 90 + 10) AS INT64) AS STRING), 2, '0'), '-',
+          LPAD(CAST(CAST(FLOOR(RAND() * 1000) AS INT64) AS STRING), 3, '0'), '-',
+          LPAD(CAST(CAST(FLOOR(RAND() * 1000) AS INT64) AS STRING), 3, '0'), '-',
+          LPAD(CAST(CAST(FLOOR(RAND() * 10000) AS INT64) AS STRING), 4, '0')
+        ),
+        CAST(ROUND(RAND() * 10000 - 1000, 2) AS NUMERIC),
+        (ARRAY<STRING>['AUTOMOBILE','BUILDING','FURNITURE','MACHINERY','HOUSEHOLD'])[CAST(FLOOR(RAND() * 5) AS INT64)],
+        SUBSTR(GENERATE_UUID(), 1, 36)
+      FROM UNNEST(GENERATE_ARRAY(1, $1)) AS s
+
+  - name: populate_orders
+    args:
+      - batch(orders / batch_size)
+      - batch_size
+      - customers
+    query: |-
+      INSERT INTO orders (o_orderkey, o_custkey, o_orderstatus,
+        o_totalprice, o_orderdate, o_orderpriority, o_clerk,
+        o_shippriority, o_comment)
+      SELECT
+        $1 * $2 + s,
+        CAST(FLOOR(RAND() * $3 + 1) AS INT64),
+        (ARRAY<STRING>['O','F','P'])[CAST(FLOOR(RAND() * 3) AS INT64)],
+        CAST(ROUND(RAND() * 400000 + 1000, 2) AS NUMERIC),
+        DATE_ADD(DATE '1992-01-01', INTERVAL CAST(FLOOR(RAND() * 2557) AS INT64) DAY),
+        (ARRAY<STRING>['1-URGENT','2-HIGH','3-MEDIUM','4-NOT SPECIFIED','5-LOW'])[CAST(FLOOR(RAND() * 5) AS INT64)],
+        CONCAT('Clerk#', LPAD(CAST(CAST(FLOOR(RAND() * 1000 + 1) AS INT64) AS STRING), 9, '0')),
+        0,
+        SUBSTR(GENERATE_UUID(), 1, 30)
+      FROM UNNEST(GENERATE_ARRAY(1, $2)) AS s
+
+  - name: populate_lineitem
+    args:
+      - batch(orders / batch_size)
+      - batch_size
+      - parts
+      - suppliers
+    query: |-
+      INSERT INTO lineitem (l_orderkey, l_partkey, l_suppkey, l_linenumber,
+        l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag,
+        l_linestatus, l_shipdate, l_commitdate, l_receiptdate,
+        l_shipinstruct, l_shipmode, l_comment)
+      SELECT
+        o.o_orderkey,
+        CAST(FLOOR(RAND() * $3 + 1) AS INT64) AS p,
+        MOD(CAST(FLOOR(RAND() * $3) AS INT64), $4) + 1,
+        ln,
+        CAST(ROUND(RAND() * 50 + 1, 2) AS NUMERIC) AS qty,
+        CAST(ROUND((RAND() * 50 + 1) * (RAND() * 900 + 100), 2) AS NUMERIC),
+        CAST(ROUND(RAND() * 0.10, 2) AS NUMERIC),
+        CAST(ROUND(RAND() * 0.08, 2) AS NUMERIC),
+        (ARRAY<STRING>['R','A','N'])[CAST(FLOOR(RAND() * 3) AS INT64)],
+        (ARRAY<STRING>['O','F'])[CAST(FLOOR(RAND() * 2) AS INT64)],
+        DATE_ADD(o.o_orderdate, INTERVAL CAST(FLOOR(RAND() * 120 + 1) AS INT64) DAY),
+        DATE_ADD(o.o_orderdate, INTERVAL CAST(FLOOR(RAND() * 90 + 1) AS INT64) DAY),
+        DATE_ADD(o.o_orderdate, INTERVAL CAST(FLOOR(RAND() * 150 + 1) AS INT64) DAY),
+        (ARRAY<STRING>['DELIVER IN PERSON','COLLECT COD','NONE','TAKE BACK RETURN'])[CAST(FLOOR(RAND() * 4) AS INT64)],
+        (ARRAY<STRING>['REG AIR','AIR','RAIL','SHIP','TRUCK','MAIL','FOB'])[CAST(FLOOR(RAND() * 7) AS INT64)],
+        SUBSTR(GENERATE_UUID(), 1, 20)
+      FROM orders o
+      CROSS JOIN UNNEST(GENERATE_ARRAY(1, CAST(FLOOR(RAND() * 4 + 1) AS INT64))) AS ln
+      WHERE o.o_orderkey > $1 * $2
+        AND o.o_orderkey <= ($1 + 1) * $2
+
+deseed:
+
+  - name: delete_lineitem
+    type: exec
+    query: DELETE FROM lineitem WHERE TRUE
+
+  - name: delete_orders
+    type: exec
+    query: DELETE FROM orders WHERE TRUE
+
+  - name: delete_partsupp
+    type: exec
+    query: DELETE FROM partsupp WHERE TRUE
+
+  - name: delete_customer
+    type: exec
+    query: DELETE FROM customer WHERE TRUE
+
+  - name: delete_part
+    type: exec
+    query: DELETE FROM part WHERE TRUE
+
+  - name: delete_supplier
+    type: exec
+    query: DELETE FROM supplier WHERE TRUE
+
+  - name: delete_nation
+    type: exec
+    query: DELETE FROM nation WHERE TRUE
+
+  - name: delete_region
+    type: exec
+    query: DELETE FROM region WHERE TRUE
+
+down:
+
+  - name: drop_lineitem
+    type: exec
+    query: DROP TABLE IF EXISTS lineitem
+
+  - name: drop_orders
+    type: exec
+    query: DROP TABLE IF EXISTS orders
+
+  - name: drop_partsupp
+    type: exec
+    query: DROP TABLE IF EXISTS partsupp
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer
+
+  - name: drop_part
+    type: exec
+    query: DROP TABLE IF EXISTS part
+
+  - name: drop_supplier
+    type: exec
+    query: DROP TABLE IF EXISTS supplier
+
+  - name: drop_nation
+    type: exec
+    query: DROP TABLE IF EXISTS nation
+
+  - name: drop_region
+    type: exec
+    query: DROP TABLE IF EXISTS region
+
+run_weights:
+  q1_pricing_summary: 25
+  q3_shipping_priority: 25
+  q6_forecasting_revenue: 25
+  q14_promotion_effect: 25
+
+run:
+
+  # TPC-H Q1: Pricing Summary Report
+  - name: q1_pricing_summary
+    type: query
+    args:
+      - gen('number:60,120')
+    query: |-
+      SELECT
+        l_returnflag,
+        l_linestatus,
+        SUM(l_quantity) AS sum_qty,
+        SUM(l_extendedprice) AS sum_base_price,
+        SUM(l_extendedprice * (1 - l_discount)) AS sum_disc_price,
+        SUM(l_extendedprice * (1 - l_discount) * (1 + l_tax)) AS sum_charge,
+        AVG(l_quantity) AS avg_qty,
+        AVG(l_extendedprice) AS avg_price,
+        AVG(l_discount) AS avg_disc,
+        COUNT(*) AS count_order
+      FROM lineitem
+      WHERE l_shipdate <= DATE_SUB(DATE '1998-12-01', INTERVAL @p1 DAY)
+      GROUP BY l_returnflag, l_linestatus
+      ORDER BY l_returnflag, l_linestatus
+
+  # TPC-H Q3: Shipping Priority
+  - name: q3_shipping_priority
+    type: query
+    args:
+      - set_rand(['AUTOMOBILE','BUILDING','FURNITURE','MACHINERY','HOUSEHOLD'], [])
+      - gen('number:1,31')
+    query: |-
+      SELECT
+        l.l_orderkey,
+        SUM(l.l_extendedprice * (1 - l.l_discount)) AS revenue,
+        o.o_orderdate,
+        o.o_shippriority
+      FROM customer c
+      JOIN orders o ON c.c_custkey = o.o_custkey
+      JOIN lineitem l ON l.l_orderkey = o.o_orderkey
+      WHERE c.c_mktsegment = @p1
+        AND o.o_orderdate < DATE_ADD(DATE '1995-03-01', INTERVAL @p2 DAY)
+        AND l.l_shipdate > DATE_ADD(DATE '1995-03-01', INTERVAL @p2 DAY)
+      GROUP BY l.l_orderkey, o.o_orderdate, o.o_shippriority
+      ORDER BY revenue DESC, o.o_orderdate
+      LIMIT 10
+
+  # TPC-H Q6: Forecasting Revenue Change
+  - name: q6_forecasting_revenue
+    type: query
+    args:
+      - gen('number:1993,1997')
+      - uniform_f(0.02, 0.09, 2)
+      - gen('number:24,25')
+    query: |-
+      SELECT SUM(l_extendedprice * l_discount) AS revenue
+      FROM lineitem
+      WHERE l_shipdate >= CAST(CONCAT(@p1, '-01-01') AS DATE)
+        AND l_shipdate < DATE_ADD(CAST(CONCAT(@p1, '-01-01') AS DATE), INTERVAL 1 YEAR)
+        AND l_discount BETWEEN CAST(@p2 AS NUMERIC) - 0.01 AND CAST(@p2 AS NUMERIC) + 0.01
+        AND l_quantity < CAST(@p3 AS NUMERIC)
+
+  # TPC-H Q14: Promotion Effect
+  - name: q14_promotion_effect
+    type: query
+    args:
+      - gen('number:1993,1997')
+      - gen('number:1,12')
+    query: |-
+      SELECT
+        100.00 * SUM(CASE WHEN p.p_type LIKE 'PROMO%'
+          THEN l.l_extendedprice * (1 - l.l_discount) ELSE 0 END)
+        / SUM(l.l_extendedprice * (1 - l.l_discount)) AS promo_revenue
+      FROM lineitem l
+      JOIN part p ON l.l_partkey = p.p_partkey
+      WHERE l.l_shipdate >= CAST(CONCAT(@p1, '-', LPAD(CAST(@p2 AS STRING), 2, '0'), '-01') AS DATE)
+        AND l.l_shipdate < DATE_ADD(
+          CAST(CONCAT(@p1, '-', LPAD(CAST(@p2 AS STRING), 2, '0'), '-01') AS DATE),
+          INTERVAL 1 MONTH)

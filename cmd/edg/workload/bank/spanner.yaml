@@ -1,0 +1,115 @@
+# Bank Workload for Google Cloud Spanner
+#
+# Connection URL format:
+#   projects/PROJECT/instances/INSTANCE/databases/DATABASE
+
+globals:
+  customers: 100000
+  initial_balance: 10000
+  batch_size: 10000
+
+up:
+
+  - name: create_customer
+    query: |-
+      CREATE TABLE IF NOT EXISTS customer (
+        id STRING(36) NOT NULL DEFAULT (GENERATE_UUID()),
+        email STRING(320) NOT NULL
+      ) PRIMARY KEY (id)
+
+  - name: create_account
+    query: |-
+      CREATE TABLE IF NOT EXISTS account (
+        id STRING(36) NOT NULL DEFAULT (GENERATE_UUID()),
+        balance FLOAT64 NOT NULL,
+        customer_id STRING(36) NOT NULL,
+        FOREIGN KEY (customer_id) REFERENCES customer(id)
+      ) PRIMARY KEY (id)
+
+seed:
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    size: 100
+    args:
+      - gen('email')
+    query: |-
+      INSERT INTO customer (email)
+      SELECT val
+      FROM UNNEST(SPLIT('$1', CODE_POINTS_TO_STRING([31]))) AS val
+
+  - name: populate_account
+    args:
+      - batch(customers / batch_size)
+      - initial_balance
+      - batch_size
+    query: |-
+      INSERT INTO account (balance, customer_id)
+      SELECT CAST($2 AS FLOAT64), c.id
+      FROM customer c
+      ORDER BY c.id
+      LIMIT $3 OFFSET CAST($1 * $3 AS INT64)
+
+deseed:
+
+  - name: delete_account
+    type: exec
+    query: DELETE FROM account WHERE TRUE
+
+  - name: delete_customer
+    type: exec
+    query: DELETE FROM customer WHERE TRUE
+
+down:
+
+  - name: drop_account
+    type: exec
+    query: DROP TABLE IF EXISTS account
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer
+
+init:
+
+  - name: fetch_accounts
+    type: query
+    query: SELECT id FROM account TABLESAMPLE RESERVOIR (10000 ROWS)
+
+run_weights:
+  check_balance: 50
+  credit_account: 5
+  make_transfer: 45
+
+run:
+
+  - name: check_balance
+    type: query
+    args:
+      - ref_rand('fetch_accounts').id
+    query: |-
+      SELECT balance FROM account WHERE id = @p1
+
+  - name: credit_account
+    type: exec
+    args:
+      - ref_rand('fetch_accounts').id
+      - gen('number:1,1000')
+    query: |-
+      UPDATE account SET balance = balance + CAST(@p2 AS FLOAT64)
+      WHERE id = @p1
+
+  - name: make_transfer
+    type: exec
+    args:
+      - ref_diff('fetch_accounts').id
+      - ref_diff('fetch_accounts').id
+      - gen('number:1,100')
+    query: |-
+      UPDATE account SET
+        balance = CASE
+                    WHEN id = @p2 THEN balance + CAST(@p3 AS FLOAT64)
+                    WHEN id = @p1 THEN balance - CAST(@p3 AS FLOAT64)
+                  END
+      WHERE id IN UNNEST([@p1, @p2])

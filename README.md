@@ -17,6 +17,7 @@ Query arguments are written as expressions compiled at startup time, giving you 
 | Oracle | `oracle` | `oracle://system:password@localhost:1521/db` |
 | MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
 | MSSQL | `mssql` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
+| Google Cloud Spanner | `spanner` | `projects/PROJECT/instances/INSTANCE/databases/DATABASE` |
 
 ## Quick Start
 
@@ -93,10 +94,6 @@ docker compose -f _examples/compose_oracle.yml down
 
 ## Todos
 
-* Pre-baked workloads for quick starts
-  * Add existing cockroach workload examples
-  * Add all relevant _examples
-* Spanner support
 * Better error output
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences
 * Global sequencies (`seq_global(name, start, step)`) for all workers to share in a thread safe way

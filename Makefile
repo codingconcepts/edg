@@ -87,4 +87,4 @@ docs:
 
 teardown:
 	- docker ps -aq | xargs docker rm -f
-	- rm ./tpc-c
+	- rm ./edg ./harness

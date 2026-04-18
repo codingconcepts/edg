@@ -1,0 +1,133 @@
+# YCSB Benchmark Workload for Google Cloud Spanner
+#
+# Connection URL format:
+#   projects/PROJECT/instances/INSTANCE/databases/DATABASE
+
+globals:
+  records: 10000
+  batch_size: 1000
+  zipf_s: 1.2
+
+up:
+
+  - name: create_usertable
+    query: |-
+      CREATE TABLE IF NOT EXISTS usertable (
+        ycsb_key STRING(255) NOT NULL,
+        field0 STRING(100) NOT NULL,
+        field1 STRING(100) NOT NULL,
+        field2 STRING(100) NOT NULL,
+        field3 STRING(100) NOT NULL,
+        field4 STRING(100) NOT NULL,
+        field5 STRING(100) NOT NULL,
+        field6 STRING(100) NOT NULL,
+        field7 STRING(100) NOT NULL,
+        field8 STRING(100) NOT NULL,
+        field9 STRING(100) NOT NULL
+      ) PRIMARY KEY (ycsb_key)
+
+seed:
+
+  - name: populate_usertable
+    args:
+      - batch(records / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO usertable (ycsb_key, field0, field1, field2, field3,
+        field4, field5, field6, field7, field8, field9)
+      SELECT
+        CONCAT('user', LPAD(CAST($1 * $2 + s - 1 AS STRING), 10, '0')),
+        SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 28),
+        SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 28),
+        SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 28),
+        SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 28),
+        SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 28),
+        SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 28),
+        SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 28),
+        SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 28),
+        SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 28),
+        SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 36) || SUBSTR(GENERATE_UUID(), 1, 28)
+      FROM UNNEST(GENERATE_ARRAY(1, $2)) AS s
+
+deseed:
+
+  - name: delete_usertable
+    type: exec
+    query: DELETE FROM usertable WHERE TRUE
+
+down:
+
+  - name: drop_usertable
+    type: exec
+    query: DROP TABLE IF EXISTS usertable
+
+# Workload A - Update heavy (default)
+run_weights:
+  read: 50
+  update: 50
+
+run:
+
+  # Point read by Zipfian-distributed key.
+  - name: read
+    type: query
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+    query: |-
+      SELECT * FROM usertable WHERE ycsb_key = @p1
+
+  # Update a single field by Zipfian-distributed key.
+  - name: update
+    type: exec
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+      - regex('[a-zA-Z0-9]{100}')
+    query: |-
+      UPDATE usertable SET field0 = @p2
+      WHERE ycsb_key = @p1
+
+  # Insert a new record with a unique key.
+  # Used by workloads D and E.
+  - name: insert
+    type: exec
+    args:
+      - uuid_v7()
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+    query: |-
+      INSERT INTO usertable (ycsb_key, field0, field1, field2, field3,
+        field4, field5, field6, field7, field8, field9)
+      VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11)
+
+  # Range scan from a Zipfian-distributed start key.
+  # Used by workload E.
+  - name: scan
+    type: query
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+      - gen('number:1,100')
+    query: |-
+      SELECT * FROM usertable
+      WHERE ycsb_key >= @p1
+      ORDER BY ycsb_key
+      LIMIT @p2
+
+  # Read-modify-write.
+  # Spanner does not support RETURNING so this uses INSERT OR UPDATE.
+  # Used by workload F.
+  - name: read_modify_write
+    type: exec
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+      - regex('[a-zA-Z0-9]{100}')
+    query: |-
+      UPDATE usertable SET field0 = @p2
+      WHERE ycsb_key = @p1

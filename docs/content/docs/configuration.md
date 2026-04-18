@@ -377,7 +377,7 @@ Prepared statements work with both `query` and `exec` types. They are **not** us
 
 Each worker maintains its own statement cache, so prepared statements are safe to use with any number of concurrent workers. Statements are prepared lazily on first use and automatically closed when the worker finishes.
 
-Prepared queries always use `$1`, `$2`, ... placeholders regardless of the target driver. edg automatically translates them to the driver's native format (`?` for mysql, `:N` for oracle, `@pN` for mssql) at prepare time.
+Prepared queries always use `$1`, `$2`, ... placeholders regardless of the target driver. edg automatically translates them to the driver's native format (`?` for mysql, `:N` for oracle, `@pN` for mssql/spanner) at prepare time.
 
 The benefit scales with query complexity. Simple point lookups show minimal improvement, but multi-table joins and aggregations can see significant gains. For example, a 4-table join with GROUP BY, HAVING, and multiple aggregates against CockroachDB:
 
@@ -581,6 +581,7 @@ Each driver has its own placeholder format:
 | `mysql` | `?` (positional) |
 | `oracle` | `:1`, `:2`, `:3` |
 | `mssql` | `@p1`, `@p2`, `@p3` |
+| `spanner` | `@p1`, `@p2`, `@p3` |
 
 Since `run` queries always use bind params, their SQL must use the correct format for the target driver.
 

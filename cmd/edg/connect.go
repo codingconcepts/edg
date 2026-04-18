@@ -14,6 +14,7 @@ import (
 	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/codingconcepts/edg/pkg/license"
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/googleapis/go-sql-spanner"
 	"github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/microsoft/go-mssqldb"
 	_ "github.com/sijms/go-ora/v2"
