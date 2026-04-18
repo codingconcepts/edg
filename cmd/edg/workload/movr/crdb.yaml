@@ -1,0 +1,309 @@
+# MovR Workload
+# =============
+# Vehicle-sharing application benchmark modelled on
+# cockroach workload run movr.
+#
+# Tables: users, vehicles, rides, vehicle_location_histories,
+# promo_codes, user_promo_codes.
+#
+# Operations model typical ride-sharing patterns: browsing
+# vehicles, starting/ending rides, tracking locations, and
+# applying promo codes.
+
+globals:
+  num_users: 1000
+  num_vehicles: 500
+  num_rides: 2000
+  num_promo_codes: 100
+  batch_size: 100
+
+up:
+
+  - name: create_users
+    query: |-
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID NOT NULL DEFAULT gen_random_uuid(),
+        city STRING NOT NULL,
+        name STRING NOT NULL,
+        address STRING NOT NULL,
+        credit_card STRING NOT NULL,
+        PRIMARY KEY (city, id)
+      )
+
+  - name: create_vehicles
+    query: |-
+      CREATE TABLE IF NOT EXISTS vehicles (
+        id UUID NOT NULL DEFAULT gen_random_uuid(),
+        city STRING NOT NULL,
+        owner_id UUID NOT NULL,
+        creation_time TIMESTAMPTZ NOT NULL DEFAULT now(),
+        status STRING NOT NULL DEFAULT 'available',
+        current_location STRING NOT NULL,
+        ext JSONB,
+        PRIMARY KEY (city, id)
+      )
+
+  - name: create_rides
+    query: |-
+      CREATE TABLE IF NOT EXISTS rides (
+        id UUID NOT NULL DEFAULT gen_random_uuid(),
+        city STRING NOT NULL,
+        vehicle_city STRING NOT NULL,
+        rider_id UUID NOT NULL,
+        vehicle_id UUID NOT NULL,
+        start_address STRING NOT NULL,
+        end_address STRING,
+        start_time TIMESTAMPTZ NOT NULL DEFAULT now(),
+        end_time TIMESTAMPTZ,
+        revenue DECIMAL(10,2),
+        PRIMARY KEY (city, id)
+      )
+
+  - name: create_vehicle_location_histories
+    query: |-
+      CREATE TABLE IF NOT EXISTS vehicle_location_histories (
+        city STRING NOT NULL,
+        ride_id UUID NOT NULL,
+        timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+        lat FLOAT8 NOT NULL,
+        long FLOAT8 NOT NULL,
+        PRIMARY KEY (city, ride_id, timestamp)
+      )
+
+  - name: create_promo_codes
+    query: |-
+      CREATE TABLE IF NOT EXISTS promo_codes (
+        code STRING NOT NULL PRIMARY KEY,
+        description STRING,
+        creation_time TIMESTAMPTZ NOT NULL DEFAULT now(),
+        expiration_time TIMESTAMPTZ NOT NULL,
+        rules JSONB
+      )
+
+  - name: create_user_promo_codes
+    query: |-
+      CREATE TABLE IF NOT EXISTS user_promo_codes (
+        city STRING NOT NULL,
+        user_id UUID NOT NULL,
+        code STRING NOT NULL,
+        timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+        usage_count INT NOT NULL DEFAULT 0,
+        PRIMARY KEY (city, user_id, code)
+      )
+
+seed:
+
+  - name: populate_users
+    args:
+      - batch(num_users / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO users (city, name, address, credit_card)
+      SELECT
+        (ARRAY['new york','boston','washington dc','seattle',
+               'san francisco','los angeles','chicago',
+               'detroit','minneapolis'])[floor(random()::FLOAT8 * 9 + 1)::INT],
+        substr(md5(random()::FLOAT8::text), 1, 12),
+        substr(md5(random()::FLOAT8::text), 1, 20) || ' St',
+        lpad(floor(random()::FLOAT8 * 10000)::INT::TEXT, 4, '0') ||
+        lpad(floor(random()::FLOAT8 * 10000)::INT::TEXT, 4, '0') ||
+        lpad(floor(random()::FLOAT8 * 10000)::INT::TEXT, 4, '0') ||
+        lpad(floor(random()::FLOAT8 * 10000)::INT::TEXT, 4, '0')
+      FROM generate_series(1, $2::INT) AS s
+
+  - name: populate_vehicles
+    args:
+      - num_vehicles
+    query: |-
+      INSERT INTO vehicles (city, owner_id, current_location, ext)
+      SELECT
+        u.city, u.id,
+        substr(md5(random()::FLOAT8::text), 1, 20) || ' Ave',
+        json_build_object(
+          'color', (ARRAY['red','blue','black','white','silver'])[floor(random()::FLOAT8 * 5 + 1)::INT],
+          'brand', (ARRAY['toyota','honda','ford','tesla','bmw'])[floor(random()::FLOAT8 * 5 + 1)::INT]
+        )
+      FROM users u
+      ORDER BY random()::FLOAT8
+      LIMIT $1::INT
+
+  - name: populate_rides
+    args:
+      - num_rides
+    query: |-
+      INSERT INTO rides (city, vehicle_city, rider_id, vehicle_id,
+        start_address, end_address, start_time, end_time, revenue)
+      SELECT
+        u.city, v.city, u.id, v.id,
+        substr(md5(random()::FLOAT8::text), 1, 20) || ' Blvd',
+        substr(md5(random()::FLOAT8::text), 1, 20) || ' Rd',
+        now() - (random()::FLOAT8 * 86400 * 30)::INT * INTERVAL '1 second',
+        now() - (random()::FLOAT8 * 86400 * 15)::INT * INTERVAL '1 second',
+        (random()::FLOAT8 * 50 + 5)::DECIMAL(10,2)
+      FROM (SELECT city, id FROM users ORDER BY random()::FLOAT8 LIMIT $1::INT) u
+      CROSS JOIN LATERAL (
+        SELECT city, id FROM vehicles ORDER BY random()::FLOAT8 LIMIT 1
+      ) v
+
+  - name: populate_promo_codes
+    args:
+      - num_promo_codes
+    query: |-
+      INSERT INTO promo_codes (code, description, expiration_time, rules)
+      SELECT
+        upper(substr(md5(random()::FLOAT8::text), 1, 8)),
+        'Promo ' || s || ': save on your next ride',
+        now() + (random()::FLOAT8 * 86400 * 90)::INT * INTERVAL '1 second',
+        json_build_object('discount_pct', floor(random()::FLOAT8 * 30 + 5)::INT)
+      FROM generate_series(1, $1::INT) AS s
+
+deseed:
+
+  - name: truncate_user_promo_codes
+    type: exec
+    query: TRUNCATE TABLE user_promo_codes
+
+  - name: truncate_vehicle_location_histories
+    type: exec
+    query: TRUNCATE TABLE vehicle_location_histories
+
+  - name: truncate_rides
+    type: exec
+    query: TRUNCATE TABLE rides
+
+  - name: truncate_vehicles
+    type: exec
+    query: TRUNCATE TABLE vehicles
+
+  - name: truncate_promo_codes
+    type: exec
+    query: TRUNCATE TABLE promo_codes
+
+  - name: truncate_users
+    type: exec
+    query: TRUNCATE TABLE users
+
+down:
+
+  - name: drop_user_promo_codes
+    type: exec
+    query: DROP TABLE IF EXISTS user_promo_codes
+
+  - name: drop_vehicle_location_histories
+    type: exec
+    query: DROP TABLE IF EXISTS vehicle_location_histories
+
+  - name: drop_rides
+    type: exec
+    query: DROP TABLE IF EXISTS rides
+
+  - name: drop_vehicles
+    type: exec
+    query: DROP TABLE IF EXISTS vehicles
+
+  - name: drop_promo_codes
+    type: exec
+    query: DROP TABLE IF EXISTS promo_codes
+
+  - name: drop_users
+    type: exec
+    query: DROP TABLE IF EXISTS users
+
+init:
+
+  - name: fetch_users
+    type: query
+    query: SELECT id, city FROM users ORDER BY random()
+
+  - name: fetch_vehicles
+    type: query
+    query: SELECT id, city FROM vehicles ORDER BY random()
+
+  - name: fetch_rides
+    type: query
+    query: SELECT id, city FROM rides ORDER BY random()
+
+  - name: fetch_promo_codes
+    type: query
+    query: SELECT code FROM promo_codes ORDER BY random()
+
+run_weights:
+  read_vehicles: 20
+  read_rides: 20
+  create_ride: 20
+  update_ride: 15
+  add_vehicle_location: 15
+  apply_promo_code: 10
+
+run:
+
+  - name: read_vehicles
+    type: query
+    args:
+      - ref_rand('fetch_vehicles').city
+    query: |-
+      SELECT id, city, owner_id, status, current_location
+      FROM vehicles
+      WHERE city = $1
+      LIMIT 10
+
+  - name: read_rides
+    type: query
+    args:
+      - ref_rand('fetch_users').id
+      - ref_rand('fetch_users').city
+    query: |-
+      SELECT id, vehicle_id, start_address, end_address,
+        start_time, end_time, revenue
+      FROM rides
+      WHERE city = $2 AND rider_id = $1::UUID
+      ORDER BY start_time DESC
+      LIMIT 10
+
+  - name: create_ride
+    type: query
+    args:
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_users').id
+      - ref_rand('fetch_vehicles').city
+      - ref_rand('fetch_vehicles').id
+      - regex('[A-Z][a-z]{4,12} (St|Ave|Blvd|Rd)')
+    query: |-
+      INSERT INTO rides (city, vehicle_city, rider_id, vehicle_id, start_address)
+      VALUES ($1, $3, $2::UUID, $4::UUID, $5)
+      RETURNING id
+
+  - name: update_ride
+    type: exec
+    args:
+      - ref_rand('fetch_rides').id
+      - ref_rand('fetch_rides').city
+      - regex('[A-Z][a-z]{4,12} (St|Ave|Blvd|Rd)')
+      - gen('number:500,5000')
+    query: |-
+      UPDATE rides SET
+        end_address = $3,
+        end_time = now(),
+        revenue = $4::DECIMAL / 100
+      WHERE city = $2 AND id = $1::UUID
+
+  - name: add_vehicle_location
+    type: exec
+    args:
+      - ref_rand('fetch_rides').city
+      - ref_rand('fetch_rides').id
+      - uniform(-90, 90)
+      - uniform(-180, 180)
+    query: |-
+      INSERT INTO vehicle_location_histories (city, ride_id, lat, long)
+      VALUES ($1, $2::UUID, $3::FLOAT8, $4::FLOAT8)
+
+  - name: apply_promo_code
+    type: exec
+    args:
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_users').id
+      - ref_rand('fetch_promo_codes').code
+    query: |-
+      UPSERT INTO user_promo_codes (city, user_id, code, usage_count)
+      VALUES ($1, $2::UUID, $3, 1)

@@ -11,7 +11,12 @@ import (
 
 	"github.com/codingconcepts/edg/cmd/edg/workload"
 	"github.com/codingconcepts/edg/cmd/edg/workload/bank"
+	"github.com/codingconcepts/edg/cmd/edg/workload/kv"
+	"github.com/codingconcepts/edg/cmd/edg/workload/movr"
 	"github.com/codingconcepts/edg/cmd/edg/workload/tpcc"
+	"github.com/codingconcepts/edg/cmd/edg/workload/tpch"
+	"github.com/codingconcepts/edg/cmd/edg/workload/ttlbench"
+	"github.com/codingconcepts/edg/cmd/edg/workload/ttllogger"
 	"github.com/codingconcepts/edg/cmd/edg/workload/ycsb"
 	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/codingconcepts/edg/pkg/env"
@@ -79,7 +84,16 @@ func main() {
 	}
 
 	wCmd := workload.Cmd()
-	wCmd.AddCommand(bank.Cmd(deps), tpcc.Cmd(deps), ycsb.Cmd(deps))
+	wCmd.AddCommand(
+		bank.Cmd(deps),
+		kv.Cmd(deps),
+		movr.Cmd(deps),
+		tpcc.Cmd(deps),
+		tpch.Cmd(deps),
+		ttlbench.Cmd(deps),
+		ttllogger.Cmd(deps),
+		ycsb.Cmd(deps),
+	)
 
 	root.AddCommand(
 		workload.UpCmd(deps),

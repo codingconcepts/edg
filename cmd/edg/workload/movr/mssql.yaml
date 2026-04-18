@@ -1,0 +1,314 @@
+# MovR Workload for SQL Server
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals:
+  num_users: 1000
+  num_vehicles: 500
+  num_rides: 2000
+  num_promo_codes: 100
+  batch_size: 100
+
+up:
+
+  - name: create_users
+    query: |-
+      IF OBJECT_ID('users', 'U') IS NULL
+      CREATE TABLE users (
+        id UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID(),
+        city NVARCHAR(50) NOT NULL,
+        name NVARCHAR(100) NOT NULL,
+        address NVARCHAR(255) NOT NULL,
+        credit_card NVARCHAR(19) NOT NULL,
+        PRIMARY KEY (city, id)
+      )
+
+  - name: create_vehicles
+    query: |-
+      IF OBJECT_ID('vehicles', 'U') IS NULL
+      CREATE TABLE vehicles (
+        id UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID(),
+        city NVARCHAR(50) NOT NULL,
+        owner_id UNIQUEIDENTIFIER NOT NULL,
+        creation_time DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        status NVARCHAR(20) NOT NULL DEFAULT 'available',
+        current_location NVARCHAR(255) NOT NULL,
+        ext NVARCHAR(MAX),
+        PRIMARY KEY (city, id)
+      )
+
+  - name: create_rides
+    query: |-
+      IF OBJECT_ID('rides', 'U') IS NULL
+      CREATE TABLE rides (
+        id UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID(),
+        city NVARCHAR(50) NOT NULL,
+        vehicle_city NVARCHAR(50) NOT NULL,
+        rider_id UNIQUEIDENTIFIER NOT NULL,
+        vehicle_id UNIQUEIDENTIFIER NOT NULL,
+        start_address NVARCHAR(255) NOT NULL,
+        end_address NVARCHAR(255),
+        start_time DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        end_time DATETIME2,
+        revenue DECIMAL(10,2),
+        PRIMARY KEY (city, id)
+      )
+
+  - name: create_vehicle_location_histories
+    query: |-
+      IF OBJECT_ID('vehicle_location_histories', 'U') IS NULL
+      CREATE TABLE vehicle_location_histories (
+        city NVARCHAR(50) NOT NULL,
+        ride_id UNIQUEIDENTIFIER NOT NULL,
+        timestamp DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        lat FLOAT NOT NULL,
+        long FLOAT NOT NULL,
+        PRIMARY KEY (city, ride_id, timestamp)
+      )
+
+  - name: create_promo_codes
+    query: |-
+      IF OBJECT_ID('promo_codes', 'U') IS NULL
+      CREATE TABLE promo_codes (
+        code NVARCHAR(20) NOT NULL PRIMARY KEY,
+        description NVARCHAR(255),
+        creation_time DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        expiration_time DATETIME2 NOT NULL,
+        rules NVARCHAR(MAX)
+      )
+
+  - name: create_user_promo_codes
+    query: |-
+      IF OBJECT_ID('user_promo_codes', 'U') IS NULL
+      CREATE TABLE user_promo_codes (
+        city NVARCHAR(50) NOT NULL,
+        user_id UNIQUEIDENTIFIER NOT NULL,
+        code NVARCHAR(20) NOT NULL,
+        timestamp DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        usage_count INT NOT NULL DEFAULT 0,
+        PRIMARY KEY (city, user_id, code)
+      )
+
+seed:
+
+  - name: populate_users
+    args:
+      - batch(num_users / batch_size)
+      - batch_size
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s UNION ALL SELECT s + 1 FROM seq WHERE s < $2
+      )
+      INSERT INTO users (city, name, address, credit_card)
+      SELECT
+        CHOOSE(ABS(CHECKSUM(NEWID())) % 9 + 1,
+          'new york','boston','washington dc','seattle',
+          'san francisco','los angeles','chicago',
+          'detroit','minneapolis'),
+        LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 12),
+        CONCAT(LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 20), ' St'),
+        CONCAT(
+          RIGHT('0000' + CAST(ABS(CHECKSUM(NEWID())) % 10000 AS NVARCHAR), 4),
+          RIGHT('0000' + CAST(ABS(CHECKSUM(NEWID())) % 10000 AS NVARCHAR), 4),
+          RIGHT('0000' + CAST(ABS(CHECKSUM(NEWID())) % 10000 AS NVARCHAR), 4),
+          RIGHT('0000' + CAST(ABS(CHECKSUM(NEWID())) % 10000 AS NVARCHAR), 4))
+      FROM seq
+      OPTION (MAXRECURSION 10000)
+
+  - name: populate_vehicles
+    args:
+      - num_vehicles
+    query: |-
+      INSERT INTO vehicles (city, owner_id, current_location, ext)
+      SELECT TOP($1)
+        city, id,
+        CONCAT(LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 20), ' Ave'),
+        '{"color":"blue","brand":"toyota"}'
+      FROM users
+      ORDER BY NEWID()
+
+  - name: populate_rides
+    args:
+      - num_rides
+    query: |-
+      INSERT INTO rides (city, vehicle_city, rider_id, vehicle_id,
+        start_address, end_address, start_time, end_time, revenue)
+      SELECT
+        u.city, v.city, u.id, v.id,
+        CONCAT(LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 20), ' Blvd'),
+        CONCAT(LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 20), ' Rd'),
+        DATEADD(SECOND, -ABS(CHECKSUM(NEWID())) % (30 * 86400), SYSUTCDATETIME()),
+        DATEADD(SECOND, -ABS(CHECKSUM(NEWID())) % (15 * 86400), SYSUTCDATETIME()),
+        CAST(ROUND(RAND(CHECKSUM(NEWID())) * 50 + 5, 2) AS DECIMAL(10,2))
+      FROM (SELECT TOP($1) city, id FROM users ORDER BY NEWID()) u
+      CROSS JOIN (SELECT TOP 1 city, id FROM vehicles ORDER BY NEWID()) v
+
+  - name: populate_promo_codes
+    args:
+      - num_promo_codes
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s UNION ALL SELECT s + 1 FROM seq WHERE s < $1
+      )
+      INSERT INTO promo_codes (code, description, expiration_time, rules)
+      SELECT
+        UPPER(LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 8)),
+        CONCAT('Promo ', s, ': save on your next ride'),
+        DATEADD(DAY, ABS(CHECKSUM(NEWID())) % 90 + 1, SYSUTCDATETIME()),
+        CONCAT('{"discount_pct":', ABS(CHECKSUM(NEWID())) % 30 + 5, '}')
+      FROM seq
+      OPTION (MAXRECURSION 10000)
+
+deseed:
+
+  - name: delete_user_promo_codes
+    type: exec
+    query: DELETE FROM user_promo_codes
+
+  - name: delete_vehicle_location_histories
+    type: exec
+    query: DELETE FROM vehicle_location_histories
+
+  - name: delete_rides
+    type: exec
+    query: DELETE FROM rides
+
+  - name: delete_vehicles
+    type: exec
+    query: DELETE FROM vehicles
+
+  - name: delete_promo_codes
+    type: exec
+    query: DELETE FROM promo_codes
+
+  - name: delete_users
+    type: exec
+    query: DELETE FROM users
+
+down:
+
+  - name: drop_user_promo_codes
+    type: exec
+    query: DROP TABLE IF EXISTS user_promo_codes
+
+  - name: drop_vehicle_location_histories
+    type: exec
+    query: DROP TABLE IF EXISTS vehicle_location_histories
+
+  - name: drop_rides
+    type: exec
+    query: DROP TABLE IF EXISTS rides
+
+  - name: drop_vehicles
+    type: exec
+    query: DROP TABLE IF EXISTS vehicles
+
+  - name: drop_promo_codes
+    type: exec
+    query: DROP TABLE IF EXISTS promo_codes
+
+  - name: drop_users
+    type: exec
+    query: DROP TABLE IF EXISTS users
+
+init:
+
+  - name: fetch_users
+    type: query
+    query: SELECT id, city FROM users ORDER BY NEWID()
+
+  - name: fetch_vehicles
+    type: query
+    query: SELECT id, city FROM vehicles ORDER BY NEWID()
+
+  - name: fetch_rides
+    type: query
+    query: SELECT id, city FROM rides ORDER BY NEWID()
+
+  - name: fetch_promo_codes
+    type: query
+    query: SELECT code FROM promo_codes ORDER BY NEWID()
+
+run_weights:
+  read_vehicles: 20
+  read_rides: 20
+  create_ride: 20
+  update_ride: 15
+  add_vehicle_location: 15
+  apply_promo_code: 10
+
+run:
+
+  - name: read_vehicles
+    type: query
+    args:
+      - ref_rand('fetch_vehicles').city
+    query: |-
+      SELECT TOP 10 id, city, owner_id, status, current_location
+      FROM vehicles
+      WHERE city = @p1
+
+  - name: read_rides
+    type: query
+    args:
+      - ref_rand('fetch_users').id
+      - ref_rand('fetch_users').city
+    query: |-
+      SELECT TOP 10 id, vehicle_id, start_address, end_address,
+        start_time, end_time, revenue
+      FROM rides
+      WHERE city = @p2 AND rider_id = @p1
+      ORDER BY start_time DESC
+
+  - name: create_ride
+    type: exec
+    args:
+      - uuid_v4()
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_users').id
+      - ref_rand('fetch_vehicles').city
+      - ref_rand('fetch_vehicles').id
+      - regex('[A-Z][a-z]{4,12} (St|Ave|Blvd|Rd)')
+    query: |-
+      INSERT INTO rides (id, city, vehicle_city, rider_id, vehicle_id, start_address)
+      VALUES (@p1, @p2, @p4, @p3, @p5, @p6)
+
+  - name: update_ride
+    type: exec
+    args:
+      - regex('[A-Z][a-z]{4,12} (St|Ave|Blvd|Rd)')
+      - gen('number:500,5000')
+      - ref_rand('fetch_rides').city
+      - ref_rand('fetch_rides').id
+    query: |-
+      UPDATE rides SET
+        end_address = @p1,
+        end_time = SYSUTCDATETIME(),
+        revenue = CAST(@p2 AS DECIMAL(10,2)) / 100
+      WHERE city = @p3 AND id = @p4
+
+  - name: add_vehicle_location
+    type: exec
+    args:
+      - ref_rand('fetch_rides').city
+      - ref_rand('fetch_rides').id
+      - uniform(-90, 90)
+      - uniform(-180, 180)
+    query: |-
+      INSERT INTO vehicle_location_histories (city, ride_id, lat, long)
+      VALUES (@p1, @p2, @p3, @p4)
+
+  - name: apply_promo_code
+    type: exec
+    args:
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_users').id
+      - ref_rand('fetch_promo_codes').code
+    query: |-
+      MERGE user_promo_codes AS t
+      USING (SELECT @p1 AS city, @p2 AS user_id, @p3 AS code) AS s
+      ON t.city = s.city AND t.user_id = s.user_id AND t.code = s.code
+      WHEN MATCHED THEN UPDATE SET usage_count = usage_count + 1
+      WHEN NOT MATCHED THEN INSERT (city, user_id, code, usage_count)
+        VALUES (s.city, s.user_id, s.code, 1);

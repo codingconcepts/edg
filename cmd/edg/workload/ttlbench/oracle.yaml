@@ -1,0 +1,85 @@
+# TTL Bench Workload for Oracle
+#
+# Oracle does not have built-in row-level TTL. This workload
+# inserts rows with a timestamp and periodically deletes expired
+# ones to simulate TTL GC pressure.
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  payload_size: 256
+
+up:
+
+  - name: create_ttlbench
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE ttlbench (
+            id RAW(16) DEFAULT SYS_GUID() PRIMARY KEY,
+            payload RAW(2000) NOT NULL,
+            inserted_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_idx_ttlbench_inserted
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_ttlbench_inserted ON ttlbench (inserted_at)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+seed: []
+
+deseed:
+
+  - name: truncate_ttlbench
+    type: exec
+    query: TRUNCATE TABLE ttlbench
+
+down:
+
+  - name: drop_ttlbench
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE ttlbench PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+run_weights:
+  insert_row: 70
+  read_recent: 20
+  delete_expired: 10
+
+run:
+
+  - name: insert_row
+    type: exec
+    args:
+      - blob(payload_size)
+    query: |-
+      INSERT INTO ttlbench (payload) VALUES (:1)
+
+  - name: read_recent
+    type: query
+    query: |-
+      SELECT id, inserted_at
+      FROM ttlbench
+      WHERE inserted_at > SYSTIMESTAMP - INTERVAL '5' MINUTE
+      ORDER BY inserted_at DESC
+      FETCH FIRST 10 ROWS ONLY
+
+  - name: delete_expired
+    type: exec
+    query: |-
+      DELETE FROM ttlbench
+      WHERE inserted_at < SYSTIMESTAMP - INTERVAL '30' MINUTE
+        AND ROWNUM <= 1000

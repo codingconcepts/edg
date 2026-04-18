@@ -1,0 +1,452 @@
+# TPC-H Workload for Oracle
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  scale_factor: 1
+  regions: 5
+  nations: 25
+  suppliers: 1000
+  parts: 20000
+  customers: 15000
+  orders: 150000
+  batch_size: 10000
+
+up:
+
+  - name: create_region
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE '
+        CREATE TABLE region (
+          r_regionkey NUMBER NOT NULL PRIMARY KEY,
+          r_name VARCHAR2(25) NOT NULL,
+          r_comment VARCHAR2(152))';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;
+
+  - name: create_nation
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE '
+        CREATE TABLE nation (
+          n_nationkey NUMBER NOT NULL PRIMARY KEY,
+          n_name VARCHAR2(25) NOT NULL,
+          n_regionkey NUMBER NOT NULL,
+          n_comment VARCHAR2(152))';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;
+
+  - name: create_supplier
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE '
+        CREATE TABLE supplier (
+          s_suppkey NUMBER NOT NULL PRIMARY KEY,
+          s_name VARCHAR2(25) NOT NULL,
+          s_address VARCHAR2(40) NOT NULL,
+          s_nationkey NUMBER NOT NULL,
+          s_phone VARCHAR2(15) NOT NULL,
+          s_acctbal NUMBER(15,2) NOT NULL,
+          s_comment VARCHAR2(101))';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;
+
+  - name: create_part
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE '
+        CREATE TABLE part (
+          p_partkey NUMBER NOT NULL PRIMARY KEY,
+          p_name VARCHAR2(55) NOT NULL,
+          p_mfgr VARCHAR2(25) NOT NULL,
+          p_brand VARCHAR2(10) NOT NULL,
+          p_type VARCHAR2(25) NOT NULL,
+          p_size NUMBER NOT NULL,
+          p_container VARCHAR2(10) NOT NULL,
+          p_retailprice NUMBER(15,2) NOT NULL,
+          p_comment VARCHAR2(23))';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;
+
+  - name: create_partsupp
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE '
+        CREATE TABLE partsupp (
+          ps_partkey NUMBER NOT NULL,
+          ps_suppkey NUMBER NOT NULL,
+          ps_availqty NUMBER NOT NULL,
+          ps_supplycost NUMBER(15,2) NOT NULL,
+          ps_comment VARCHAR2(199),
+          PRIMARY KEY (ps_partkey, ps_suppkey))';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;
+
+  - name: create_customer
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE '
+        CREATE TABLE customer (
+          c_custkey NUMBER NOT NULL PRIMARY KEY,
+          c_name VARCHAR2(25) NOT NULL,
+          c_address VARCHAR2(40) NOT NULL,
+          c_nationkey NUMBER NOT NULL,
+          c_phone VARCHAR2(15) NOT NULL,
+          c_acctbal NUMBER(15,2) NOT NULL,
+          c_mktsegment VARCHAR2(10) NOT NULL,
+          c_comment VARCHAR2(117))';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;
+
+  - name: create_orders
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE '
+        CREATE TABLE orders (
+          o_orderkey NUMBER NOT NULL PRIMARY KEY,
+          o_custkey NUMBER NOT NULL,
+          o_orderstatus CHAR(1) NOT NULL,
+          o_totalprice NUMBER(15,2) NOT NULL,
+          o_orderdate DATE NOT NULL,
+          o_orderpriority VARCHAR2(15) NOT NULL,
+          o_clerk VARCHAR2(15) NOT NULL,
+          o_shippriority NUMBER NOT NULL,
+          o_comment VARCHAR2(79))';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;
+
+  - name: create_lineitem
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE '
+        CREATE TABLE lineitem (
+          l_orderkey NUMBER NOT NULL,
+          l_partkey NUMBER NOT NULL,
+          l_suppkey NUMBER NOT NULL,
+          l_linenumber NUMBER NOT NULL,
+          l_quantity NUMBER(15,2) NOT NULL,
+          l_extendedprice NUMBER(15,2) NOT NULL,
+          l_discount NUMBER(15,2) NOT NULL,
+          l_tax NUMBER(15,2) NOT NULL,
+          l_returnflag CHAR(1) NOT NULL,
+          l_linestatus CHAR(1) NOT NULL,
+          l_shipdate DATE NOT NULL,
+          l_commitdate DATE NOT NULL,
+          l_receiptdate DATE NOT NULL,
+          l_shipinstruct VARCHAR2(25) NOT NULL,
+          l_shipmode VARCHAR2(10) NOT NULL,
+          l_comment VARCHAR2(44),
+          PRIMARY KEY (l_orderkey, l_linenumber))';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;
+
+seed:
+
+  - name: populate_region
+    query: |-
+      INSERT ALL
+        INTO region VALUES (0,'AFRICA','')
+        INTO region VALUES (1,'AMERICA','')
+        INTO region VALUES (2,'ASIA','')
+        INTO region VALUES (3,'EUROPE','')
+        INTO region VALUES (4,'MIDDLE EAST','')
+      SELECT 1 FROM DUAL
+
+  - name: populate_nation
+    query: |-
+      INSERT ALL
+        INTO nation VALUES (0,'ALGERIA',0,'')
+        INTO nation VALUES (1,'ARGENTINA',1,'')
+        INTO nation VALUES (2,'BRAZIL',1,'')
+        INTO nation VALUES (3,'CANADA',1,'')
+        INTO nation VALUES (4,'EGYPT',4,'')
+        INTO nation VALUES (5,'ETHIOPIA',0,'')
+        INTO nation VALUES (6,'FRANCE',3,'')
+        INTO nation VALUES (7,'GERMANY',3,'')
+        INTO nation VALUES (8,'INDIA',2,'')
+        INTO nation VALUES (9,'INDONESIA',2,'')
+        INTO nation VALUES (10,'IRAN',4,'')
+        INTO nation VALUES (11,'IRAQ',4,'')
+        INTO nation VALUES (12,'JAPAN',2,'')
+        INTO nation VALUES (13,'JORDAN',4,'')
+        INTO nation VALUES (14,'KENYA',0,'')
+        INTO nation VALUES (15,'MOROCCO',0,'')
+        INTO nation VALUES (16,'MOZAMBIQUE',0,'')
+        INTO nation VALUES (17,'PERU',1,'')
+        INTO nation VALUES (18,'CHINA',2,'')
+        INTO nation VALUES (19,'ROMANIA',3,'')
+        INTO nation VALUES (20,'SAUDI ARABIA',4,'')
+        INTO nation VALUES (21,'VIETNAM',2,'')
+        INTO nation VALUES (22,'RUSSIA',3,'')
+        INTO nation VALUES (23,'UNITED KINGDOM',3,'')
+        INTO nation VALUES (24,'UNITED STATES',1,'')
+      SELECT 1 FROM DUAL
+
+  - name: populate_supplier
+    args:
+      - suppliers
+    query: |-
+      INSERT INTO supplier (s_suppkey, s_name, s_address, s_nationkey,
+        s_phone, s_acctbal, s_comment)
+      SELECT LEVEL,
+        'Supplier#' || LPAD(LEVEL, 9, '0'),
+        DBMS_RANDOM.STRING('x', FLOOR(DBMS_RANDOM.VALUE(15, 40))),
+        FLOOR(DBMS_RANDOM.VALUE(0, 25)),
+        LPAD(FLOOR(DBMS_RANDOM.VALUE(10, 100)), 2, '0') || '-' ||
+        LPAD(FLOOR(DBMS_RANDOM.VALUE(0, 1000)), 3, '0') || '-' ||
+        LPAD(FLOOR(DBMS_RANDOM.VALUE(0, 1000)), 3, '0') || '-' ||
+        LPAD(FLOOR(DBMS_RANDOM.VALUE(0, 10000)), 4, '0'),
+        ROUND(DBMS_RANDOM.VALUE(-1000, 9000), 2),
+        DBMS_RANDOM.STRING('x', 30)
+      FROM DUAL CONNECT BY LEVEL <= $1
+
+  - name: populate_part
+    args:
+      - batch(parts / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO part (p_partkey, p_name, p_mfgr, p_brand, p_type,
+        p_size, p_container, p_retailprice, p_comment)
+      SELECT $1 * $2 + LEVEL,
+        DBMS_RANDOM.STRING('x', FLOOR(DBMS_RANDOM.VALUE(20, 50))),
+        'Manufacturer#' || FLOOR(DBMS_RANDOM.VALUE(1, 6)),
+        'Brand#' || FLOOR(DBMS_RANDOM.VALUE(1, 6)) || FLOOR(DBMS_RANDOM.VALUE(1, 6)),
+        'STANDARD',
+        FLOOR(DBMS_RANDOM.VALUE(1, 51)),
+        'SM CASE',
+        ROUND((90000 + ($1 * $2 + LEVEL) / 10 + DBMS_RANDOM.VALUE(0, 100)) / 100, 2),
+        DBMS_RANDOM.STRING('x', 15)
+      FROM DUAL CONNECT BY LEVEL <= $2
+
+  - name: populate_customer
+    args:
+      - batch(customers / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO customer (c_custkey, c_name, c_address, c_nationkey,
+        c_phone, c_acctbal, c_mktsegment, c_comment)
+      SELECT $1 * $2 + LEVEL,
+        'Customer#' || LPAD($1 * $2 + LEVEL, 9, '0'),
+        DBMS_RANDOM.STRING('x', FLOOR(DBMS_RANDOM.VALUE(15, 40))),
+        FLOOR(DBMS_RANDOM.VALUE(0, 25)),
+        LPAD(FLOOR(DBMS_RANDOM.VALUE(10, 100)), 2, '0') || '-' ||
+        LPAD(FLOOR(DBMS_RANDOM.VALUE(0, 1000)), 3, '0') || '-' ||
+        LPAD(FLOOR(DBMS_RANDOM.VALUE(0, 1000)), 3, '0') || '-' ||
+        LPAD(FLOOR(DBMS_RANDOM.VALUE(0, 10000)), 4, '0'),
+        ROUND(DBMS_RANDOM.VALUE(-1000, 9000), 2),
+        DECODE(FLOOR(DBMS_RANDOM.VALUE(0, 5)),
+          0,'AUTOMOBILE', 1,'BUILDING', 2,'FURNITURE',
+          3,'MACHINERY', 'HOUSEHOLD'),
+        DBMS_RANDOM.STRING('x', 40)
+      FROM DUAL CONNECT BY LEVEL <= $2
+
+  - name: populate_orders
+    args:
+      - batch(orders / batch_size)
+      - batch_size
+      - customers
+    query: |-
+      INSERT INTO orders (o_orderkey, o_custkey, o_orderstatus,
+        o_totalprice, o_orderdate, o_orderpriority, o_clerk,
+        o_shippriority, o_comment)
+      SELECT $1 * $2 + LEVEL,
+        FLOOR(DBMS_RANDOM.VALUE(1, $3 + 1)),
+        DECODE(FLOOR(DBMS_RANDOM.VALUE(0, 3)), 0,'O', 1,'F', 'P'),
+        ROUND(DBMS_RANDOM.VALUE(1000, 401000), 2),
+        DATE '1992-01-01' + FLOOR(DBMS_RANDOM.VALUE(0, 2557)),
+        DECODE(FLOOR(DBMS_RANDOM.VALUE(0, 5)),
+          0,'1-URGENT', 1,'2-HIGH', 2,'3-MEDIUM',
+          3,'4-NOT SPECIFIED', '5-LOW'),
+        'Clerk#' || LPAD(FLOOR(DBMS_RANDOM.VALUE(1, 1001)), 9, '0'),
+        0,
+        DBMS_RANDOM.STRING('x', 30)
+      FROM DUAL CONNECT BY LEVEL <= $2
+
+  - name: populate_lineitem
+    args:
+      - batch(orders / batch_size)
+      - batch_size
+      - parts
+      - suppliers
+    query: |-
+      INSERT INTO lineitem (l_orderkey, l_partkey, l_suppkey, l_linenumber,
+        l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag,
+        l_linestatus, l_shipdate, l_commitdate, l_receiptdate,
+        l_shipinstruct, l_shipmode, l_comment)
+      SELECT o.o_orderkey,
+        FLOOR(DBMS_RANDOM.VALUE(1, $3 + 1)),
+        FLOOR(DBMS_RANDOM.VALUE(1, $4 + 1)),
+        1,
+        ROUND(DBMS_RANDOM.VALUE(1, 51), 2),
+        ROUND(DBMS_RANDOM.VALUE(1000, 91000), 2),
+        ROUND(DBMS_RANDOM.VALUE(0, 0.10), 2),
+        ROUND(DBMS_RANDOM.VALUE(0, 0.08), 2),
+        DECODE(FLOOR(DBMS_RANDOM.VALUE(0, 3)), 0,'R', 1,'A', 'N'),
+        DECODE(FLOOR(DBMS_RANDOM.VALUE(0, 2)), 0,'O', 'F'),
+        o.o_orderdate + FLOOR(DBMS_RANDOM.VALUE(1, 121)),
+        o.o_orderdate + FLOOR(DBMS_RANDOM.VALUE(1, 91)),
+        o.o_orderdate + FLOOR(DBMS_RANDOM.VALUE(1, 151)),
+        DECODE(FLOOR(DBMS_RANDOM.VALUE(0, 4)),
+          0,'DELIVER IN PERSON', 1,'COLLECT COD',
+          2,'NONE', 'TAKE BACK RETURN'),
+        DECODE(FLOOR(DBMS_RANDOM.VALUE(0, 7)),
+          0,'REG AIR', 1,'AIR', 2,'RAIL', 3,'SHIP',
+          4,'TRUCK', 5,'MAIL', 'FOB'),
+        DBMS_RANDOM.STRING('x', 20)
+      FROM orders o
+      WHERE o.o_orderkey > $1 * $2
+        AND o.o_orderkey <= ($1 + 1) * $2
+
+deseed:
+
+  - name: truncate_lineitem
+    type: exec
+    query: TRUNCATE TABLE lineitem
+
+  - name: truncate_orders
+    type: exec
+    query: TRUNCATE TABLE orders
+
+  - name: truncate_partsupp
+    type: exec
+    query: TRUNCATE TABLE partsupp
+
+  - name: truncate_customer
+    type: exec
+    query: TRUNCATE TABLE customer
+
+  - name: truncate_part
+    type: exec
+    query: TRUNCATE TABLE part
+
+  - name: truncate_supplier
+    type: exec
+    query: TRUNCATE TABLE supplier
+
+  - name: truncate_nation
+    type: exec
+    query: TRUNCATE TABLE nation
+
+  - name: truncate_region
+    type: exec
+    query: TRUNCATE TABLE region
+
+down:
+
+  - name: drop_lineitem
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE lineitem PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+  - name: drop_orders
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE orders PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+  - name: drop_partsupp
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE partsupp PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+  - name: drop_customer
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE customer PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+  - name: drop_part
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE part PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+  - name: drop_supplier
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE supplier PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+  - name: drop_nation
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE nation PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+  - name: drop_region
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE region PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+run_weights:
+  q1_pricing_summary: 25
+  q3_shipping_priority: 25
+  q6_forecasting_revenue: 25
+  q14_promotion_effect: 25
+
+run:
+
+  - name: q1_pricing_summary
+    type: query
+    args:
+      - gen('number:60,120')
+    query: |-
+      SELECT l_returnflag, l_linestatus,
+        SUM(l_quantity) AS sum_qty,
+        SUM(l_extendedprice) AS sum_base_price,
+        SUM(l_extendedprice * (1 - l_discount)) AS sum_disc_price,
+        SUM(l_extendedprice * (1 - l_discount) * (1 + l_tax)) AS sum_charge,
+        AVG(l_quantity) AS avg_qty,
+        AVG(l_extendedprice) AS avg_price,
+        AVG(l_discount) AS avg_disc,
+        COUNT(*) AS count_order
+      FROM lineitem
+      WHERE l_shipdate <= DATE '1998-12-01' - :1
+      GROUP BY l_returnflag, l_linestatus
+      ORDER BY l_returnflag, l_linestatus
+
+  - name: q3_shipping_priority
+    type: query
+    args:
+      - set_rand(['AUTOMOBILE','BUILDING','FURNITURE','MACHINERY','HOUSEHOLD'], [])
+      - gen('number:1,31')
+    query: |-
+      SELECT l.l_orderkey,
+        SUM(l.l_extendedprice * (1 - l.l_discount)) AS revenue,
+        o.o_orderdate, o.o_shippriority
+      FROM customer c
+      JOIN orders o ON c.c_custkey = o.o_custkey
+      JOIN lineitem l ON l.l_orderkey = o.o_orderkey
+      WHERE c.c_mktsegment = :1
+        AND o.o_orderdate < DATE '1995-03-01' + :2
+        AND l.l_shipdate > DATE '1995-03-01' + :2
+      GROUP BY l.l_orderkey, o.o_orderdate, o.o_shippriority
+      ORDER BY revenue DESC, o.o_orderdate
+      FETCH FIRST 10 ROWS ONLY
+
+  - name: q6_forecasting_revenue
+    type: query
+    args:
+      - gen('number:1993,1997')
+      - uniform_f(0.02, 0.09, 2)
+      - gen('number:24,25')
+    query: |-
+      SELECT SUM(l_extendedprice * l_discount) AS revenue
+      FROM lineitem
+      WHERE l_shipdate >= TO_DATE(:1 || '-01-01', 'YYYY-MM-DD')
+        AND l_shipdate < ADD_MONTHS(TO_DATE(:1 || '-01-01', 'YYYY-MM-DD'), 12)
+        AND l_discount BETWEEN :2 - 0.01 AND :2 + 0.01
+        AND l_quantity < :3
+
+  - name: q14_promotion_effect
+    type: query
+    args:
+      - gen('number:1993,1997')
+      - gen('number:1,12')
+    query: |-
+      SELECT
+        100.00 * SUM(CASE WHEN p.p_type LIKE 'PROMO%'
+          THEN l.l_extendedprice * (1 - l.l_discount) ELSE 0 END)
+        / SUM(l.l_extendedprice * (1 - l.l_discount)) AS promo_revenue
+      FROM lineitem l
+      JOIN part p ON l.l_partkey = p.p_partkey
+      WHERE l_shipdate >= TO_DATE(:1 || '-' || LPAD(:2, 2, '0') || '-01', 'YYYY-MM-DD')
+        AND l_shipdate < ADD_MONTHS(
+          TO_DATE(:1 || '-' || LPAD(:2, 2, '0') || '-01', 'YYYY-MM-DD'), 1)

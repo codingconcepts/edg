@@ -1,0 +1,89 @@
+# TTL Logger Workload for SQL Server
+#
+# SQL Server does not have built-in row-level TTL. This workload
+# includes a delete_expired operation to simulate TTL GC.
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals:
+  message_size: 256
+
+up:
+
+  - name: create_events
+    query: |-
+      IF OBJECT_ID('events', 'U') IS NULL
+      CREATE TABLE events (
+        id UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID() PRIMARY KEY,
+        level VARCHAR(10) NOT NULL,
+        source VARCHAR(50) NOT NULL,
+        message NVARCHAR(MAX) NOT NULL,
+        created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+      )
+
+  - name: create_idx_events_level_created
+    query: |-
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_events_level_created')
+      CREATE INDEX idx_events_level_created ON events (level, created_at DESC)
+
+  - name: create_idx_events_created
+    query: |-
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_events_created')
+      CREATE INDEX idx_events_created ON events (created_at DESC)
+
+seed: []
+
+deseed:
+
+  - name: delete_events
+    type: exec
+    query: DELETE FROM events
+
+down:
+
+  - name: drop_events
+    type: exec
+    query: DROP TABLE IF EXISTS events
+
+run_weights:
+  write_log: 60
+  read_recent: 13
+  read_by_level: 13
+  delete_expired: 14
+
+run:
+
+  - name: write_log
+    type: exec
+    args:
+      - set_rand(['DEBUG','INFO','WARN','ERROR','FATAL'], [10,50,25,12,3])
+      - set_rand(['api','worker','scheduler','auth','billing'], [])
+      - regex('[a-zA-Z0-9 ]{64,256}')
+    query: |-
+      INSERT INTO events (level, source, message)
+      VALUES (@p1, @p2, @p3)
+
+  - name: read_recent
+    type: query
+    query: |-
+      SELECT TOP 20 id, level, source, message, created_at
+      FROM events
+      ORDER BY created_at DESC
+
+  - name: read_by_level
+    type: query
+    args:
+      - set_rand(['ERROR','WARN','FATAL'], [60,30,10])
+    query: |-
+      SELECT TOP 20 id, source, message, created_at
+      FROM events
+      WHERE level = @p1
+        AND created_at > DATEADD(MINUTE, -5, SYSUTCDATETIME())
+      ORDER BY created_at DESC
+
+  - name: delete_expired
+    type: exec
+    query: |-
+      DELETE TOP(1000) FROM events
+      WHERE created_at < DATEADD(MINUTE, -10, SYSUTCDATETIME())

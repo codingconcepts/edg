@@ -1,0 +1,70 @@
+# TTL Bench Workload for MySQL
+#
+# MySQL does not have built-in row-level TTL. This workload
+# inserts rows with a timestamp and periodically deletes expired
+# ones to simulate TTL GC pressure.
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
+globals:
+  payload_size: 256
+
+up:
+
+  - name: create_ttlbench
+    query: |-
+      CREATE TABLE IF NOT EXISTS ttlbench (
+        id CHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
+        payload BLOB NOT NULL,
+        inserted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+
+  - name: create_idx_ttlbench_inserted
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_ttlbench_inserted
+      ON ttlbench (inserted_at)
+
+seed: []
+
+deseed:
+
+  - name: delete_ttlbench
+    type: exec
+    query: DELETE FROM ttlbench
+
+down:
+
+  - name: drop_ttlbench
+    type: exec
+    query: DROP TABLE IF EXISTS ttlbench
+
+run_weights:
+  insert_row: 70
+  read_recent: 20
+  delete_expired: 10
+
+run:
+
+  - name: insert_row
+    type: exec
+    args:
+      - blob(payload_size)
+    query: |-
+      INSERT INTO ttlbench (payload) VALUES (?)
+
+  - name: read_recent
+    type: query
+    query: |-
+      SELECT id, inserted_at
+      FROM ttlbench
+      WHERE inserted_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+      ORDER BY inserted_at DESC
+      LIMIT 10
+
+  - name: delete_expired
+    type: exec
+    query: |-
+      DELETE FROM ttlbench
+      WHERE inserted_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+      LIMIT 1000

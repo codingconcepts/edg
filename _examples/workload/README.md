@@ -1,6 +1,6 @@
 # Workload
 
-Built-in workloads (bank, tpcc, ycsb) that run without a config file. The `--driver` flag selects the correct embedded config automatically.
+Built-in workloads (bank, kv, movr, tpcc, tpch, ttlbench, ttllogger, ycsb) that run without a config file. The `--driver` flag selects the correct embedded config automatically.
 
 ## CockroachDB
 
@@ -17,46 +17,49 @@ go run ./cmd/edg workload bank all \
 --driver pgx \
 --url "postgres://root@localhost:26257?sslmode=disable" \
 -w 10 \
--d 1m
+-d 5s
 
-# Or separately.
-go run ./cmd/edg workload bank up \
---driver pgx \
---url "postgres://root@localhost:26257?sslmode=disable"
-
-go run ./cmd/edg workload bank seed \
---driver pgx \
---url "postgres://root@localhost:26257?sslmode=disable"
-
-go run ./cmd/edg workload bank run \
+go run ./cmd/edg workload kv all \
 --driver pgx \
 --url "postgres://root@localhost:26257?sslmode=disable" \
 -w 10 \
--d 1m
+-d 5s
 
-go run ./cmd/edg workload bank deseed \
+go run ./cmd/edg workload movr all \
 --driver pgx \
---url "postgres://root@localhost:26257?sslmode=disable"
+--url "postgres://root@localhost:26257?sslmode=disable" \
+-w 10 \
+-d 5s
 
-go run ./cmd/edg workload bank down \
---driver pgx \
---url "postgres://root@localhost:26257?sslmode=disable"
-```
-
-### Other workloads
-
-```sh
 go run ./cmd/edg workload tpcc all \
 --driver pgx \
 --url "postgres://root@localhost:26257?sslmode=disable" \
 -w 10 \
--d 1m
+-d 5s
+
+go run ./cmd/edg workload tpch all \
+--driver pgx \
+--url "postgres://root@localhost:26257?sslmode=disable" \
+-w 4 \
+-d 5s
+
+go run ./cmd/edg workload ttlbench all \
+--driver pgx \
+--url "postgres://root@localhost:26257?sslmode=disable" \
+-w 10 \
+-d 5s
+
+go run ./cmd/edg workload ttllogger all \
+--driver pgx \
+--url "postgres://root@localhost:26257?sslmode=disable" \
+-w 10 \
+-d 5s
 
 go run ./cmd/edg workload ycsb all \
 --driver pgx \
 --url "postgres://root@localhost:26257?sslmode=disable" \
 -w 10 \
--d 1m
+-d 5s
 ```
 
 ## MySQL
@@ -74,19 +77,49 @@ go run ./cmd/edg workload bank all \
 --driver mysql \
 --url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true" \
 -w 10 \
--d 1m
+-d 5s
+
+go run ./cmd/edg workload kv all \
+--driver mysql \
+--url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true" \
+-w 10 \
+-d 5s
+
+go run ./cmd/edg workload movr all \
+--driver mysql \
+--url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true" \
+-w 10 \
+-d 5s
 
 go run ./cmd/edg workload tpcc all \
 --driver mysql \
 --url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true" \
 -w 10 \
--d 1m
+-d 5s
+
+go run ./cmd/edg workload tpch all \
+--driver mysql \
+--url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true" \
+-w 4 \
+-d 5s
+
+go run ./cmd/edg workload ttlbench all \
+--driver mysql \
+--url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true" \
+-w 10 \
+-d 5s
+
+go run ./cmd/edg workload ttllogger all \
+--driver mysql \
+--url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true" \
+-w 10 \
+-d 5s
 
 go run ./cmd/edg workload ycsb all \
 --driver mysql \
 --url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true" \
 -w 10 \
--d 1m
+-d 5s
 ```
 
 ## Oracle
@@ -104,19 +137,49 @@ go run ./cmd/edg workload bank all \
 --driver oracle \
 --url "oracle://system:password@localhost:1521/defaultdb" \
 -w 10 \
--d 1m
+-d 5s
+
+go run ./cmd/edg workload kv all \
+--driver oracle \
+--url "oracle://system:password@localhost:1521/defaultdb" \
+-w 10 \
+-d 5s
+
+go run ./cmd/edg workload movr all \
+--driver oracle \
+--url "oracle://system:password@localhost:1521/defaultdb" \
+-w 10 \
+-d 5s
 
 go run ./cmd/edg workload tpcc all \
 --driver oracle \
 --url "oracle://system:password@localhost:1521/defaultdb" \
 -w 10 \
--d 1m
+-d 5s
+
+go run ./cmd/edg workload tpch all \
+--driver oracle \
+--url "oracle://system:password@localhost:1521/defaultdb" \
+-w 4 \
+-d 5s
+
+go run ./cmd/edg workload ttlbench all \
+--driver oracle \
+--url "oracle://system:password@localhost:1521/defaultdb" \
+-w 10 \
+-d 5s
+
+go run ./cmd/edg workload ttllogger all \
+--driver oracle \
+--url "oracle://system:password@localhost:1521/defaultdb" \
+-w 10 \
+-d 5s
 
 go run ./cmd/edg workload ycsb all \
 --driver oracle \
 --url "oracle://system:password@localhost:1521/defaultdb" \
 -w 10 \
--d 1m
+-d 5s
 ```
 
 ## MSSQL
@@ -134,17 +197,47 @@ go run ./cmd/edg workload bank all \
 --driver mssql \
 --url "sqlserver://sa:P4ssw0rd@localhost:1433?database=bank&encrypt=disable" \
 -w 10 \
--d 1m
+-d 5s
+
+go run ./cmd/edg workload kv all \
+--driver mssql \
+--url "sqlserver://sa:P4ssw0rd@localhost:1433?database=kv&encrypt=disable" \
+-w 10 \
+-d 5s
+
+go run ./cmd/edg workload movr all \
+--driver mssql \
+--url "sqlserver://sa:P4ssw0rd@localhost:1433?database=movr&encrypt=disable" \
+-w 10 \
+-d 5s
 
 go run ./cmd/edg workload tpcc all \
 --driver mssql \
 --url "sqlserver://sa:P4ssw0rd@localhost:1433?database=tpcc&encrypt=disable" \
 -w 10 \
--d 1m
+-d 5s
+
+go run ./cmd/edg workload tpch all \
+--driver mssql \
+--url "sqlserver://sa:P4ssw0rd@localhost:1433?database=tpch&encrypt=disable" \
+-w 4 \
+-d 5s
+
+go run ./cmd/edg workload ttlbench all \
+--driver mssql \
+--url "sqlserver://sa:P4ssw0rd@localhost:1433?database=ttlbench&encrypt=disable" \
+-w 10 \
+-d 5s
+
+go run ./cmd/edg workload ttllogger all \
+--driver mssql \
+--url "sqlserver://sa:P4ssw0rd@localhost:1433?database=ttllogger&encrypt=disable" \
+-w 10 \
+-d 5s
 
 go run ./cmd/edg workload ycsb all \
 --driver mssql \
 --url "sqlserver://sa:P4ssw0rd@localhost:1433?database=ycsb&encrypt=disable" \
 -w 10 \
--d 1m
+-d 5s
 ```

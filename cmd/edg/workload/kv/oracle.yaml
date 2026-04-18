@@ -1,0 +1,86 @@
+# KV Workload for Oracle
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  keys: 10000
+  batch_size: 1000
+  value_size: 256
+
+up:
+
+  - name: create_kv
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE kv (
+            k NUMBER(19) NOT NULL PRIMARY KEY,
+            v RAW(2000) NOT NULL
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+seed:
+
+  - name: clear_kv
+    type: exec
+    query: TRUNCATE TABLE kv
+
+  - name: populate_kv
+    args:
+      - batch(keys / batch_size)
+      - batch_size
+      - value_size
+    query: |-
+      INSERT INTO kv (k, v)
+      SELECT
+        $1 * $2 + LEVEL,
+        DBMS_CRYPTO.RANDOMBYTES($3)
+      FROM DUAL
+      CONNECT BY LEVEL <= $2
+
+deseed:
+
+  - name: truncate_kv
+    type: exec
+    query: TRUNCATE TABLE kv
+
+down:
+
+  - name: drop_kv
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE kv PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+run_weights:
+  read: 50
+  write: 50
+
+run:
+
+  - name: read
+    type: query
+    args:
+      - gen('number:1,' + string(keys))
+    query: |-
+      SELECT k, v FROM kv WHERE k = :1
+
+  - name: write
+    type: exec
+    args:
+      - gen('number:1,' + string(keys))
+      - blob(value_size)
+    query: |-
+      MERGE INTO kv t
+      USING (SELECT :1 AS k, :2 AS v FROM DUAL) s
+      ON (t.k = s.k)
+      WHEN MATCHED THEN UPDATE SET t.v = s.v
+      WHEN NOT MATCHED THEN INSERT (k, v) VALUES (s.k, s.v)

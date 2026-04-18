@@ -18,7 +18,7 @@ weight: 3
 | `all` | Run up, seed, run, deseed, and down in sequence |
 | `init` | Generate a starter config from an existing database schema |
 | `repl` | Interactive expression evaluator |
-| `workload <name> <command>` | Run a built-in workload (bank, tpcc, ycsb) without a config file |
+| `workload <name> <command>` | Run a built-in workload without a config file |
 | `validate config` | Validate a config file without connecting to a database |
 | `validate license` | Validate a license key and print its details |
 
@@ -83,12 +83,17 @@ edg all \
 
 ### Workload
 
-The `workload` command runs a built-in workload without needing a config file. Three industry-standard benchmarks are embedded in the binary: **bank**, **tpcc**, and **ycsb**. Each workload supports all six lifecycle commands (`up`, `seed`, `run`, `deseed`, `down`, `all`) and selects the correct config for the `--driver` automatically.
+The `workload` command runs a built-in workload without needing a config file. Eight benchmarks are embedded in the binary. Each workload supports all six lifecycle commands (`up`, `seed`, `run`, `deseed`, `down`, `all`) and selects the correct config for the `--driver` automatically.
 
 | Workload | Description |
 |---|---|
 | `bank` | Bank account operations for contention and correctness testing |
+| `kv` | Simple key-value read/write benchmark |
+| `movr` | Vehicle-sharing application with rides, vehicles, and users |
 | `tpcc` | Full TPC-C benchmark with all 5 transaction profiles |
+| `tpch` | TPC-H decision-support benchmark with analytical queries |
+| `ttlbench` | Insert throughput under row-level TTL garbage collection pressure |
+| `ttllogger` | Structured log ingestion with TTL-based expiry |
 | `ycsb` | Yahoo! Cloud Serving Benchmark with configurable workload profiles |
 
 | Driver | Config used |
@@ -111,12 +116,46 @@ edg workload bank all \
 -w 10 \
 -d 5m
 
+# Run KV benchmark
+edg workload kv all \
+--driver pgx \
+--url "postgres://root@localhost:26257?sslmode=disable" \
+-w 20 \
+-d 5m
+
+# Run MovR ride-sharing workload
+edg workload movr all \
+--driver pgx \
+--url "postgres://root@localhost:26257?sslmode=disable" \
+-w 10 \
+-d 5m
+
 # Run TPC-C against MySQL
 edg workload tpcc all \
 --driver mysql \
 --url "root:password@tcp(localhost:3306)/tpcc?parseTime=true" \
 -w 50 \
 -d 10m
+
+# Run TPC-H analytical queries
+edg workload tpch all \
+--driver pgx \
+--url "postgres://root@localhost:26257?sslmode=disable" \
+-w 4 \
+-d 5m
+
+# TTL benchmarks (CockroachDB native TTL)
+edg workload ttlbench all \
+--driver pgx \
+--url "postgres://root@localhost:26257?sslmode=disable" \
+-w 10 \
+-d 5m
+
+edg workload ttllogger all \
+--driver pgx \
+--url "postgres://root@localhost:26257?sslmode=disable" \
+-w 10 \
+-d 5m
 
 # Run YCSB against MSSQL
 edg workload ycsb all \

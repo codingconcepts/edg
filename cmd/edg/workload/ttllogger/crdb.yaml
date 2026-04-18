@@ -1,0 +1,80 @@
+# TTL Logger Workload
+# ===================
+# Log-ingestion benchmark that measures write and read
+# throughput with CockroachDB's row-level TTL expiring old
+# log entries. Modelled on cockroach workload run ttllogger.
+#
+# Simulates a structured logging pipeline: events are written
+# continuously, recent events are queried by level, and older
+# entries are automatically expired by the TTL job.
+
+globals:
+  message_size: 256
+
+up:
+
+  - name: create_events
+    query: |-
+      CREATE TABLE IF NOT EXISTS events (
+        id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+        level STRING NOT NULL,
+        source STRING NOT NULL,
+        message STRING NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        INDEX idx_events_level_created (level, created_at DESC),
+        INDEX idx_events_created (created_at DESC)
+      ) WITH (
+        ttl_expire_after = '10 minutes',
+        ttl_job_cron = '* * * * *'
+      )
+
+seed: []
+
+deseed:
+
+  - name: truncate_events
+    type: exec
+    query: TRUNCATE TABLE events
+
+down:
+
+  - name: drop_events
+    type: exec
+    query: DROP TABLE IF EXISTS events
+
+run_weights:
+  write_log: 70
+  read_recent: 15
+  read_by_level: 15
+
+run:
+
+  - name: write_log
+    type: exec
+    args:
+      - set_rand(['DEBUG','INFO','WARN','ERROR','FATAL'], [10,50,25,12,3])
+      - set_rand(['api','worker','scheduler','auth','billing'], [])
+      - regex('[a-zA-Z0-9 ]{64,256}')
+    query: |-
+      INSERT INTO events (level, source, message)
+      VALUES ($1, $2, $3)
+
+  - name: read_recent
+    type: query
+    query: |-
+      SELECT id, level, source, message, created_at
+      FROM events
+      ORDER BY created_at DESC
+      LIMIT 20
+
+  - name: read_by_level
+    type: query
+    args:
+      - set_rand(['ERROR','WARN','FATAL'], [60,30,10])
+    query: |-
+      SELECT id, source, message, created_at
+      FROM events
+      WHERE level = $1
+        AND created_at > now() - INTERVAL '5 minutes'
+      ORDER BY created_at DESC
+      LIMIT 20

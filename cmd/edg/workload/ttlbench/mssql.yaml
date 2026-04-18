@@ -1,0 +1,69 @@
+# TTL Bench Workload for SQL Server
+#
+# SQL Server does not have built-in row-level TTL. This workload
+# inserts rows with a timestamp and periodically deletes expired
+# ones to simulate TTL GC pressure.
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+
+globals:
+  payload_size: 256
+
+up:
+
+  - name: create_ttlbench
+    query: |-
+      IF OBJECT_ID('ttlbench', 'U') IS NULL
+      CREATE TABLE ttlbench (
+        id UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID() PRIMARY KEY,
+        payload VARBINARY(MAX) NOT NULL,
+        inserted_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+      )
+
+  - name: create_idx_ttlbench_inserted
+    query: |-
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_ttlbench_inserted')
+      CREATE INDEX idx_ttlbench_inserted ON ttlbench (inserted_at)
+
+seed: []
+
+deseed:
+
+  - name: delete_ttlbench
+    type: exec
+    query: DELETE FROM ttlbench
+
+down:
+
+  - name: drop_ttlbench
+    type: exec
+    query: DROP TABLE IF EXISTS ttlbench
+
+run_weights:
+  insert_row: 70
+  read_recent: 20
+  delete_expired: 10
+
+run:
+
+  - name: insert_row
+    type: exec
+    args:
+      - blob(payload_size)
+    query: |-
+      INSERT INTO ttlbench (payload) VALUES (@p1)
+
+  - name: read_recent
+    type: query
+    query: |-
+      SELECT TOP 10 id, inserted_at
+      FROM ttlbench
+      WHERE inserted_at > DATEADD(MINUTE, -5, SYSUTCDATETIME())
+      ORDER BY inserted_at DESC
+
+  - name: delete_expired
+    type: exec
+    query: |-
+      DELETE TOP(1000) FROM ttlbench
+      WHERE inserted_at < DATEADD(MINUTE, -30, SYSUTCDATETIME())

@@ -1,0 +1,355 @@
+# MovR Workload for Oracle
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  num_users: 1000
+  num_vehicles: 500
+  num_rides: 2000
+  num_promo_codes: 100
+  batch_size: 100
+
+up:
+
+  - name: create_users
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE users (
+            id RAW(16) DEFAULT SYS_GUID() NOT NULL,
+            city VARCHAR2(50) NOT NULL,
+            name VARCHAR2(100) NOT NULL,
+            address VARCHAR2(255) NOT NULL,
+            credit_card VARCHAR2(19) NOT NULL,
+            PRIMARY KEY (city, id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_vehicles
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE vehicles (
+            id RAW(16) DEFAULT SYS_GUID() NOT NULL,
+            city VARCHAR2(50) NOT NULL,
+            owner_id RAW(16) NOT NULL,
+            creation_time TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            status VARCHAR2(20) DEFAULT ''available'' NOT NULL,
+            current_location VARCHAR2(255) NOT NULL,
+            ext CLOB,
+            PRIMARY KEY (city, id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_rides
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE rides (
+            id RAW(16) DEFAULT SYS_GUID() NOT NULL,
+            city VARCHAR2(50) NOT NULL,
+            vehicle_city VARCHAR2(50) NOT NULL,
+            rider_id RAW(16) NOT NULL,
+            vehicle_id RAW(16) NOT NULL,
+            start_address VARCHAR2(255) NOT NULL,
+            end_address VARCHAR2(255),
+            start_time TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            end_time TIMESTAMP,
+            revenue NUMBER(10,2),
+            PRIMARY KEY (city, id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_vehicle_location_histories
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE vehicle_location_histories (
+            city VARCHAR2(50) NOT NULL,
+            ride_id RAW(16) NOT NULL,
+            timestamp TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            lat NUMBER NOT NULL,
+            long NUMBER NOT NULL,
+            PRIMARY KEY (city, ride_id, timestamp)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_promo_codes
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE promo_codes (
+            code VARCHAR2(20) NOT NULL PRIMARY KEY,
+            description VARCHAR2(255),
+            creation_time TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            expiration_time TIMESTAMP NOT NULL,
+            rules CLOB
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_user_promo_codes
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE user_promo_codes (
+            city VARCHAR2(50) NOT NULL,
+            user_id RAW(16) NOT NULL,
+            code VARCHAR2(20) NOT NULL,
+            timestamp TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            usage_count NUMBER DEFAULT 0 NOT NULL,
+            PRIMARY KEY (city, user_id, code)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+seed:
+
+  - name: populate_users
+    args:
+      - batch(num_users / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO users (city, name, address, credit_card)
+      SELECT
+        (SELECT column_value FROM (
+          SELECT column_value, ROWNUM rn FROM TABLE(
+            SYS.ODCIVARCHAR2LIST('new york','boston','washington dc','seattle',
+              'san francisco','los angeles','chicago','detroit','minneapolis')
+          )
+        ) WHERE rn = FLOOR(DBMS_RANDOM.VALUE(1, 10))),
+        DBMS_RANDOM.STRING('x', 12),
+        DBMS_RANDOM.STRING('x', 20) || ' St',
+        LPAD(FLOOR(DBMS_RANDOM.VALUE(0, 10000)), 4, '0') ||
+        LPAD(FLOOR(DBMS_RANDOM.VALUE(0, 10000)), 4, '0') ||
+        LPAD(FLOOR(DBMS_RANDOM.VALUE(0, 10000)), 4, '0') ||
+        LPAD(FLOOR(DBMS_RANDOM.VALUE(0, 10000)), 4, '0')
+      FROM DUAL CONNECT BY LEVEL <= $2
+
+  - name: populate_vehicles
+    args:
+      - num_vehicles
+    query: |-
+      INSERT INTO vehicles (city, owner_id, current_location, ext)
+      SELECT city, id,
+        DBMS_RANDOM.STRING('x', 20) || ' Ave',
+        '{"color":"blue","brand":"toyota"}'
+      FROM (SELECT city, id FROM users ORDER BY DBMS_RANDOM.VALUE)
+      WHERE ROWNUM <= $1
+
+  - name: populate_rides
+    args:
+      - num_rides
+    query: |-
+      INSERT INTO rides (city, vehicle_city, rider_id, vehicle_id,
+        start_address, end_address, start_time, end_time, revenue)
+      SELECT u.city, v.city, u.id, v.id,
+        DBMS_RANDOM.STRING('x', 20) || ' Blvd',
+        DBMS_RANDOM.STRING('x', 20) || ' Rd',
+        SYSTIMESTAMP - NUMTODSINTERVAL(DBMS_RANDOM.VALUE(0, 30) * 86400, 'SECOND'),
+        SYSTIMESTAMP - NUMTODSINTERVAL(DBMS_RANDOM.VALUE(0, 15) * 86400, 'SECOND'),
+        ROUND(DBMS_RANDOM.VALUE(5, 55), 2)
+      FROM (SELECT city, id FROM users ORDER BY DBMS_RANDOM.VALUE) u
+      CROSS JOIN (SELECT city, id FROM vehicles ORDER BY DBMS_RANDOM.VALUE FETCH FIRST 1 ROW ONLY) v
+      WHERE ROWNUM <= $1
+
+  - name: populate_promo_codes
+    args:
+      - num_promo_codes
+    query: |-
+      INSERT INTO promo_codes (code, description, expiration_time, rules)
+      SELECT
+        DBMS_RANDOM.STRING('U', 8),
+        'Promo ' || LEVEL || ': save on your next ride',
+        SYSTIMESTAMP + NUMTODSINTERVAL(DBMS_RANDOM.VALUE(1, 90) * 86400, 'SECOND'),
+        '{"discount_pct":' || FLOOR(DBMS_RANDOM.VALUE(5, 35)) || '}'
+      FROM DUAL CONNECT BY LEVEL <= $1
+
+deseed:
+
+  - name: truncate_user_promo_codes
+    type: exec
+    query: TRUNCATE TABLE user_promo_codes
+
+  - name: truncate_vehicle_location_histories
+    type: exec
+    query: TRUNCATE TABLE vehicle_location_histories
+
+  - name: truncate_rides
+    type: exec
+    query: TRUNCATE TABLE rides
+
+  - name: truncate_vehicles
+    type: exec
+    query: TRUNCATE TABLE vehicles
+
+  - name: truncate_promo_codes
+    type: exec
+    query: TRUNCATE TABLE promo_codes
+
+  - name: truncate_users
+    type: exec
+    query: TRUNCATE TABLE users
+
+down:
+
+  - name: drop_user_promo_codes
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE user_promo_codes PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+  - name: drop_vehicle_location_histories
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE vehicle_location_histories PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+  - name: drop_rides
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE rides PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+  - name: drop_vehicles
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE vehicles PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+  - name: drop_promo_codes
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE promo_codes PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+  - name: drop_users
+    type: exec
+    query: |-
+      BEGIN EXECUTE IMMEDIATE 'DROP TABLE users PURGE';
+      EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+
+init:
+
+  - name: fetch_users
+    type: query
+    query: SELECT id, city FROM users
+
+  - name: fetch_vehicles
+    type: query
+    query: SELECT id, city FROM vehicles
+
+  - name: fetch_rides
+    type: query
+    query: SELECT id, city FROM rides
+
+  - name: fetch_promo_codes
+    type: query
+    query: SELECT code FROM promo_codes
+
+run_weights:
+  read_vehicles: 20
+  read_rides: 20
+  create_ride: 20
+  update_ride: 15
+  add_vehicle_location: 15
+  apply_promo_code: 10
+
+run:
+
+  - name: read_vehicles
+    type: query
+    args:
+      - ref_rand('fetch_vehicles').city
+    query: |-
+      SELECT id, city, owner_id, status, current_location
+      FROM vehicles
+      WHERE city = :1
+      FETCH FIRST 10 ROWS ONLY
+
+  - name: read_rides
+    type: query
+    args:
+      - ref_rand('fetch_users').id
+      - ref_rand('fetch_users').city
+    query: |-
+      SELECT id, vehicle_id, start_address, end_address,
+        start_time, end_time, revenue
+      FROM rides
+      WHERE city = :2 AND rider_id = :1
+      ORDER BY start_time DESC
+      FETCH FIRST 10 ROWS ONLY
+
+  - name: create_ride
+    type: exec
+    args:
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_users').id
+      - ref_rand('fetch_vehicles').city
+      - ref_rand('fetch_vehicles').id
+      - regex('[A-Z][a-z]{4,12} (St|Ave|Blvd|Rd)')
+    query: |-
+      INSERT INTO rides (city, vehicle_city, rider_id, vehicle_id, start_address)
+      VALUES (:1, :3, :2, :4, :5)
+
+  - name: update_ride
+    type: exec
+    args:
+      - ref_rand('fetch_rides').id
+      - ref_rand('fetch_rides').city
+      - regex('[A-Z][a-z]{4,12} (St|Ave|Blvd|Rd)')
+      - gen('number:500,5000')
+    query: |-
+      UPDATE rides SET
+        end_address = :3,
+        end_time = SYSTIMESTAMP,
+        revenue = :4 / 100
+      WHERE city = :2 AND id = :1
+
+  - name: add_vehicle_location
+    type: exec
+    args:
+      - ref_rand('fetch_rides').city
+      - ref_rand('fetch_rides').id
+      - uniform(-90, 90)
+      - uniform(-180, 180)
+    query: |-
+      INSERT INTO vehicle_location_histories (city, ride_id, lat, long)
+      VALUES (:1, :2, :3, :4)
+
+  - name: apply_promo_code
+    type: exec
+    args:
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_users').id
+      - ref_rand('fetch_promo_codes').code
+    query: |-
+      MERGE INTO user_promo_codes t
+      USING (SELECT :1 AS city, :2 AS user_id, :3 AS code FROM DUAL) s
+      ON (t.city = s.city AND t.user_id = s.user_id AND t.code = s.code)
+      WHEN MATCHED THEN UPDATE SET usage_count = usage_count + 1
+      WHEN NOT MATCHED THEN INSERT (city, user_id, code, usage_count)
+        VALUES (s.city, s.user_id, s.code, 1)

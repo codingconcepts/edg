@@ -1,0 +1,65 @@
+# TTL Bench Workload
+# ==================
+# Insert-heavy benchmark that measures write throughput under
+# CockroachDB's row-level TTL garbage collection pressure.
+# Modelled on cockroach workload run ttlbench.
+#
+# Rows are inserted with a timestamp column and automatically
+# expire via the ttl_expire_after storage parameter. The TTL
+# job runs every minute, creating background GC pressure that
+# competes with foreground writes.
+#
+# Use this to test how TTL affects insert throughput and tail
+# latency under sustained write load.
+
+globals:
+  payload_size: 256
+
+up:
+
+  - name: create_ttlbench
+    query: |-
+      CREATE TABLE IF NOT EXISTS ttlbench (
+        id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+        payload BYTES NOT NULL,
+        inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      ) WITH (
+        ttl_expire_after = '30 minutes',
+        ttl_job_cron = '* * * * *'
+      )
+
+seed: []
+
+deseed:
+
+  - name: truncate_ttlbench
+    type: exec
+    query: TRUNCATE TABLE ttlbench
+
+down:
+
+  - name: drop_ttlbench
+    type: exec
+    query: DROP TABLE IF EXISTS ttlbench
+
+run_weights:
+  insert_row: 80
+  read_recent: 20
+
+run:
+
+  - name: insert_row
+    type: exec
+    args:
+      - blob(payload_size)
+    query: |-
+      INSERT INTO ttlbench (payload) VALUES ($1)
+
+  - name: read_recent
+    type: query
+    query: |-
+      SELECT id, inserted_at
+      FROM ttlbench
+      WHERE inserted_at > now() - INTERVAL '5 minutes'
+      ORDER BY inserted_at DESC
+      LIMIT 10

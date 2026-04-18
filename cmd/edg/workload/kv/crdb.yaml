@@ -1,0 +1,71 @@
+# KV Workload
+# ===========
+# Simple key-value read/write benchmark modelled on
+# cockroach workload run kv.
+#
+# Single table with a BIGINT key and a BYTES value column.
+# Operations are point reads and upserts with uniform
+# random key distribution.
+#
+# Tune globals to control table size and value width.
+
+globals:
+  keys: 10000
+  batch_size: 1000
+  value_size: 256
+
+up:
+
+  - name: create_kv
+    query: |-
+      CREATE TABLE IF NOT EXISTS kv (
+        k INT8 NOT NULL PRIMARY KEY,
+        v BYTES NOT NULL
+      )
+
+seed:
+
+  - name: populate_kv
+    args:
+      - batch(keys / batch_size)
+      - batch_size
+      - value_size
+    query: |-
+      INSERT INTO kv (k, v)
+      SELECT
+        $1::INT * $2::INT + s,
+        decode(lpad('', $3::INT * 2, md5(random()::FLOAT8::text)), 'hex')
+      FROM generate_series(1, $2::INT) AS s
+
+deseed:
+
+  - name: truncate_kv
+    type: exec
+    query: TRUNCATE TABLE kv
+
+down:
+
+  - name: drop_kv
+    type: exec
+    query: DROP TABLE IF EXISTS kv
+
+run_weights:
+  read: 50
+  write: 50
+
+run:
+
+  - name: read
+    type: query
+    args:
+      - gen('number:1,' + string(keys))
+    query: |-
+      SELECT k, v FROM kv WHERE k = $1::INT8
+
+  - name: write
+    type: exec
+    args:
+      - gen('number:1,' + string(keys))
+      - blob(value_size)
+    query: |-
+      UPSERT INTO kv (k, v) VALUES ($1::INT8, $2)
