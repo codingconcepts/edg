@@ -182,6 +182,83 @@ go run ./cmd/edg workload ycsb all \
 -d 5s
 ```
 
+## Cloud Spanner
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_spanner.yml up -d
+
+# Create instance and databases.
+curl -s -X POST 'http://localhost:9020/v1/projects/test-project/instances' \
+--json '{"instanceId":"test-instance","instance":{"config":"projects/test-project/instanceConfigs/emulator-config","displayName":"Test","nodeCount":1}}'
+
+for db in bank kv movr tpcc tpch ttlbench ttllogger ycsb; do
+  curl -s -X POST "http://localhost:9020/v1/projects/test-project/instances/test-instance/databases" \
+    --json "{\"createStatement\":\"CREATE DATABASE \`${db}\`\"}"
+done
+```
+
+### Run
+
+```sh
+SPANNER_EMULATOR_HOST=localhost:9010 \
+go run ./cmd/edg workload bank all \
+--driver spanner \
+--url "projects/test-project/instances/test-instance/databases/bank" \
+-w 10 \
+-d 5s
+
+SPANNER_EMULATOR_HOST=localhost:9010 \
+go run ./cmd/edg workload kv all \
+--driver spanner \
+--url "projects/test-project/instances/test-instance/databases/kv" \
+-w 10 \
+-d 5s
+
+SPANNER_EMULATOR_HOST=localhost:9010 \
+go run ./cmd/edg workload movr all \
+--driver spanner \
+--url "projects/test-project/instances/test-instance/databases/movr" \
+-w 10 \
+-d 5s
+
+SPANNER_EMULATOR_HOST=localhost:9010 \
+go run ./cmd/edg workload tpcc all \
+--driver spanner \
+--url "projects/test-project/instances/test-instance/databases/tpcc" \
+-w 10 \
+-d 5s
+
+SPANNER_EMULATOR_HOST=localhost:9010 \
+go run ./cmd/edg workload tpch all \
+--driver spanner \
+--url "projects/test-project/instances/test-instance/databases/tpch" \
+-w 4 \
+-d 5s
+
+SPANNER_EMULATOR_HOST=localhost:9010 \
+go run ./cmd/edg workload ttlbench all \
+--driver spanner \
+--url "projects/test-project/instances/test-instance/databases/ttlbench" \
+-w 10 \
+-d 5s
+
+SPANNER_EMULATOR_HOST=localhost:9010 \
+go run ./cmd/edg workload ttllogger all \
+--driver spanner \
+--url "projects/test-project/instances/test-instance/databases/ttllogger" \
+-w 10 \
+-d 5s
+
+SPANNER_EMULATOR_HOST=localhost:9010 \
+go run ./cmd/edg workload ycsb all \
+--driver spanner \
+--url "projects/test-project/instances/test-instance/databases/ycsb" \
+-w 10 \
+-d 5s
+```
+
 ## MSSQL
 
 ### Setup

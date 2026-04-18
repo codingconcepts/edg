@@ -62,4 +62,4 @@ run:
       - gen('number:1,' + string(keys))
       - blob(value_size)
     query: |-
-      INSERT OR UPDATE INTO kv (k, v) VALUES (@p1, @p2)
+      INSERT OR UPDATE INTO kv (k, v) VALUES (CAST(@p1 AS INT64), @p2)

@@ -4,9 +4,9 @@
 #   projects/PROJECT/instances/INSTANCE/databases/DATABASE
 
 globals:
-  customers: 100000
+  customers: 10000
   initial_balance: 10000
-  batch_size: 10000
+  batch_size: 1000
 
 up:
 
@@ -31,7 +31,7 @@ seed:
   - name: populate_customer
     type: exec_batch
     count: customers
-    size: 100
+    size: batch_size
     args:
       - gen('email')
     query: |-
@@ -47,9 +47,11 @@ seed:
     query: |-
       INSERT INTO account (balance, customer_id)
       SELECT CAST($2 AS FLOAT64), c.id
-      FROM customer c
-      ORDER BY c.id
-      LIMIT $3 OFFSET CAST($1 * $3 AS INT64)
+      FROM (
+        SELECT id, ROW_NUMBER() OVER (ORDER BY id) AS rn
+        FROM customer
+      ) c
+      WHERE c.rn > $1 * $3 AND c.rn <= ($1 + 1) * $3
 
 deseed:
 

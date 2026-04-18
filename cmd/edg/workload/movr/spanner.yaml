@@ -2,6 +2,9 @@
 #
 # Connection URL format:
 #   projects/PROJECT/instances/INSTANCE/databases/DATABASE
+#
+# Uses FARM_FINGERPRINT(GENERATE_UUID()) in place of RAND() for
+# emulator compatibility.
 
 globals:
   num_users: 1000
@@ -90,14 +93,14 @@ seed:
       SELECT
         (ARRAY<STRING>['new york','boston','washington dc','seattle',
                'san francisco','los angeles','chicago',
-               'detroit','minneapolis'])[CAST(FLOOR(RAND() * 9) AS INT64)],
+               'detroit','minneapolis'])[OFFSET(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 9))],
         SUBSTR(GENERATE_UUID(), 1, 12),
         CONCAT(SUBSTR(GENERATE_UUID(), 1, 20), ' St'),
         CONCAT(
-          LPAD(CAST(CAST(FLOOR(RAND() * 10000) AS INT64) AS STRING), 4, '0'),
-          LPAD(CAST(CAST(FLOOR(RAND() * 10000) AS INT64) AS STRING), 4, '0'),
-          LPAD(CAST(CAST(FLOOR(RAND() * 10000) AS INT64) AS STRING), 4, '0'),
-          LPAD(CAST(CAST(FLOOR(RAND() * 10000) AS INT64) AS STRING), 4, '0')
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) AS STRING), 4, '0'),
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) AS STRING), 4, '0'),
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) AS STRING), 4, '0'),
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) AS STRING), 4, '0')
         )
       FROM UNNEST(GENERATE_ARRAY(1, $2)) AS s
 
@@ -110,8 +113,8 @@ seed:
         u.city, u.id,
         CONCAT(SUBSTR(GENERATE_UUID(), 1, 20), ' Ave'),
         JSON_OBJECT(
-          'color', (ARRAY<STRING>['red','blue','black','white','silver'])[CAST(FLOOR(RAND() * 5) AS INT64)],
-          'brand', (ARRAY<STRING>['toyota','honda','ford','tesla','bmw'])[CAST(FLOOR(RAND() * 5) AS INT64)]
+          'color', (ARRAY<STRING>['red','blue','black','white','silver'])[OFFSET(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 5))],
+          'brand', (ARRAY<STRING>['toyota','honda','ford','tesla','bmw'])[OFFSET(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 5))]
         )
       FROM users u
       ORDER BY FARM_FINGERPRINT(u.id)
@@ -127,9 +130,9 @@ seed:
         u.city, v.city, u.id, v.id,
         CONCAT(SUBSTR(GENERATE_UUID(), 1, 20), ' Blvd'),
         CONCAT(SUBSTR(GENERATE_UUID(), 1, 20), ' Rd'),
-        TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL CAST(FLOOR(RAND() * 30 * 86400) AS INT64) SECOND),
-        TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL CAST(FLOOR(RAND() * 15 * 86400) AS INT64) SECOND),
-        CAST(ROUND(RAND() * 50 + 5, 2) AS NUMERIC)
+        TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 30 * 86400) AS INT64) SECOND),
+        TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 15 * 86400) AS INT64) SECOND),
+        CAST(ROUND(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 5000) / 100.0 + 5, 2) AS NUMERIC)
       FROM (SELECT city, id FROM users ORDER BY FARM_FINGERPRINT(id) LIMIT $1) u
       CROSS JOIN (
         SELECT city, id FROM vehicles ORDER BY FARM_FINGERPRINT(id) LIMIT 1
@@ -143,8 +146,8 @@ seed:
       SELECT
         UPPER(SUBSTR(GENERATE_UUID(), 1, 8)),
         CONCAT('Promo ', CAST(s AS STRING), ': save on your next ride'),
-        TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL CAST(FLOOR(RAND() * 90) AS INT64) DAY),
-        JSON_OBJECT('discount_pct', CAST(FLOOR(RAND() * 30 + 5) AS INT64))
+        TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 90) AS INT64) DAY),
+        JSON_OBJECT('discount_pct', MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 30) + 5)
       FROM UNNEST(GENERATE_ARRAY(1, $1)) AS s
 
 deseed:

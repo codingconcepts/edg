@@ -8,6 +8,9 @@
 # batch inserts to stay within this limit. Adjust batch_size and
 # ol_batch if you see "mutation limit exceeded" errors.
 #
+# Uses FARM_FINGERPRINT(GENERATE_UUID()) in place of RAND() for
+# emulator compatibility.
+#
 # Connection URL format:
 #   projects/PROJECT/instances/INSTANCE/databases/DATABASE
 #
@@ -187,14 +190,14 @@ seed:
       INSERT INTO item (i_id, i_im_id, i_name, i_price, i_data)
       SELECT
         $1 * $2 + s,
-        CAST(FLOOR(RAND() * 10000 + 1) AS INT64),
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 18 + 6) AS INT64)),
-        CAST(ROUND(RAND() * 99 + 1, 2) AS NUMERIC),
-        CASE WHEN RAND() < 0.1
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) + 1,
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 18) + 6),
+        CAST(ROUND(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 9900) / 100.0 + 1, 2) AS NUMERIC),
+        CASE WHEN MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) = 0
           THEN CONCAT('ORIGINAL', SUBSTR(GENERATE_UUID(), 1,
-            CAST(FLOOR(RAND() * 16 + 18) AS INT64)))
+            MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 16) + 18))
           ELSE SUBSTR(CONCAT(GENERATE_UUID(), GENERATE_UUID()), 1,
-            CAST(FLOOR(RAND() * 24 + 26) AS INT64))
+            MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 24) + 26)
         END
       FROM UNNEST(GENERATE_ARRAY(1, $2)) AS s
 
@@ -206,13 +209,13 @@ seed:
         w_state, w_zip, w_tax, w_ytd)
       SELECT
         s,
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 4 + 6) AS INT64)),
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 10 + 10) AS INT64)),
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 10 + 10) AS INT64)),
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 10 + 10) AS INT64)),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 4) + 6),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
         SUBSTR(GENERATE_UUID(), 1, 2),
-        CONCAT(LPAD(CAST(CAST(FLOOR(RAND() * 10000) AS INT64) AS STRING), 4, '0'), '11111'),
-        CAST(RAND() / 5 AS NUMERIC),
+        CONCAT(LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) AS STRING), 4, '0'), '11111'),
+        CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 100000) / 500000.0 AS NUMERIC),
         CAST(300000 AS NUMERIC)
       FROM UNNEST(GENERATE_ARRAY(1, $1)) AS s
 
@@ -225,13 +228,13 @@ seed:
         d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id)
       SELECT
         $1, d,
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 4 + 6) AS INT64)),
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 10 + 10) AS INT64)),
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 10 + 10) AS INT64)),
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 10 + 10) AS INT64)),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 4) + 6),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
         SUBSTR(GENERATE_UUID(), 1, 2),
-        CONCAT(LPAD(CAST(CAST(FLOOR(RAND() * 10000) AS INT64) AS STRING), 4, '0'), '11111'),
-        CAST(RAND() / 5 AS NUMERIC),
+        CONCAT(LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) AS STRING), 4, '0'), '11111'),
+        CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 100000) / 500000.0 AS NUMERIC),
         CAST(30000 AS NUMERIC),
         3001
       FROM UNNEST(GENERATE_ARRAY(1, $2)) AS d
@@ -258,34 +261,34 @@ seed:
           MOD($2 * $3 + s - 1, $4) + 1 AS c_id,
           CASE WHEN MOD($2 * $3 + s - 1, $4) < 1000
             THEN MOD($2 * $3 + s - 1, $4)
-            ELSE CAST(FLOOR(RAND() * 1000) AS INT64)
+            ELSE MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 1000)
           END AS ln
         FROM UNNEST(GENERATE_ARRAY(1, $3)) AS s
       )
       SELECT
         $1, g.d_id, g.c_id,
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 10 + 6) AS INT64)),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 6),
         'OE',
         CONCAT(
           (ARRAY<STRING>['BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'])[OFFSET(DIV(g.ln, 100))],
           (ARRAY<STRING>['BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'])[OFFSET(MOD(DIV(g.ln, 10), 10))],
           (ARRAY<STRING>['BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'])[OFFSET(MOD(g.ln, 10))]
         ),
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 10 + 10) AS INT64)),
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 10 + 10) AS INT64)),
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 10 + 10) AS INT64)),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
         SUBSTR(GENERATE_UUID(), 1, 2),
-        CONCAT(LPAD(CAST(CAST(FLOOR(RAND() * 10000) AS INT64) AS STRING), 4, '0'), '11111'),
+        CONCAT(LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) AS STRING), 4, '0'), '11111'),
         CONCAT(
-          LPAD(CAST(CAST(FLOOR(RAND() * 9999) AS INT64) AS STRING), 4, '0'),
-          LPAD(CAST(CAST(FLOOR(RAND() * 9999) AS INT64) AS STRING), 4, '0'),
-          LPAD(CAST(CAST(FLOOR(RAND() * 9999) AS INT64) AS STRING), 4, '0'),
-          LPAD(CAST(CAST(FLOOR(RAND() * 9999) AS INT64) AS STRING), 4, '0')
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 9999) AS STRING), 4, '0'),
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 9999) AS STRING), 4, '0'),
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 9999) AS STRING), 4, '0'),
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 9999) AS STRING), 4, '0')
         ),
         CURRENT_TIMESTAMP(),
-        CASE WHEN RAND() < 0.1 THEN 'BC' ELSE 'GC' END,
+        CASE WHEN MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) = 0 THEN 'BC' ELSE 'GC' END,
         CAST(50000 AS NUMERIC),
-        CAST(RAND() / 2 AS NUMERIC),
+        CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 100000) / 200000.0 AS NUMERIC),
         CAST(-10 AS NUMERIC),
         CAST(10 AS NUMERIC),
         1,
@@ -296,7 +299,7 @@ seed:
                  GENERATE_UUID(), GENERATE_UUID(), GENERATE_UUID(),
                  GENERATE_UUID(), GENERATE_UUID(), GENERATE_UUID(),
                  GENERATE_UUID(), GENERATE_UUID(), GENERATE_UUID()),
-          1, CAST(FLOOR(RAND() * 200 + 300) AS INT64)
+          1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 200) + 300
         )
       FROM gen g
 
@@ -319,7 +322,7 @@ seed:
         $1,
         CURRENT_TIMESTAMP(),
         CAST(10 AS NUMERIC),
-        SUBSTR(GENERATE_UUID(), 1, CAST(FLOOR(RAND() * 12 + 12) AS INT64))
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 12) + 12)
       FROM UNNEST(GENERATE_ARRAY(1, $3)) AS s
 
   # Orders: flattened district x order cross join, same as customer.
@@ -336,13 +339,13 @@ seed:
         $1,
         DIV($2 * $3 + s - 1, $4) + 1,
         MOD($2 * $3 + s - 1, $4) + 1,
-        CAST(FLOOR(RAND() * 3000 + 1) AS INT64),
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 3000) + 1,
         CURRENT_TIMESTAMP(),
         CASE WHEN MOD($2 * $3 + s - 1, $4) + 1 <= 2100
-          THEN CAST(FLOOR(RAND() * 10 + 1) AS INT64)
+          THEN MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 1
           ELSE NULL
         END,
-        CAST(FLOOR(RAND() * 11 + 5) AS INT64),
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 11) + 5,
         1
       FROM UNNEST(GENERATE_ARRAY(1, $3)) AS s
 
@@ -374,12 +377,12 @@ seed:
       SELECT
         o.o_w_id, o.o_d_id, o.o_id,
         n,
-        CAST(FLOOR(RAND() * 100000 + 1) AS INT64),
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 100000) + 1,
         o.o_w_id,
         CASE WHEN o.o_id <= 2100 THEN o.o_entry_d ELSE NULL END,
         5,
         CASE WHEN o.o_id <= 2100 THEN CAST(0 AS NUMERIC)
-             ELSE CAST(RAND() * 9999 AS NUMERIC)
+             ELSE CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 999900) / 100.0 AS NUMERIC)
         END,
         SUBSTR(GENERATE_UUID(), 1, 24)
       FROM oorder o
@@ -402,7 +405,7 @@ seed:
         s_ytd, s_order_cnt, s_remote_cnt, s_data)
       SELECT
         $1, $2 * $3 + s,
-        CAST(FLOOR(RAND() * 91 + 10) AS INT64),
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 91) + 10,
         SUBSTR(GENERATE_UUID(), 1, 24),
         SUBSTR(GENERATE_UUID(), 1, 24),
         SUBSTR(GENERATE_UUID(), 1, 24),
@@ -414,11 +417,11 @@ seed:
         SUBSTR(GENERATE_UUID(), 1, 24),
         SUBSTR(GENERATE_UUID(), 1, 24),
         0, 0, 0,
-        CASE WHEN RAND() < 0.1
+        CASE WHEN MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) = 0
           THEN CONCAT('ORIGINAL', SUBSTR(GENERATE_UUID(), 1,
-            CAST(FLOOR(RAND() * 16 + 18) AS INT64)))
+            MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 16) + 18))
           ELSE SUBSTR(CONCAT(GENERATE_UUID(), GENERATE_UUID()), 1,
-            CAST(FLOOR(RAND() * 24 + 26) AS INT64))
+            MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 24) + 26)
         END
       FROM UNNEST(GENERATE_ARRAY(1, $3)) AS s
 
