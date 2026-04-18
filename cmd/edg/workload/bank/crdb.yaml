@@ -1,0 +1,106 @@
+globals:
+  customers: 100000
+  initial_balance: 10000
+  batch_size: 10000
+
+up:
+
+  - name: create_customer
+    query: |-
+      CREATE TABLE IF NOT EXISTS customer (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email STRING NOT NULL
+      )
+
+  - name: create_account
+    query: |-
+      CREATE TABLE IF NOT EXISTS account (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        balance FLOAT NOT NULL,
+        customer_id UUID NOT NULL REFERENCES customer(id)
+      )
+
+seed:
+
+  - name: populate_customer
+    args:
+      - gen_batch(customers, batch_size, 'email')
+    query: |-
+      INSERT INTO customer (email)
+      SELECT unnest(string_to_array('$1', sep))
+
+  - name: populate_account
+    args:
+      - batch(customers / batch_size)
+      - initial_balance
+      - batch_size
+    query: |-
+      INSERT INTO account (balance, customer_id)
+      SELECT $2::FLOAT, c.id
+      FROM customer c
+      ORDER BY c.id
+      OFFSET $1::INT * $3::INT
+      LIMIT $3::INT
+
+deseed:
+
+  - name: truncate_account
+    type: exec
+    query: TRUNCATE TABLE account CASCADE
+
+  - name: truncate_customer
+    type: exec 
+    query: TRUNCATE TABLE customer CASCADE
+
+down:
+
+  - name: drop_account
+    type: exec
+    query: DROP TABLE IF EXISTS account
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer
+
+init:
+
+  - name: fetch_accounts
+    type: query
+    query: SELECT id FROM account ORDER BY random()
+
+run_weights:
+  check_balance: 50
+  credit_account: 5
+  make_transfer: 45
+
+run:
+
+  - name: check_balance
+    type: query
+    args:
+      - ref_rand('fetch_accounts').id
+    query: |-
+      SELECT balance FROM account WHERE id = $1::UUID
+
+  - name: credit_account
+    type: exec
+    args:
+      - ref_rand('fetch_accounts').id
+      - gen('number:1,1000')
+    query: |-
+      UPDATE account SET balance = balance + $2::FLOAT
+      WHERE id = $1::UUID
+
+  - name: make_transfer
+    type: exec
+    args:
+      - ref_diff('fetch_accounts').id
+      - ref_diff('fetch_accounts').id
+      - gen('number:1,100')
+    query: |-
+      UPDATE account SET
+        balance = CASE
+                    WHEN id = $2::UUID THEN balance + $3::FLOAT
+                    WHEN id = $1::UUID THEN balance - $3::FLOAT
+                  END
+      WHERE id IN ($1::UUID, $2::UUID)

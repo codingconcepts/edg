@@ -1,0 +1,674 @@
+# TPC-C Benchmark Workload for SQL Server
+# ========================================
+# To configure the number of warehouses, change the "warehouses"
+# value in the globals section. All other tables scale automatically
+# based on the warehouse count.
+#
+# Requires SQL Server 2016+.
+# For large datasets, increase the default max recursion:
+#   OPTION (MAXRECURSION 0)  -- appended to seed queries as needed
+#
+# SQL Server does not support writable CTEs (DML inside WITH clauses),
+# so the run-section transactions are simplified to their primary
+# operation. For full TPC-C compliance, use stored procedures.
+#
+# Known deviations from TPC-C spec:
+#   - Transactions simplified to single-statement operations
+#   - New-Order does not update stock or insert order lines atomically
+#   - Payment does not update warehouse/district YTD atomically
+#   - Delivery is simplified to process one district at a time
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#
+# Framework notes: Batch-inlined queries (ref_each in seed section)
+# use $1, $2 for string substitution by the framework before sending
+# to the database. Run-section queries use @p1, @p2 (SQL Server bind
+# syntax) since they pass args via database/sql positional parameters.
+
+globals:
+  warehouses: 1    # W
+  districts: 10    # W * 10
+  customers: 30000 # W * 10 * 3000
+  orders: 30000    # W * 10 * 3000
+  stock: 100000    # W * 100,000
+  items: 100000    # 100,000
+
+up:
+
+  - name: create_warehouse
+    query: |-
+      IF OBJECT_ID('warehouse', 'U') IS NULL
+      CREATE TABLE warehouse (
+        w_id INT NOT NULL,
+        w_name NVARCHAR(10) NOT NULL,
+        w_street_1 NVARCHAR(20) NOT NULL,
+        w_street_2 NVARCHAR(20) NOT NULL,
+        w_city NVARCHAR(20) NOT NULL,
+        w_state CHAR(2) NOT NULL,
+        w_zip CHAR(9) NOT NULL,
+        w_tax DECIMAL(4,4) NOT NULL,
+        w_ytd DECIMAL(12,2) NOT NULL,
+        PRIMARY KEY (w_id)
+      )
+
+  - name: create_district
+    query: |-
+      IF OBJECT_ID('district', 'U') IS NULL
+      CREATE TABLE district (
+        d_w_id INT NOT NULL,
+        d_id INT NOT NULL,
+        d_name NVARCHAR(10) NOT NULL,
+        d_street_1 NVARCHAR(20) NOT NULL,
+        d_street_2 NVARCHAR(20) NOT NULL,
+        d_city NVARCHAR(20) NOT NULL,
+        d_state CHAR(2) NOT NULL,
+        d_zip CHAR(9) NOT NULL,
+        d_tax DECIMAL(4,4) NOT NULL,
+        d_ytd DECIMAL(12,2) NOT NULL,
+        d_next_o_id INT NOT NULL,
+        PRIMARY KEY (d_w_id, d_id)
+      )
+
+  - name: create_customer
+    query: |-
+      IF OBJECT_ID('customer', 'U') IS NULL
+      CREATE TABLE customer (
+        c_w_id INT NOT NULL,
+        c_d_id INT NOT NULL,
+        c_id INT NOT NULL,
+        c_first NVARCHAR(16) NOT NULL,
+        c_middle CHAR(2) NOT NULL,
+        c_last NVARCHAR(16) NOT NULL,
+        c_street_1 NVARCHAR(20) NOT NULL,
+        c_street_2 NVARCHAR(20) NOT NULL,
+        c_city NVARCHAR(20) NOT NULL,
+        c_state CHAR(2) NOT NULL,
+        c_zip CHAR(9) NOT NULL,
+        c_phone CHAR(16) NOT NULL,
+        c_since DATETIME2 NOT NULL,
+        c_credit CHAR(2) NOT NULL,
+        c_credit_lim DECIMAL(12,2) NOT NULL,
+        c_discount DECIMAL(4,4) NOT NULL,
+        c_balance DECIMAL(12,2) NOT NULL,
+        c_ytd_payment DECIMAL(12,2) NOT NULL,
+        c_payment_cnt INT NOT NULL,
+        c_delivery_cnt INT NOT NULL,
+        c_data NVARCHAR(500) NOT NULL,
+        PRIMARY KEY (c_w_id, c_d_id, c_id)
+      )
+
+  - name: create_history
+    query: |-
+      IF OBJECT_ID('history', 'U') IS NULL
+      CREATE TABLE history (
+        h_id UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID(),
+        h_c_id INT NOT NULL,
+        h_c_d_id INT NOT NULL,
+        h_c_w_id INT NOT NULL,
+        h_d_id INT NOT NULL,
+        h_w_id INT NOT NULL,
+        h_date DATETIME2 NOT NULL,
+        h_amount DECIMAL(6,2) NOT NULL,
+        h_data NVARCHAR(24) NOT NULL,
+        PRIMARY KEY (h_id)
+      )
+
+  - name: create_oorder
+    query: |-
+      IF OBJECT_ID('oorder', 'U') IS NULL
+      CREATE TABLE oorder (
+        o_w_id INT NOT NULL,
+        o_d_id INT NOT NULL,
+        o_id INT NOT NULL,
+        o_c_id INT NOT NULL,
+        o_entry_d DATETIME2 NOT NULL,
+        o_carrier_id INT,
+        o_ol_cnt INT NOT NULL,
+        o_all_local INT NOT NULL,
+        PRIMARY KEY (o_w_id, o_d_id, o_id)
+      )
+
+  - name: create_new_order
+    query: |-
+      IF OBJECT_ID('new_order', 'U') IS NULL
+      CREATE TABLE new_order (
+        no_w_id INT NOT NULL,
+        no_d_id INT NOT NULL,
+        no_o_id INT NOT NULL,
+        PRIMARY KEY (no_w_id, no_d_id, no_o_id)
+      )
+
+  - name: create_order_line
+    query: |-
+      IF OBJECT_ID('order_line', 'U') IS NULL
+      CREATE TABLE order_line (
+        ol_w_id INT NOT NULL,
+        ol_d_id INT NOT NULL,
+        ol_o_id INT NOT NULL,
+        ol_number INT NOT NULL,
+        ol_i_id INT NOT NULL,
+        ol_supply_w_id INT NOT NULL,
+        ol_delivery_d DATETIME2 NULL,
+        ol_quantity INT NOT NULL,
+        ol_amount DECIMAL(6,2) NOT NULL,
+        ol_dist_info CHAR(24) NOT NULL,
+        PRIMARY KEY (ol_w_id, ol_d_id, ol_o_id, ol_number)
+      )
+
+  - name: create_item
+    query: |-
+      IF OBJECT_ID('item', 'U') IS NULL
+      CREATE TABLE item (
+        i_id INT NOT NULL,
+        i_im_id INT NOT NULL,
+        i_name NVARCHAR(24) NOT NULL,
+        i_price DECIMAL(5,2) NOT NULL,
+        i_data NVARCHAR(50) NOT NULL,
+        PRIMARY KEY (i_id)
+      )
+
+  - name: create_stock
+    query: |-
+      IF OBJECT_ID('stock', 'U') IS NULL
+      CREATE TABLE stock (
+        s_w_id INT NOT NULL,
+        s_i_id INT NOT NULL,
+        s_quantity INT NOT NULL,
+        s_dist_01 CHAR(24) NOT NULL,
+        s_dist_02 CHAR(24) NOT NULL,
+        s_dist_03 CHAR(24) NOT NULL,
+        s_dist_04 CHAR(24) NOT NULL,
+        s_dist_05 CHAR(24) NOT NULL,
+        s_dist_06 CHAR(24) NOT NULL,
+        s_dist_07 CHAR(24) NOT NULL,
+        s_dist_08 CHAR(24) NOT NULL,
+        s_dist_09 CHAR(24) NOT NULL,
+        s_dist_10 CHAR(24) NOT NULL,
+        s_ytd INT NOT NULL,
+        s_order_cnt INT NOT NULL,
+        s_remote_cnt INT NOT NULL,
+        s_data NVARCHAR(50) NOT NULL,
+        PRIMARY KEY (s_w_id, s_i_id)
+      )
+
+  - name: create_idx_customer_name
+    query: |-
+      CREATE INDEX idx_customer_name
+      ON customer (c_w_id, c_d_id, c_last, c_first)
+
+  - name: create_idx_oorder_customer
+    query: |-
+      CREATE INDEX idx_oorder_customer
+      ON oorder (o_w_id, o_d_id, o_c_id, o_id DESC)
+
+seed:
+
+  - name: populate_item
+    args:
+      - items
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
+      INSERT INTO item (i_id, i_im_id, i_name, i_price, i_data)
+      SELECT
+        s,
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000 + 1) AS INT),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 18 + 6) AS INT)),
+        CAST(RAND(CHECKSUM(NEWID())) * 99 + 1 AS DECIMAL(5,2)),
+        CASE WHEN RAND(CHECKSUM(NEWID())) < 0.1
+          THEN CONCAT('ORIGINAL', SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+            CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 16 + 18) AS INT)))
+          ELSE SUBSTRING(CONCAT(
+            REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''),
+            REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', '')), 1,
+            CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 24 + 26) AS INT))
+        END
+      FROM seq
+      OPTION (MAXRECURSION 0)
+
+  - name: populate_warehouse
+    args:
+      - warehouses
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS s
+        UNION ALL
+        SELECT s + 1 FROM seq WHERE s < $1
+      )
+      INSERT INTO warehouse (w_id, w_name, w_street_1, w_street_2, w_city,
+        w_state, w_zip, w_tax, w_ytd)
+      SELECT
+        s,
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 4 + 6) AS INT)),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 2),
+        CONCAT(RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS INT) AS NVARCHAR), 4), '11111'),
+        RAND(CHECKSUM(NEWID())) / 5,
+        300000
+      FROM seq
+      OPTION (MAXRECURSION 0)
+
+  - name: populate_district
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - districts
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS d
+        UNION ALL
+        SELECT d + 1 FROM seq WHERE d < $2
+      )
+      INSERT INTO district (d_w_id, d_id, d_name, d_street_1, d_street_2,
+        d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id)
+      SELECT
+        $1, d,
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 4 + 6) AS INT)),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 2),
+        CONCAT(RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS INT) AS NVARCHAR), 4), '11111'),
+        RAND(CHECKSUM(NEWID())) / 5,
+        30000,
+        3001
+      FROM seq
+      OPTION (MAXRECURSION 0)
+
+  - name: populate_customer
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - districts
+      - customers / districts
+    query: |-
+      WITH d_seq AS (
+        SELECT 1 AS d
+        UNION ALL
+        SELECT d + 1 FROM d_seq WHERE d < $2
+      ),
+      c_seq AS (
+        SELECT 1 AS c
+        UNION ALL
+        SELECT c + 1 FROM c_seq WHERE c < $3
+      )
+      INSERT INTO customer (c_w_id, c_d_id, c_id, c_first, c_middle, c_last,
+        c_street_1, c_street_2, c_city, c_state, c_zip, c_phone,
+        c_since, c_credit, c_credit_lim, c_discount, c_balance,
+        c_ytd_payment, c_payment_cnt, c_delivery_cnt, c_data)
+      SELECT
+        $1, d, c,
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 6) AS INT)),
+        'OE',
+        CONCAT(
+          CHOOSE(CAST(FLOOR(CASE WHEN c <= 1000 THEN c - 1 ELSE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) END / 100) AS INT) + 1,
+            'BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'),
+          CHOOSE(CAST(FLOOR(CASE WHEN c <= 1000 THEN c - 1 ELSE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) END / 10) AS INT) % 10 + 1,
+            'BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'),
+          CHOOSE(CAST(CASE WHEN c <= 1000 THEN c - 1 ELSE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) END % 10 AS INT) + 1,
+            'BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING')
+        ),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 2),
+        CONCAT(RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS INT) AS NVARCHAR), 4), '11111'),
+        CONCAT(
+          RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 9999) AS INT) AS NVARCHAR), 4),
+          RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 9999) AS INT) AS NVARCHAR), 4),
+          RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 9999) AS INT) AS NVARCHAR), 4),
+          RIGHT(REPLICATE('0', 4) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 9999) AS INT) AS NVARCHAR), 4)
+        ),
+        GETDATE(),
+        CASE WHEN RAND(CHECKSUM(NEWID())) < 0.1 THEN 'BC' ELSE 'GC' END,
+        50000,
+        RAND(CHECKSUM(NEWID())) / 2,
+        -10,
+        10,
+        1,
+        0,
+        SUBSTRING(REPLICATE(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 16), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 200 + 300) AS INT))
+      FROM d_seq
+      CROSS JOIN c_seq
+      OPTION (MAXRECURSION 0)
+
+  - name: populate_history
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+    query: |-
+      INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id,
+        h_date, h_amount, h_data)
+      SELECT
+        c.c_id, c.c_d_id, c.c_w_id,
+        c.c_d_id, c.c_w_id,
+        GETDATE(),
+        10,
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+          CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 12 + 12) AS INT))
+      FROM customer c
+      WHERE c.c_w_id = $1
+
+  - name: populate_oorder
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - districts
+      - orders / districts
+    query: |-
+      WITH d_seq AS (
+        SELECT 1 AS d
+        UNION ALL
+        SELECT d + 1 FROM d_seq WHERE d < $2
+      ),
+      o_seq AS (
+        SELECT 1 AS o
+        UNION ALL
+        SELECT o + 1 FROM o_seq WHERE o < $3
+      )
+      INSERT INTO oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
+        o_carrier_id, o_ol_cnt, o_all_local)
+      SELECT
+        $1, d, o,
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 3000 + 1) AS INT),
+        GETDATE(),
+        CASE WHEN o <= 2100 THEN CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 1) AS INT) ELSE NULL END,
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 11 + 5) AS INT),
+        1
+      FROM d_seq
+      CROSS JOIN o_seq
+      OPTION (MAXRECURSION 0)
+
+  - name: populate_new_order
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - districts
+      - orders / districts
+    query: |-
+      WITH d_seq AS (
+        SELECT 1 AS d
+        UNION ALL
+        SELECT d + 1 FROM d_seq WHERE d < $2
+      ),
+      o_seq AS (
+        SELECT 2101 AS o
+        UNION ALL
+        SELECT o + 1 FROM o_seq WHERE o < $3
+      )
+      INSERT INTO new_order (no_w_id, no_d_id, no_o_id)
+      SELECT $1, d, o
+      FROM d_seq
+      CROSS JOIN o_seq
+      OPTION (MAXRECURSION 0)
+
+  - name: populate_order_line
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+    query: |-
+      WITH n_seq AS (
+        SELECT 1 AS n
+        UNION ALL
+        SELECT n + 1 FROM n_seq WHERE n < 15
+      )
+      INSERT INTO order_line (ol_w_id, ol_d_id, ol_o_id, ol_number,
+        ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount,
+        ol_dist_info)
+      SELECT
+        o.o_w_id, o.o_d_id, o.o_id,
+        n,
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 100000 + 1) AS INT),
+        o.o_w_id,
+        CASE WHEN o.o_id <= 2100 THEN o.o_entry_d ELSE NULL END,
+        5,
+        CASE WHEN o.o_id <= 2100 THEN 0 ELSE RAND(CHECKSUM(NEWID())) * 9999 END,
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24)
+      FROM oorder o
+      JOIN n_seq ON n <= o.o_ol_cnt
+      WHERE o.o_w_id = $1
+
+  - name: populate_stock
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - stock
+    query: |-
+      WITH seq AS (
+        SELECT 1 AS i
+        UNION ALL
+        SELECT i + 1 FROM seq WHERE i < $2
+      )
+      INSERT INTO stock (s_w_id, s_i_id, s_quantity,
+        s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05,
+        s_dist_06, s_dist_07, s_dist_08, s_dist_09, s_dist_10,
+        s_ytd, s_order_cnt, s_remote_cnt, s_data)
+      SELECT
+        $1, i,
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 91 + 10) AS INT),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24),
+        SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1, 24),
+        0, 0, 0,
+        CASE WHEN RAND(CHECKSUM(NEWID())) < 0.1
+          THEN CONCAT('ORIGINAL', SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
+            CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 16 + 18) AS INT)))
+          ELSE SUBSTRING(CONCAT(
+            REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''),
+            REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', '')), 1,
+            CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 24 + 26) AS INT))
+        END
+      FROM seq
+      OPTION (MAXRECURSION 0)
+
+deseed:
+  - name: truncate_order_line
+    type: exec
+    query: DELETE FROM order_line
+
+  - name: truncate_new_order
+    type: exec
+    query: DELETE FROM new_order
+
+  - name: truncate_oorder
+    type: exec
+    query: DELETE FROM oorder
+
+  - name: truncate_history
+    type: exec
+    query: DELETE FROM history
+
+  - name: truncate_stock
+    type: exec
+    query: DELETE FROM stock
+
+  - name: truncate_customer
+    type: exec
+    query: DELETE FROM customer
+
+  - name: truncate_district
+    type: exec
+    query: DELETE FROM district
+
+  - name: truncate_warehouse
+    type: exec
+    query: DELETE FROM warehouse
+
+  - name: truncate_item
+    type: exec
+    query: DELETE FROM item
+
+down:
+  - name: drop_order_line
+    type: exec
+    query: DROP TABLE IF EXISTS order_line
+
+  - name: drop_new_order
+    type: exec
+    query: DROP TABLE IF EXISTS new_order
+
+  - name: drop_oorder
+    type: exec
+    query: DROP TABLE IF EXISTS oorder
+
+  - name: drop_history
+    type: exec
+    query: DROP TABLE IF EXISTS history
+
+  - name: drop_stock
+    type: exec
+    query: DROP TABLE IF EXISTS stock
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer
+
+  - name: drop_district
+    type: exec
+    query: DROP TABLE IF EXISTS district
+
+  - name: drop_warehouse
+    type: exec
+    query: DROP TABLE IF EXISTS warehouse
+
+  - name: drop_item
+    type: exec
+    query: DROP TABLE IF EXISTS item
+
+init:
+  - name: fetch_warehouses
+    type: query
+    query: SELECT w_id FROM warehouse
+
+run_weights:
+  new_order: 45
+  payment: 43
+  order_status: 4
+  delivery: 4
+  stock_level: 4
+
+run:
+
+  # New-Order transaction (TPC-C 2.4) - Simplified
+  # Inserts the order entry. Stock update and order lines require
+  # writable CTEs or stored procedures for atomicity.
+  # Uses params subquery to avoid repeating positional @pN params.
+  - name: new_order
+    type: exec
+    wait: 18s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+      - gen('number:5,15')
+    query: |-
+      INSERT INTO oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
+        o_ol_cnt, o_all_local)
+      SELECT p.w_id, p.d_id, d.d_next_o_id, p.c_id, GETDATE(), p.ol_cnt, 1
+      FROM (SELECT @p1 AS w_id, @p2 AS d_id, @p3 AS c_id, @p4 AS ol_cnt) p
+      JOIN district d ON d.d_w_id = p.w_id AND d.d_id = p.d_id
+
+  # Payment transaction (TPC-C 2.5) - Simplified
+  # Updates customer balance. Uses params subquery so amount
+  # is referenced once but used in two SET expressions.
+  - name: payment
+    type: exec
+    wait: 3s
+    args:
+      - gen('number:100,500000')
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+    query: |-
+      UPDATE c
+      SET
+        c.c_balance = c.c_balance - p.amount / 100,
+        c.c_ytd_payment = c.c_ytd_payment + p.amount / 100,
+        c.c_payment_cnt = c.c_payment_cnt + 1
+      FROM customer c
+      JOIN (SELECT @p1 AS amount, @p2 AS w_id, @p3 AS d_id, @p4 AS c_id) p ON 1=1
+      WHERE c.c_w_id = p.w_id AND c.c_d_id = p.d_id AND c.c_id = p.c_id
+
+  # Order-Status transaction (TPC-C 2.6) - Read-only
+  # Looks up the latest order and its order lines for a customer.
+  # Uses params subquery so w_id can be referenced in correlated subquery.
+  - name: order_status
+    type: query
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+    query: |-
+      SELECT o.o_id, o.o_entry_d, o.o_carrier_id,
+        ol.ol_i_id, ol.ol_supply_w_id, ol.ol_quantity,
+        ol.ol_amount, ol.ol_delivery_d
+      FROM (SELECT @p1 AS w_id, @p2 AS d_id, @p3 AS c_id) p
+      JOIN oorder o
+        ON o.o_w_id = p.w_id AND o.o_d_id = p.d_id AND o.o_c_id = p.c_id
+      JOIN order_line ol
+        ON ol.ol_w_id = o.o_w_id AND ol.ol_d_id = o.o_d_id
+        AND ol.ol_o_id = o.o_id
+      WHERE o.o_id = (
+          SELECT MAX(o2.o_id) FROM oorder o2
+          WHERE o2.o_w_id = p.w_id AND o2.o_d_id = p.d_id
+            AND o2.o_c_id = p.c_id
+        )
+
+  # Delivery transaction (TPC-C 2.7) - Simplified
+  # Deletes the oldest new_order for a single district.
+  # Uses params subquery so w_id and d_id can be reused.
+  - name: delivery
+    type: exec
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+    query: |-
+      DELETE n FROM new_order n
+      JOIN (SELECT @p1 AS w_id, @p2 AS d_id) p ON 1=1
+      WHERE n.no_w_id = p.w_id AND n.no_d_id = p.d_id
+        AND n.no_o_id = (
+          SELECT MIN(no_o_id) FROM new_order
+          WHERE no_w_id = p.w_id AND no_d_id = p.d_id
+        )
+
+  # Stock-Level transaction (TPC-C 2.8) - Read-only
+  # Counts recently-ordered items with stock below threshold.
+  - name: stock_level
+    type: query
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:10,20')
+    query: |-
+      SELECT COUNT(DISTINCT s.s_i_id) AS low_stock
+      FROM district d
+      JOIN order_line ol
+        ON ol.ol_w_id = d.d_w_id AND ol.ol_d_id = d.d_id
+        AND ol.ol_o_id BETWEEN d.d_next_o_id - 20 AND d.d_next_o_id - 1
+      JOIN stock s
+        ON s.s_i_id = ol.ol_i_id AND s.s_w_id = d.d_w_id
+      WHERE d.d_w_id = @p1 AND d.d_id = @p2
+        AND s.s_quantity < @p3

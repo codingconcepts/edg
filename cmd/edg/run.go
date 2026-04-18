@@ -4,50 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
-	"os"
-	"os/signal"
 	"sync"
 	"time"
 
 	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/codingconcepts/edg/pkg/env"
-	"github.com/spf13/cobra"
 )
-
-func runCmd() *cobra.Command {
-	var (
-		duration      time.Duration
-		workers       int
-		printInterval time.Duration
-	)
-
-	cmd := &cobra.Command{
-		Use:   "run",
-		Short: "Run the benchmark workload",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			db, req, err := connect()
-			if err != nil {
-				return err
-			}
-			defer db.Close()
-
-			if cmd.Flags().Changed("duration") {
-				req.Stages = nil
-			}
-
-			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
-			defer cancel()
-
-			return run(ctx, cancel, db, req, duration, workers, printInterval)
-		},
-	}
-
-	cmd.Flags().DurationVarP(&duration, "duration", "d", time.Minute, "benchmark duration")
-	cmd.Flags().IntVarP(&workers, "workers", "w", 1, "number of concurrent workers")
-	cmd.Flags().DurationVar(&printInterval, "print-interval", time.Second, "progress reporting interval")
-
-	return cmd
-}
 
 func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config.Request, duration time.Duration, workers int, printInterval time.Duration) error {
 	var stats map[string]*queryStats

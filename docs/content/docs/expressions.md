@@ -64,6 +64,7 @@ These are edg's built-in functions, available in any expression context (`args:`
 | `ref_same(name)` | `map` | Returns a random row, but the same row is reused across all `ref_same` calls within a single query execution. Cleared between iterations.<br><br>`ref_same('products').name` -> `Widget` |
 | `regex(pattern)` | `string` | Generates a random string matching the given regular expression.<br><br>`regex('[A-Z]{3}-[0-9]{4}')` -> `ABK-7291` |
 | `seq(start, step)` | `int` | Auto-incrementing sequence per worker. Returns `start + counter * step`.<br><br>`seq(1, 1)` -> `1` |
+| `sep` | `string` | Driver-aware batch field separator. Emits the SQL function that produces the ASCII unit separator character (char 31) used to delimit values within batch-expanded placeholders. Resolves to `chr(31)` for pgx and Oracle, `CHAR(31)` for MySQL and MSSQL. Typically used inside `string_to_array` to split a batch arg back into rows. **Always use `sep` instead of a literal comma — generated values may contain commas, which would silently corrupt your data.**<br><br>`string_to_array('$1', sep)` |
 | `set_exp(values, rate)` | `any` | Picks an item from a set using exponential distribution.<br><br>`set_exp(['low', 'med', 'high'], 0.5)` -> `low` |
 | `set_lognorm(values, mu, sigma)` | `any` | Picks an item from a set using log-normal distribution.<br><br>`set_lognorm(['free', 'basic', 'pro'], 0.5, 0.5)` -> `free` |
 | `set_norm(values, mean, stddev)` | `any` | Picks an item from a set using normal distribution.<br><br>`set_norm([1, 2, 3, 4, 5], 2, 0.8)` -> `3` |
@@ -358,6 +359,10 @@ These expressions are used in the `args:` list of a `run` query. Each entry in `
 |---|---|
 | `batch(customers / batch_size)` | Drives batched execution: the parent query runs N times with $1 = 0..N-1 |
 | `gen_batch(customers, batch_size, 'email')` | Generates unique emails via gofakeit, split into batches |
+| `string_to_array('$1', sep)` | Splits a batch-expanded placeholder back into rows using the driver-aware separator |
+
+> [!NOTE]
+> Always use `sep` instead of a literal comma delimiter when splitting batch args. Generated values (names, addresses, etc.) can contain commas, which would silently split a single value into multiple rows and corrupt your data. `sep` uses the ASCII unit separator (char 31), which never appears in generated text.
 
 ### Binary
 

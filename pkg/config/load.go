@@ -39,3 +39,18 @@ func LoadConfig(path string) (*Request, error) {
 
 	return &req, nil
 }
+
+// ParseConfig unmarshals a YAML config from raw bytes.
+func ParseConfig(data []byte) (*Request, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parsing config: %w", err)
+	}
+
+	var req Request
+	if err := doc.Decode(&req); err != nil {
+		return nil, fmt.Errorf("decoding config: %w", err)
+	}
+
+	return &req, nil
+}

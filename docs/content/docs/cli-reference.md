@@ -18,6 +18,7 @@ weight: 3
 | `all` | Run up, seed, run, deseed, and down in sequence |
 | `init` | Generate a starter config from an existing database schema |
 | `repl` | Interactive expression evaluator |
+| `workload <name> <command>` | Run a built-in workload (bank, tpcc, ycsb) without a config file |
 | `validate config` | Validate a config file without connecting to a database |
 | `validate license` | Validate a license key and print its details |
 
@@ -80,6 +81,53 @@ edg all \
 -d 5m
 ```
 
+### Workload
+
+The `workload` command runs a built-in workload without needing a config file. Three industry-standard benchmarks are embedded in the binary: **bank**, **tpcc**, and **ycsb**. Each workload supports all six lifecycle commands (`up`, `seed`, `run`, `deseed`, `down`, `all`) and selects the correct config for the `--driver` automatically.
+
+| Workload | Description |
+|---|---|
+| `bank` | Bank account operations for contention and correctness testing |
+| `tpcc` | Full TPC-C benchmark with all 5 transaction profiles |
+| `ycsb` | Yahoo! Cloud Serving Benchmark with configurable workload profiles |
+
+| Driver | Config used |
+|---|---|
+| `pgx`, `dsql` | CockroachDB/PostgreSQL variant |
+| `mysql` | MySQL variant |
+| `oracle` | Oracle variant |
+| `mssql` | SQL Server variant |
+
+```sh
+# Create the bank schema
+edg workload bank up \
+--driver pgx \
+--url "postgres://root@localhost:26257?sslmode=disable"
+
+# Seed and run in one step
+edg workload bank all \
+--driver pgx \
+--url "postgres://root@localhost:26257?sslmode=disable" \
+-w 10 \
+-d 5m
+
+# Run TPC-C against MySQL
+edg workload tpcc all \
+--driver mysql \
+--url "root:password@tcp(localhost:3306)/tpcc?parseTime=true" \
+-w 50 \
+-d 10m
+
+# Run YCSB against MSSQL
+edg workload ycsb all \
+--driver mssql \
+--url "sqlserver://sa:P4ssw0rd@localhost:1433?database=ycsb&encrypt=disable" \
+-w 20 \
+-d 5m
+```
+
+The `--config` flag is not required (and ignored) for workload commands. All other flags (`--duration`, `--workers`, `--print-interval`, `--rng-seed`, `--license`) work as normal.
+
 ### Init
 
 The `init` command connects to an existing database, inspects its schema, and prints a complete config to stdout. The output includes `globals`, `up`, `seed`, `deseed`, and `down` sections ready to use with the other commands.
@@ -106,9 +154,8 @@ The generated config:
 - **`down`** `DROP TABLE` in reverse dependency order.
 - Tables are topologically sorted so parent tables are created before children.
 
-{{% hint warning %}}
-The output is a starting point. You'll typically want to refine the seed expressions to produce more realistic data, add a `run` section, and adjust `globals.rows`.
-{{% /hint %}}
+> [!WARNING]
+> The output is a starting point. You'll typically want to refine the seed expressions to produce more realistic data, add a `run` section, and adjust `globals.rows`.
 
 #### Examples by driver
 

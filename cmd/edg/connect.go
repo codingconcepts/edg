@@ -23,26 +23,38 @@ import (
 var publicKeyB64 string
 
 func connect() (*sql.DB, *config.Request, error) {
-	url := flagURL
-	if url == "" {
-		url = os.Getenv("URL")
-	}
-	if url == "" {
-		return nil, nil, fmt.Errorf("--url flag or URL env var required")
-	}
-
 	req, err := config.LoadConfig(configFile)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	db, err := connectDB()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return db, req, nil
+}
+
+func connectDB() (*sql.DB, error) {
+	url := flagURL
+	if url == "" {
+		url = os.Getenv("URL")
+	}
+	if url == "" {
+		return nil, fmt.Errorf("--url flag or URL env var required")
+	}
+
 	if license.IsEnterprise(flagDriver) {
 		if err := checkLicense(flagDriver); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
-	var db *sql.DB
+	var (
+		db  *sql.DB
+		err error
+	)
 	switch flagDriver {
 	case "dsql":
 		db, err = connectDSQL(context.Background(), url)
@@ -52,15 +64,15 @@ func connect() (*sql.DB, *config.Request, error) {
 		db, err = sql.Open(flagDriver, url)
 	}
 	if err != nil {
-		return nil, nil, fmt.Errorf("opening database: %w", err)
+		return nil, fmt.Errorf("opening database: %w", err)
 	}
 
 	if err := db.Ping(); err != nil {
 		db.Close()
-		return nil, nil, fmt.Errorf("connecting to database: %w", err)
+		return nil, fmt.Errorf("connecting to database: %w", err)
 	}
 
-	return db, req, nil
+	return db, nil
 }
 
 func checkLicense(driver string) error {

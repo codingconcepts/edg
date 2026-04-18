@@ -207,6 +207,16 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		}
 	}
 
+	// Replace the sep token in query text with the driver-specific SQL
+	// function (chr(31) for pgx/dsql, CHAR(31) for mysql/mssql) so it
+	// can be used directly in SQL without being an expression arg.
+	sepSQL := string(env.sep())
+	for _, queries := range allQueries {
+		for _, query := range queries {
+			query.Query = strings.ReplaceAll(query.Query, ", sep)", ", "+sepSQL+")")
+		}
+	}
+
 	for _, group := range []struct {
 		name    string
 		queries []*config.Query

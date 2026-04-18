@@ -1,0 +1,917 @@
+# TPC-C Benchmark Workload (Oracle)
+# ==================================
+# Oracle adaptation of the TPC-C workload.
+#
+# Requirements:
+#   - Oracle 12c or later (uses CROSS APPLY, FETCH FIRST)
+#   - Go driver: godror (github.com/godror/godror)
+#   - Run with: --driver godror
+#
+# Framework notes:
+#   - Batch-inlined queries (ref_each in up section) use $1, $2 for
+#     string substitution by the framework. The framework's placeholder
+#     format in env.go must match: change "$%d" to ":%d" for Oracle,
+#     or keep $N for inlined-only queries (values are substituted before
+#     the SQL reaches the driver).
+#   - Run-section queries use :1, :2 (Oracle bind syntax) since they
+#     pass args via database/sql positional parameters.
+#
+# To configure the number of warehouses, change the "warehouses"
+# value in the globals section. All other tables scale automatically
+# based on the warehouse count.
+#
+# Data cardinalities per TPC-C spec (rev 5.11):
+#   item:       100,000 (fixed)
+#   warehouse:  W (configurable)
+#   district:   10 x W
+#   customer:   3,000 x 10 x W
+#   history:    1 per customer (initial)
+#   oorder:     3,000 x 10 x W
+#   new_order:  900 x 10 x W (orders 2101-3000)
+#   order_line: ~10 x 3,000 x 10 x W (5-15 per order)
+#   stock:      100,000 x W
+#
+# Run queries implement the 5 TPC-C transaction profiles:
+#   - New-Order  (simplified to single-item orders)
+#   - Payment    (home-warehouse only)
+#   - Order-Status
+#   - Delivery   (all 10 districts per invocation)
+#   - Stock-Level
+
+globals:
+  warehouses: 1    # W
+  districts: 10    # W * 10
+  customers: 30000 # W * 10 * 3000
+  orders: 30000    # W * 10 * 3000
+  stock: 100000    # W * 100,000
+  items: 100000    # 100,000
+
+up:
+
+  - name: create_warehouse
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE warehouse (
+            w_id NUMBER(10) NOT NULL,
+            w_name VARCHAR2(10) NOT NULL,
+            w_street_1 VARCHAR2(20) NOT NULL,
+            w_street_2 VARCHAR2(20) NOT NULL,
+            w_city VARCHAR2(20) NOT NULL,
+            w_state CHAR(2) NOT NULL,
+            w_zip CHAR(9) NOT NULL,
+            w_tax NUMBER(4,4) NOT NULL,
+            w_ytd NUMBER(12,2) NOT NULL,
+            PRIMARY KEY (w_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_district
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE district (
+            d_w_id NUMBER(10) NOT NULL,
+            d_id NUMBER(10) NOT NULL,
+            d_name VARCHAR2(10) NOT NULL,
+            d_street_1 VARCHAR2(20) NOT NULL,
+            d_street_2 VARCHAR2(20) NOT NULL,
+            d_city VARCHAR2(20) NOT NULL,
+            d_state CHAR(2) NOT NULL,
+            d_zip CHAR(9) NOT NULL,
+            d_tax NUMBER(4,4) NOT NULL,
+            d_ytd NUMBER(12,2) NOT NULL,
+            d_next_o_id NUMBER(10) NOT NULL,
+            PRIMARY KEY (d_w_id, d_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_customer
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE customer (
+            c_w_id NUMBER(10) NOT NULL,
+            c_d_id NUMBER(10) NOT NULL,
+            c_id NUMBER(10) NOT NULL,
+            c_first VARCHAR2(16) NOT NULL,
+            c_middle CHAR(2) NOT NULL,
+            c_last VARCHAR2(16) NOT NULL,
+            c_street_1 VARCHAR2(20) NOT NULL,
+            c_street_2 VARCHAR2(20) NOT NULL,
+            c_city VARCHAR2(20) NOT NULL,
+            c_state CHAR(2) NOT NULL,
+            c_zip CHAR(9) NOT NULL,
+            c_phone CHAR(16) NOT NULL,
+            c_since TIMESTAMP NOT NULL,
+            c_credit CHAR(2) NOT NULL,
+            c_credit_lim NUMBER(12,2) NOT NULL,
+            c_discount NUMBER(4,4) NOT NULL,
+            c_balance NUMBER(12,2) NOT NULL,
+            c_ytd_payment NUMBER(12,2) NOT NULL,
+            c_payment_cnt NUMBER(10) NOT NULL,
+            c_delivery_cnt NUMBER(10) NOT NULL,
+            c_data VARCHAR2(500) NOT NULL,
+            PRIMARY KEY (c_w_id, c_d_id, c_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_history
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE history (
+            h_id RAW(16) DEFAULT SYS_GUID() NOT NULL,
+            h_c_id NUMBER(10) NOT NULL,
+            h_c_d_id NUMBER(10) NOT NULL,
+            h_c_w_id NUMBER(10) NOT NULL,
+            h_d_id NUMBER(10) NOT NULL,
+            h_w_id NUMBER(10) NOT NULL,
+            h_date TIMESTAMP NOT NULL,
+            h_amount NUMBER(6,2) NOT NULL,
+            h_data VARCHAR2(24) NOT NULL,
+            PRIMARY KEY (h_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_oorder
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE oorder (
+            o_w_id NUMBER(10) NOT NULL,
+            o_d_id NUMBER(10) NOT NULL,
+            o_id NUMBER(10) NOT NULL,
+            o_c_id NUMBER(10) NOT NULL,
+            o_entry_d TIMESTAMP NOT NULL,
+            o_carrier_id NUMBER(10),
+            o_ol_cnt NUMBER(10) NOT NULL,
+            o_all_local NUMBER(10) NOT NULL,
+            PRIMARY KEY (o_w_id, o_d_id, o_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_new_order
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE new_order (
+            no_w_id NUMBER(10) NOT NULL,
+            no_d_id NUMBER(10) NOT NULL,
+            no_o_id NUMBER(10) NOT NULL,
+            PRIMARY KEY (no_w_id, no_d_id, no_o_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_order_line
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE order_line (
+            ol_w_id NUMBER(10) NOT NULL,
+            ol_d_id NUMBER(10) NOT NULL,
+            ol_o_id NUMBER(10) NOT NULL,
+            ol_number NUMBER(10) NOT NULL,
+            ol_i_id NUMBER(10) NOT NULL,
+            ol_supply_w_id NUMBER(10) NOT NULL,
+            ol_delivery_d TIMESTAMP,
+            ol_quantity NUMBER(10) NOT NULL,
+            ol_amount NUMBER(12,2) NOT NULL,
+            ol_dist_info CHAR(24) NOT NULL,
+            PRIMARY KEY (ol_w_id, ol_d_id, ol_o_id, ol_number)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_item
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE item (
+            i_id NUMBER(10) NOT NULL,
+            i_im_id NUMBER(10) NOT NULL,
+            i_name VARCHAR2(24) NOT NULL,
+            i_price NUMBER(5,2) NOT NULL,
+            i_data VARCHAR2(50) NOT NULL,
+            PRIMARY KEY (i_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_stock
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE stock (
+            s_w_id NUMBER(10) NOT NULL,
+            s_i_id NUMBER(10) NOT NULL,
+            s_quantity NUMBER(10) NOT NULL,
+            s_dist_01 CHAR(24) NOT NULL,
+            s_dist_02 CHAR(24) NOT NULL,
+            s_dist_03 CHAR(24) NOT NULL,
+            s_dist_04 CHAR(24) NOT NULL,
+            s_dist_05 CHAR(24) NOT NULL,
+            s_dist_06 CHAR(24) NOT NULL,
+            s_dist_07 CHAR(24) NOT NULL,
+            s_dist_08 CHAR(24) NOT NULL,
+            s_dist_09 CHAR(24) NOT NULL,
+            s_dist_10 CHAR(24) NOT NULL,
+            s_ytd NUMBER(10) NOT NULL,
+            s_order_cnt NUMBER(10) NOT NULL,
+            s_remote_cnt NUMBER(10) NOT NULL,
+            s_data VARCHAR2(50) NOT NULL,
+            PRIMARY KEY (s_w_id, s_i_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_idx_customer_name
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_customer_name
+          ON customer (c_w_id, c_d_id, c_last, c_first)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_idx_oorder_customer
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_oorder_customer
+          ON oorder (o_w_id, o_d_id, o_c_id, o_id DESC)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+seed:
+
+  - name: clear_order_line
+    type: exec
+    query: TRUNCATE TABLE order_line
+
+  - name: clear_new_order
+    type: exec
+    query: TRUNCATE TABLE new_order
+
+  - name: clear_oorder
+    type: exec
+    query: TRUNCATE TABLE oorder
+
+  - name: clear_history
+    type: exec
+    query: TRUNCATE TABLE history
+
+  - name: clear_stock
+    type: exec
+    query: TRUNCATE TABLE stock
+
+  - name: clear_customer
+    type: exec
+    query: TRUNCATE TABLE customer
+
+  - name: clear_district
+    type: exec
+    query: TRUNCATE TABLE district
+
+  - name: clear_warehouse
+    type: exec
+    query: TRUNCATE TABLE warehouse
+
+  - name: clear_item
+    type: exec
+    query: TRUNCATE TABLE item
+
+  - name: populate_item
+    args:
+      - items
+    query: |-
+      INSERT INTO item (i_id, i_im_id, i_name, i_price, i_data)
+      SELECT
+        s,
+        TRUNC(DBMS_RANDOM.VALUE * 10000 + 1),
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 18 + 6)),
+        ROUND(DBMS_RANDOM.VALUE * 99 + 1, 2),
+        CASE WHEN DBMS_RANDOM.VALUE < 0.1
+          THEN 'ORIGINAL' || DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 16 + 18))
+          ELSE DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 24 + 26))
+        END
+      FROM (SELECT LEVEL AS s FROM DUAL CONNECT BY LEVEL <= $1)
+
+  - name: populate_warehouse
+    args:
+      - warehouses
+    query: |-
+      INSERT INTO warehouse (w_id, w_name, w_street_1, w_street_2, w_city,
+        w_state, w_zip, w_tax, w_ytd)
+      SELECT
+        s,
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 4 + 6)),
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 10 + 10)),
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 10 + 10)),
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 10 + 10)),
+        DBMS_RANDOM.STRING('x', 2),
+        LPAD(TO_CHAR(TRUNC(DBMS_RANDOM.VALUE * 10000)), 4, '0') || '11111',
+        DBMS_RANDOM.VALUE / 5,
+        300000
+      FROM (SELECT LEVEL AS s FROM DUAL CONNECT BY LEVEL <= $1)
+
+  - name: populate_district
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - districts
+    query: |-
+      INSERT INTO district (d_w_id, d_id, d_name, d_street_1, d_street_2,
+        d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id)
+      SELECT
+        $1, d,
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 4 + 6)),
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 10 + 10)),
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 10 + 10)),
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 10 + 10)),
+        DBMS_RANDOM.STRING('x', 2),
+        LPAD(TO_CHAR(TRUNC(DBMS_RANDOM.VALUE * 10000)), 4, '0') || '11111',
+        DBMS_RANDOM.VALUE / 5,
+        30000,
+        3001
+      FROM (SELECT LEVEL AS d FROM DUAL CONNECT BY LEVEL <= $2)
+
+  - name: populate_customer
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - districts
+      - customers / districts
+    query: |-
+      INSERT INTO customer (c_w_id, c_d_id, c_id, c_first, c_middle, c_last,
+        c_street_1, c_street_2, c_city, c_state, c_zip, c_phone,
+        c_since, c_credit, c_credit_lim, c_discount, c_balance,
+        c_ytd_payment, c_payment_cnt, c_delivery_cnt, c_data)
+      SELECT
+        $1, d_gen.d, c_gen.c,
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 10 + 6)),
+        'OE',
+        DECODE(TRUNC(ln.n / 100),
+          0,'BAR', 1,'OUGHT', 2,'ABLE', 3,'PRI', 4,'PRES',
+          5,'ESE', 6,'ANTI', 7,'CALLY', 8,'ATION', 9,'EING') ||
+        DECODE(MOD(TRUNC(ln.n / 10), 10),
+          0,'BAR', 1,'OUGHT', 2,'ABLE', 3,'PRI', 4,'PRES',
+          5,'ESE', 6,'ANTI', 7,'CALLY', 8,'ATION', 9,'EING') ||
+        DECODE(MOD(ln.n, 10),
+          0,'BAR', 1,'OUGHT', 2,'ABLE', 3,'PRI', 4,'PRES',
+          5,'ESE', 6,'ANTI', 7,'CALLY', 8,'ATION', 9,'EING'),
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 10 + 10)),
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 10 + 10)),
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 10 + 10)),
+        DBMS_RANDOM.STRING('x', 2),
+        LPAD(TO_CHAR(TRUNC(DBMS_RANDOM.VALUE * 10000)), 4, '0') || '11111',
+        LPAD(TO_CHAR(TRUNC(DBMS_RANDOM.VALUE * 9999)), 4, '0') ||
+        LPAD(TO_CHAR(TRUNC(DBMS_RANDOM.VALUE * 9999)), 4, '0') ||
+        LPAD(TO_CHAR(TRUNC(DBMS_RANDOM.VALUE * 9999)), 4, '0') ||
+        LPAD(TO_CHAR(TRUNC(DBMS_RANDOM.VALUE * 9999)), 4, '0'),
+        SYSTIMESTAMP,
+        CASE WHEN DBMS_RANDOM.VALUE < 0.1 THEN 'BC' ELSE 'GC' END,
+        50000,
+        DBMS_RANDOM.VALUE / 2,
+        -10,
+        10,
+        1,
+        0,
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 200 + 300))
+      FROM (SELECT LEVEL AS d FROM DUAL CONNECT BY LEVEL <= $2) d_gen
+      CROSS JOIN (SELECT LEVEL AS c FROM DUAL CONNECT BY LEVEL <= $3) c_gen
+      CROSS APPLY (
+        SELECT CASE WHEN c_gen.c <= 1000 THEN c_gen.c - 1
+                    ELSE TRUNC(DBMS_RANDOM.VALUE * 1000)
+               END AS n
+        FROM DUAL
+      ) ln
+
+  - name: populate_history
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+    query: |-
+      INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id,
+        h_date, h_amount, h_data)
+      SELECT
+        c.c_id, c.c_d_id, c.c_w_id,
+        c.c_d_id, c.c_w_id,
+        SYSTIMESTAMP,
+        10,
+        DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 12 + 12))
+      FROM customer c
+      WHERE c.c_w_id = $1
+
+  - name: populate_oorder
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - districts
+      - orders / districts
+    query: |-
+      INSERT INTO oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
+        o_carrier_id, o_ol_cnt, o_all_local)
+      SELECT
+        $1, d_gen.d, o_gen.o,
+        TRUNC(DBMS_RANDOM.VALUE * $3 + 1),
+        SYSTIMESTAMP,
+        CASE WHEN o_gen.o <= 2100 THEN TRUNC(DBMS_RANDOM.VALUE * $2 + 1) ELSE NULL END,
+        TRUNC(DBMS_RANDOM.VALUE * 11 + 5),
+        1
+      FROM (SELECT LEVEL AS d FROM DUAL CONNECT BY LEVEL <= $2) d_gen
+      CROSS JOIN (SELECT LEVEL AS o FROM DUAL CONNECT BY LEVEL <= $3) o_gen
+
+  - name: populate_new_order
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - districts
+      - orders / districts
+    query: |-
+      INSERT INTO new_order (no_w_id, no_d_id, no_o_id)
+      SELECT $1, d_gen.d, o_gen.o
+      FROM (SELECT LEVEL AS d FROM DUAL CONNECT BY LEVEL <= $2) d_gen
+      CROSS JOIN (SELECT LEVEL + 2100 AS o FROM DUAL CONNECT BY LEVEL <= $3 - 2100) o_gen
+
+  - name: populate_order_line
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+    query: |-
+      INSERT INTO order_line (ol_w_id, ol_d_id, ol_o_id, ol_number,
+        ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount,
+        ol_dist_info)
+      SELECT
+        o.o_w_id, o.o_d_id, o.o_id,
+        lines.n,
+        TRUNC(DBMS_RANDOM.VALUE * 100000 + 1),
+        o.o_w_id,
+        CASE WHEN o.o_id <= 2100 THEN o.o_entry_d ELSE NULL END,
+        5,
+        CASE WHEN o.o_id <= 2100 THEN 0
+             ELSE DBMS_RANDOM.VALUE * 9999
+        END,
+        DBMS_RANDOM.STRING('x', 24)
+      FROM oorder o
+      CROSS APPLY (
+        SELECT LEVEL AS n FROM DUAL CONNECT BY LEVEL <= o.o_ol_cnt
+      ) lines
+      WHERE o.o_w_id = $1
+
+  - name: populate_stock
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - stock
+    query: |-
+      INSERT INTO stock (s_w_id, s_i_id, s_quantity,
+        s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05,
+        s_dist_06, s_dist_07, s_dist_08, s_dist_09, s_dist_10,
+        s_ytd, s_order_cnt, s_remote_cnt, s_data)
+      SELECT
+        $1, i_gen.i,
+        TRUNC(DBMS_RANDOM.VALUE * 91 + 10),
+        DBMS_RANDOM.STRING('x', 24),
+        DBMS_RANDOM.STRING('x', 24),
+        DBMS_RANDOM.STRING('x', 24),
+        DBMS_RANDOM.STRING('x', 24),
+        DBMS_RANDOM.STRING('x', 24),
+        DBMS_RANDOM.STRING('x', 24),
+        DBMS_RANDOM.STRING('x', 24),
+        DBMS_RANDOM.STRING('x', 24),
+        DBMS_RANDOM.STRING('x', 24),
+        DBMS_RANDOM.STRING('x', 24),
+        0, 0, 0,
+        CASE WHEN DBMS_RANDOM.VALUE < 0.1
+          THEN 'ORIGINAL' || DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 16 + 18))
+          ELSE DBMS_RANDOM.STRING('x', TRUNC(DBMS_RANDOM.VALUE * 24 + 26))
+        END
+      FROM (SELECT LEVEL AS i FROM DUAL CONNECT BY LEVEL <= $2) i_gen
+
+deseed:
+  - name: truncate_order_line
+    type: exec
+    query: TRUNCATE TABLE order_line
+
+  - name: truncate_new_order
+    type: exec
+    query: TRUNCATE TABLE new_order
+
+  - name: truncate_oorder
+    type: exec
+    query: TRUNCATE TABLE oorder
+
+  - name: truncate_history
+    type: exec
+    query: TRUNCATE TABLE history
+
+  - name: truncate_stock
+    type: exec
+    query: TRUNCATE TABLE stock
+
+  - name: truncate_customer
+    type: exec
+    query: TRUNCATE TABLE customer
+
+  - name: truncate_district
+    type: exec
+    query: TRUNCATE TABLE district
+
+  - name: truncate_warehouse
+    type: exec
+    query: TRUNCATE TABLE warehouse
+
+  - name: truncate_item
+    type: exec
+    query: TRUNCATE TABLE item
+
+down:
+  - name: drop_order_line
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE order_line CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_new_order
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE new_order CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_oorder
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE oorder CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_history
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE history CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_stock
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE stock CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_customer
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE customer CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_district
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE district CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_warehouse
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE warehouse CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_item
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE item CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+init:
+  - name: fetch_warehouses
+    type: query
+    query: SELECT w_id FROM warehouse
+
+run_weights:
+  new_order: 45
+  payment: 43
+  order_status: 4
+  delivery: 4
+  stock_level: 4
+
+run:
+  # New-Order transaction (TPC-C 2.4)
+  # 5-15 order lines per transaction; all items local.
+  # Uses PL/SQL block since Oracle does not support writable CTEs.
+  # Args: w_id, d_id, c_id, item_ids (comma-separated)
+  - name: new_order
+    type: exec
+    wait: 18s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+      - nurand_n(8191, 1, items, 5, 15)
+    query: |-
+      DECLARE
+        v_w_id NUMBER(10) := :1;
+        v_d_id NUMBER(10) := :2;
+        v_c_id NUMBER(10) := :3;
+        v_item_ids VARCHAR2(200) := :4;
+        v_next_o_id NUMBER(10);
+        v_d_tax NUMBER(4,4);
+        v_w_tax NUMBER(4,4);
+        v_c_discount NUMBER(4,4);
+        v_c_last VARCHAR2(16);
+        v_c_credit CHAR(2);
+        v_i_id NUMBER(10);
+        v_i_price NUMBER(5,2);
+        v_qty NUMBER(10);
+        v_s_quantity NUMBER(10);
+        v_ol_dist_info CHAR(24);
+        v_ol_cnt NUMBER(10);
+        v_ol_number NUMBER(10) := 0;
+      BEGIN
+        UPDATE district SET d_next_o_id = d_next_o_id + 1
+        WHERE d_w_id = v_w_id AND d_id = v_d_id
+        RETURNING d_tax, d_next_o_id - 1 INTO v_d_tax, v_next_o_id;
+
+        SELECT w_tax INTO v_w_tax
+        FROM warehouse WHERE w_id = v_w_id;
+
+        SELECT c_discount, c_last, c_credit
+        INTO v_c_discount, v_c_last, v_c_credit
+        FROM customer
+        WHERE c_w_id = v_w_id AND c_d_id = v_d_id AND c_id = v_c_id;
+
+        v_ol_cnt := REGEXP_COUNT(v_item_ids, ',') + 1;
+
+        INSERT INTO new_order (no_w_id, no_d_id, no_o_id)
+        VALUES (v_w_id, v_d_id, v_next_o_id);
+
+        INSERT INTO oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
+          o_ol_cnt, o_all_local)
+        VALUES (v_w_id, v_d_id, v_next_o_id, v_c_id, SYSTIMESTAMP,
+          v_ol_cnt, 1);
+
+        FOR rec IN (
+          SELECT TO_NUMBER(REGEXP_SUBSTR(v_item_ids, '[^,]+', 1, LEVEL)) AS i_id,
+            LEVEL AS ol_number
+          FROM DUAL
+          CONNECT BY LEVEL <= v_ol_cnt
+        ) LOOP
+          v_ol_number := rec.ol_number;
+          v_i_id := rec.i_id;
+          v_qty := TRUNC(DBMS_RANDOM.VALUE * 10) + 1;
+
+          UPDATE stock SET
+            s_quantity = CASE
+              WHEN s_quantity >= v_qty + 10 THEN s_quantity - v_qty
+              ELSE s_quantity - v_qty + 91
+            END,
+            s_ytd = s_ytd + v_qty,
+            s_order_cnt = s_order_cnt + 1
+          WHERE s_i_id = v_i_id AND s_w_id = v_w_id
+          RETURNING s_quantity, s_dist_01 INTO v_s_quantity, v_ol_dist_info;
+
+          SELECT i_price INTO v_i_price
+          FROM item WHERE i_id = v_i_id;
+
+          INSERT INTO order_line (ol_w_id, ol_d_id, ol_o_id, ol_number,
+            ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info)
+          VALUES (v_w_id, v_d_id, v_next_o_id, v_ol_number, v_i_id,
+            v_w_id, v_qty, v_qty * v_i_price, v_ol_dist_info);
+        END LOOP;
+      END;
+
+  # Payment transaction (TPC-C 2.5)
+  # 85% home-warehouse, 15% remote-warehouse payments.
+  # Args: w_id, d_id, c_id, amount_cents
+  - name: payment
+    type: exec
+    wait: 3s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+      - gen('number:100,500000')
+    query: |-
+      DECLARE
+        v_w_id NUMBER(10) := :1;
+        v_d_id NUMBER(10) := :2;
+        v_c_id NUMBER(10) := :3;
+        v_h_amount NUMBER(6,2) := :4 / 100;
+        v_c_w_id NUMBER(10);
+        v_w_name VARCHAR2(10);
+        v_d_name VARCHAR2(10);
+        v_c_first VARCHAR2(16);
+        v_c_middle CHAR(2);
+        v_c_last VARCHAR2(16);
+        v_c_balance NUMBER(12,2);
+      BEGIN
+        -- 85% home warehouse, 15% remote warehouse for customer
+        IF DBMS_RANDOM.VALUE < 0.85 THEN
+          v_c_w_id := v_w_id;
+        ELSE
+          BEGIN
+            SELECT w_id INTO v_c_w_id
+            FROM (SELECT w_id FROM warehouse WHERE w_id != v_w_id
+                  ORDER BY DBMS_RANDOM.VALUE)
+            WHERE ROWNUM = 1;
+          EXCEPTION WHEN NO_DATA_FOUND THEN
+            v_c_w_id := v_w_id;
+          END;
+        END IF;
+
+        UPDATE warehouse SET w_ytd = w_ytd + v_h_amount
+        WHERE w_id = v_w_id
+        RETURNING w_name INTO v_w_name;
+
+        UPDATE district SET d_ytd = d_ytd + v_h_amount
+        WHERE d_w_id = v_w_id AND d_id = v_d_id
+        RETURNING d_name INTO v_d_name;
+
+        UPDATE customer SET
+          c_balance = c_balance - v_h_amount,
+          c_ytd_payment = c_ytd_payment + v_h_amount,
+          c_payment_cnt = c_payment_cnt + 1
+        WHERE c_w_id = v_c_w_id AND c_d_id = v_d_id AND c_id = v_c_id
+        RETURNING c_first, c_middle, c_last, c_balance
+        INTO v_c_first, v_c_middle, v_c_last, v_c_balance;
+
+        INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id,
+          h_date, h_amount, h_data)
+        VALUES (v_c_id, v_d_id, v_c_w_id, v_d_id, v_w_id, SYSTIMESTAMP,
+          v_h_amount, v_w_name || '    ' || v_d_name);
+      END;
+
+  # Order-Status transaction (TPC-C 2.6)
+  # 60% by last-name (midpoint), 40% by customer ID.
+  # Args: w_id, d_id, c_id
+  - name: order_status
+    type: query
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+    query: |-
+      WITH params AS (
+        SELECT :1 AS p_w_id, :2 AS p_d_id, :3 AS p_c_id FROM DUAL
+      )
+      SELECT o.o_id, o.o_entry_d, o.o_carrier_id,
+        ol.ol_i_id, ol.ol_supply_w_id, ol.ol_quantity,
+        ol.ol_amount, ol.ol_delivery_d
+      FROM params p
+      CROSS JOIN oorder o
+      JOIN order_line ol
+        ON ol.ol_w_id = o.o_w_id AND ol.ol_d_id = o.o_d_id
+        AND ol.ol_o_id = o.o_id
+      WHERE o.o_w_id = p.p_w_id AND o.o_d_id = p.p_d_id
+        AND o.o_c_id = CASE WHEN DBMS_RANDOM.VALUE < 0.6
+          THEN (
+            SELECT c_id FROM (
+              SELECT c_id,
+                ROW_NUMBER() OVER (ORDER BY c_first) AS rn,
+                CEIL(COUNT(*) OVER () / 2) AS mid
+              FROM customer
+              WHERE c_w_id = p.p_w_id AND c_d_id = p.p_d_id
+                AND c_last = (
+                  SELECT c_last FROM customer
+                  WHERE c_w_id = p.p_w_id AND c_d_id = p.p_d_id
+                    AND c_id = p.p_c_id
+                )
+            ) WHERE rn = mid
+          )
+          ELSE p.p_c_id
+        END
+      ORDER BY o.o_id DESC
+      FETCH FIRST 15 ROWS ONLY
+
+  # Delivery transaction (TPC-C 2.7)
+  # Processes the oldest new_order in all 10 districts atomically.
+  # Uses a cursor loop since Oracle lacks writable CTEs and DELETE...USING.
+  # Args: w_id, carrier_id
+  - name: delivery
+    type: exec
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+    query: |-
+      DECLARE
+        v_w_id NUMBER(10) := :1;
+        v_carrier_id NUMBER(10) := :2;
+      BEGIN
+        FOR rec IN (
+          SELECT no_o_id, no_d_id
+          FROM (
+            SELECT no_o_id, no_d_id,
+              ROW_NUMBER() OVER (PARTITION BY no_d_id ORDER BY no_o_id) AS rn
+            FROM new_order
+            WHERE no_w_id = v_w_id
+          )
+          WHERE rn = 1
+        ) LOOP
+          DELETE FROM new_order
+          WHERE no_w_id = v_w_id AND no_d_id = rec.no_d_id
+            AND no_o_id = rec.no_o_id;
+
+          UPDATE oorder SET o_carrier_id = v_carrier_id
+          WHERE o_w_id = v_w_id AND o_d_id = rec.no_d_id
+            AND o_id = rec.no_o_id;
+
+          UPDATE order_line SET ol_delivery_d = SYSTIMESTAMP
+          WHERE ol_w_id = v_w_id AND ol_d_id = rec.no_d_id
+            AND ol_o_id = rec.no_o_id;
+
+          UPDATE customer SET
+            c_balance = c_balance + (
+              SELECT COALESCE(SUM(ol_amount), 0)
+              FROM order_line
+              WHERE ol_w_id = v_w_id AND ol_d_id = rec.no_d_id
+                AND ol_o_id = rec.no_o_id
+            ),
+            c_delivery_cnt = c_delivery_cnt + 1
+          WHERE c_w_id = v_w_id AND c_d_id = rec.no_d_id
+            AND c_id = (
+              SELECT o_c_id FROM oorder
+              WHERE o_w_id = v_w_id AND o_d_id = rec.no_d_id
+                AND o_id = rec.no_o_id
+            );
+        END LOOP;
+      END;
+
+  # Stock-Level transaction (TPC-C 2.8)
+  # Counts recently-ordered items with stock below threshold.
+  # Args: w_id, d_id, threshold
+  - name: stock_level
+    type: query
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:10,20')
+    query: |-
+      SELECT COUNT(DISTINCT s.s_i_id) AS low_stock
+      FROM district d
+      JOIN order_line ol
+        ON ol.ol_w_id = d.d_w_id AND ol.ol_d_id = d.d_id
+        AND ol.ol_o_id BETWEEN d.d_next_o_id - 20 AND d.d_next_o_id - 1
+      JOIN stock s
+        ON s.s_i_id = ol.ol_i_id AND s.s_w_id = d.d_w_id
+      WHERE d.d_w_id = :1 AND d.d_id = :2
+        AND s.s_quantity < :3

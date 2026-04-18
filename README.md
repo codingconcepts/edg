@@ -93,6 +93,9 @@ docker compose -f _examples/compose_oracle.yml down
 
 ## Todos
 
+* Pre-baked workloads for quick starts
+  * Add existing cockroach workload examples
+  * Add all relevant _examples
 * Spanner support
 * Better error output
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences

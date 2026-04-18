@@ -9,6 +9,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/codingconcepts/edg/cmd/edg/workload"
+	"github.com/codingconcepts/edg/cmd/edg/workload/bank"
+	"github.com/codingconcepts/edg/cmd/edg/workload/tpcc"
+	"github.com/codingconcepts/edg/cmd/edg/workload/ycsb"
 	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/codingconcepts/edg/pkg/env"
 	"github.com/codingconcepts/edg/pkg/random"
@@ -67,7 +71,29 @@ func main() {
 		return nil
 	}
 
-	root.AddCommand(upCmd(), seedCmd(), deseedCmd(), downCmd(), runCmd(), allCmd(), replCmd(), validateCmd(), versionCmd(), initCmd())
+	deps := workload.Deps{
+		Connect:   connect,
+		ConnectDB: connectDB,
+		Driver:    func() string { return flagDriver },
+		Run:       run,
+	}
+
+	wCmd := workload.Cmd()
+	wCmd.AddCommand(bank.Cmd(deps), tpcc.Cmd(deps), ycsb.Cmd(deps))
+
+	root.AddCommand(
+		workload.UpCmd(deps),
+		workload.SeedCmd(deps),
+		workload.DeseedCmd(deps),
+		workload.DownCmd(deps),
+		workload.RunCmd(deps),
+		workload.AllCmd(deps),
+		replCmd(),
+		validateCmd(),
+		versionCmd(),
+		initCmd(),
+		wCmd,
+	)
 	root.SilenceUsage = true
 	root.SilenceErrors = true
 
