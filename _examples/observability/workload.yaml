@@ -1,0 +1,153 @@
+globals:
+  customers: 100000
+  initial_balance: 10000
+  batch_size: 10000
+
+stages:
+  - name: start
+    workers: 1
+    duration: 10s
+  - name: ramp_up
+    workers: 5
+    duration: 30s
+  - name: steady
+    workers: 10
+    duration: 1m
+  - name: ramp_down
+    workers: 5
+    duration: 30s
+  - name: end
+    workers: 1
+    duration: 10s
+
+up:
+
+  - name: create_customer
+    query: |-
+      CREATE TABLE IF NOT EXISTS customer (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email STRING NOT NULL
+      )
+
+  - name: create_account
+    query: |-
+      CREATE TABLE IF NOT EXISTS account (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        balance FLOAT NOT NULL,
+        customer_id UUID NOT NULL REFERENCES customer(id)
+      )
+
+seed:
+
+  - name: populate_customer
+    args:
+      - gen_batch(customers, batch_size, 'email')
+    query: |-
+      INSERT INTO customer (email)
+      SELECT unnest(string_to_array('$1', __sep__))
+
+  - name: populate_account
+    args:
+      - batch(customers / batch_size)
+      - initial_balance
+      - batch_size
+    query: |-
+      INSERT INTO account (balance, customer_id)
+      SELECT $2::FLOAT, c.id
+      FROM customer c
+      ORDER BY c.id
+      OFFSET $1::INT * $3::INT
+      LIMIT $3::INT
+
+deseed:
+
+  - name: truncate_account
+    type: exec
+    query: TRUNCATE TABLE account CASCADE
+
+  - name: truncate_customer
+    type: exec
+    query: TRUNCATE TABLE customer CASCADE
+
+down:
+
+  - name: drop_account
+    type: exec
+    query: DROP TABLE IF EXISTS account
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer
+
+init:
+
+  - name: fetch_accounts
+    type: query
+    query: SELECT id FROM account ORDER BY random()
+
+  - name: fetch_customers
+    type: query
+    query: SELECT id, email FROM customer ORDER BY random()
+
+run_weights:
+  check_balance: 30
+  credit_account: 10
+  make_transfer: 40
+
+run:
+
+  - name: check_balance
+    type: query
+    args:
+      - ref_rand('fetch_accounts').id
+    query: |-
+      SELECT balance FROM account WHERE id = $1::UUID
+
+  - name: credit_account
+    type: exec
+    args:
+      - ref_rand('fetch_accounts').id
+      - gen('number:1,1000')
+    query: |-
+      UPDATE account SET balance = balance + $2::FLOAT
+      WHERE id = $1::UUID
+
+  # Transfers roll back when the source account has insufficient
+  # funds, giving the Grafana dashboard a visible rollback rate.
+  - transaction: make_transfer
+    locals:
+      amount: gen('number:1,5000')
+    queries:
+      - name: read_source
+        type: query
+        args:
+          - ref_diff('fetch_accounts').id
+        query: |-
+          SELECT id, balance FROM account WHERE id = $1::UUID
+
+      - rollback_if: "ref_same('read_source').balance < local('amount')"
+
+      - name: read_target
+        type: query
+        args:
+          - ref_diff('fetch_accounts').id
+        query: |-
+          SELECT id, balance FROM account WHERE id = $1::UUID
+
+      - name: debit_source
+        type: exec
+        args:
+          - ref_same('read_source').id
+          - local('amount')
+        query: |-
+          UPDATE account SET balance = balance - $2::FLOAT
+          WHERE id = $1::UUID
+
+      - name: credit_target
+        type: exec
+        args:
+          - ref_same('read_target').id
+          - local('amount')
+        query: |-
+          UPDATE account SET balance = balance + $2::FLOAT
+          WHERE id = $1::UUID

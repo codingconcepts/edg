@@ -25,11 +25,12 @@ import (
 )
 
 var (
-	flagURL     string
-	configFile  string
-	flagDriver  string
-	flagRngSeed uint64
-	flagLicense string
+	flagURL         string
+	configFile      string
+	flagDriver      string
+	flagRngSeed     uint64
+	flagLicense     string
+	flagMetricsAddr string
 
 	version string
 )
@@ -68,6 +69,7 @@ func main() {
 	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql, mssql, dsql, spanner]")
 	root.PersistentFlags().StringVar(&flagLicense, "license", "", "license key for enterprise drivers (env: EDG_LICENSE)")
 	root.PersistentFlags().Uint64Var(&flagRngSeed, "rng-seed", 0, "PRNG seed for deterministic output")
+	root.PersistentFlags().StringVar(&flagMetricsAddr, "metrics-addr", "", "address for Prometheus metrics endpoint (e.g. :9090)")
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("rng-seed") {

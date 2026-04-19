@@ -1,0 +1,7 @@
+scrape_configs:
+  - job_name: edg
+    scrape_interval: 5s
+    static_configs:
+      # edg runs on the host; host.docker.internal resolves to the
+      # host machine from inside the Prometheus container.
+      - targets: ["host.docker.internal:9090"]

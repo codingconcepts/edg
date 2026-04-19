@@ -1,6 +1,6 @@
 ---
 title: Agent Skills
-weight: 10
+weight: 11
 ---
 
 # Agent Skills

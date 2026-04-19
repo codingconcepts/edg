@@ -12,6 +12,10 @@ import (
 )
 
 func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config.Request, duration time.Duration, workers int, printInterval time.Duration) error {
+	if flagMetricsAddr != "" {
+		go startMetricsServer(flagMetricsAddr)
+	}
+
 	var stats map[string]*queryStats
 	var elapsed time.Duration
 	var err error
@@ -56,6 +60,7 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *confi
 			}
 
 			slog.Info("stage", "name", stage.Name, "workers", workers, "duration", dur)
+			metricWorkers.Set(float64(workers))
 
 			stageCtx, stageCancel := context.WithTimeout(ctx, dur)
 			wg := startWorkers(stageCtx, workers, db, req, initEnv, results)
@@ -108,6 +113,7 @@ func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *c
 		close(results)
 	}()
 
+	metricWorkers.Set(float64(workers))
 	slog.Info("running", "workers", workers, "duration", duration)
 	stats := printResults(results, printInterval, start, workers, duration)
 
