@@ -41,17 +41,16 @@ seed:
 
   - name: populate_account
     args:
-      - batch(customers / batch_size)
+      - batch(customers / batch_size, batch_size)
       - initial_balance
       - batch_size
     query: |-
       INSERT INTO account (balance, customer_id)
       SELECT CAST($2 AS FLOAT64), c.id
-      FROM (
-        SELECT id, ROW_NUMBER() OVER (ORDER BY id) AS rn
-        FROM customer
-      ) c
-      WHERE c.rn > $1 * $3 AND c.rn <= ($1 + 1) * $3
+      FROM customer c
+      ORDER BY c.id
+      LIMIT $3
+      OFFSET $1
 
 deseed:
 
@@ -91,7 +90,7 @@ run:
     args:
       - ref_rand('fetch_accounts').id
     query: |-
-      SELECT balance FROM account WHERE id = @p1
+      SELECT balance FROM account WHERE id = $1
 
   - name: credit_account
     type: exec
@@ -99,8 +98,8 @@ run:
       - ref_rand('fetch_accounts').id
       - gen('number:1,1000')
     query: |-
-      UPDATE account SET balance = balance + CAST(@p2 AS FLOAT64)
-      WHERE id = @p1
+      UPDATE account SET balance = balance + CAST($2 AS FLOAT64)
+      WHERE id = $1
 
   - name: make_transfer
     type: exec
@@ -111,7 +110,7 @@ run:
     query: |-
       UPDATE account SET
         balance = CASE
-                    WHEN id = @p2 THEN balance + CAST(@p3 AS FLOAT64)
-                    WHEN id = @p1 THEN balance - CAST(@p3 AS FLOAT64)
+                    WHEN id = $2 THEN balance + CAST($3 AS FLOAT64)
+                    WHEN id = $1 THEN balance - CAST($3 AS FLOAT64)
                   END
-      WHERE id IN UNNEST([@p1, @p2])
+      WHERE id IN UNNEST([$1, $2])

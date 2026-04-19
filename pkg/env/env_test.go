@@ -6,12 +6,14 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/codingconcepts/edg/pkg/convert"
+	"github.com/codingconcepts/edg/pkg/test"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
@@ -427,6 +429,108 @@ func TestInitFrom_IndependentCopies(t *testing.T) {
 	targetData[0] = map[string]any{"id": 999}
 
 	assert.Equal(t, 1, sourceRows[0]["id"], "InitFrom did not create an independent copy; source was mutated")
+}
+
+func TestNewEnv_ExpressionGlobals(t *testing.T) {
+	req := &config.Request{
+		Globals: map[string]any{
+			"warehouses": 1,
+			"districts":  "warehouses * 10",
+			"customers":  "districts * 3000",
+		},
+		GlobalsOrder: []string{"warehouses", "districts", "customers"},
+	}
+
+	env, err := NewEnv(nil, "", req)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, env.env["warehouses"])
+	assert.Equal(t, 10, env.env["districts"])
+	assert.Equal(t, 30000, env.env["customers"])
+}
+
+func TestNewEnv_ExpressionGlobals_LiteralStringKept(t *testing.T) {
+	req := &config.Request{
+		Globals: map[string]any{
+			"city": "new york",
+		},
+		GlobalsOrder: []string{"city"},
+	}
+
+	env, err := NewEnv(nil, "", req)
+	require.NoError(t, err)
+
+	// "new york" is not a valid expression, so it stays as a literal string.
+	assert.Equal(t, "new york", env.env["city"])
+}
+
+func TestNewEnv_ExpressionGlobals_NoOrder(t *testing.T) {
+	req := &config.Request{
+		Globals: map[string]any{
+			"total": 42,
+		},
+	}
+
+	env, err := NewEnv(nil, "", req)
+	require.NoError(t, err)
+
+	// Without GlobalsOrder, non-string globals still work.
+	assert.Equal(t, 42, env.env["total"])
+}
+
+func TestNewEnv_ExpressionGlobals_UsedInArgs(t *testing.T) {
+	req := &config.Request{
+		Globals: map[string]any{
+			"warehouses": 2,
+			"districts":  "warehouses * 10",
+		},
+		GlobalsOrder: []string{"warehouses", "districts"},
+		Run: []*config.RunItem{
+			{Query: &config.Query{Args: []string{"districts"}}},
+		},
+	}
+
+	env, err := NewEnv(nil, "", req)
+	require.NoError(t, err)
+
+	argSets, _, err := env.GenerateArgs(req.Run[0].Query)
+	require.NoError(t, err)
+
+	assert.Equal(t, 20, argSets[0][0])
+}
+
+func TestNewEnv_ExpressionGlobals_Env(t *testing.T) {
+	test.CleanupEnv(t, "EDG_TEST_BATCH")
+	require.NoError(t, os.Setenv("EDG_TEST_BATCH", "250"))
+
+	req := &config.Request{
+		Globals: map[string]any{
+			"batch_size": "env('EDG_TEST_BATCH')",
+		},
+		GlobalsOrder: []string{"batch_size"},
+	}
+
+	env, err := NewEnv(nil, "", req)
+	require.NoError(t, err)
+
+	assert.Equal(t, "250", env.env["batch_size"])
+}
+
+func TestNewEnv_ExpressionGlobals_EnvMissing(t *testing.T) {
+	test.CleanupEnv(t, "EDG_TEST_MISSING")
+	os.Unsetenv("EDG_TEST_MISSING")
+
+	req := &config.Request{
+		Globals: map[string]any{
+			"val": "env('EDG_TEST_MISSING')",
+		},
+		GlobalsOrder: []string{"val"},
+	}
+
+	_, err := NewEnv(nil, "", req)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "evaluating global")
+	assert.Contains(t, err.Error(), "EDG_TEST_MISSING")
 }
 
 func TestNewEnv_GlobalShadowsBuiltin(t *testing.T) {

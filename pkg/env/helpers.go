@@ -16,6 +16,14 @@ func environ(name string) (string, error) {
 	return val, nil
 }
 
+func environNil(name string) any {
+	val, ok := os.LookupEnv(name)
+	if !ok {
+		return nil
+	}
+	return val
+}
+
 func (e *Env) global(name string) any {
 	return e.request.Globals[name]
 }

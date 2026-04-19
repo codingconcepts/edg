@@ -11,9 +11,9 @@ globals:
   regions: 5
   nations: 25
   suppliers: 1000
-  parts: 20000
+  parts: 10000
   customers: 15000
-  orders: 150000
+  orders: 10000
   batch_size: 10000
 
 up:
@@ -165,12 +165,13 @@ seed:
 
   - name: populate_part
     args:
-      - parts
+      - batch(parts / batch_size)
+      - batch_size
     query: |-
       INSERT INTO part (p_partkey, p_name, p_mfgr, p_brand, p_type,
         p_size, p_container, p_retailprice, p_comment)
       SELECT
-        s,
+        $1 * $2 + s,
         CONCAT(GENERATE_UUID(), SUBSTR(GENERATE_UUID(), 1, 19)),
         CONCAT('Manufacturer#', CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 5) + 1 AS STRING)),
         CONCAT('Brand#',
@@ -190,23 +191,24 @@ seed:
                'JUMBO CASE','JUMBO BOX','JUMBO PACK','JUMBO PKG',
                'WRAP CASE','WRAP BOX','WRAP PACK','WRAP PKG',
                'WRAP BAG'])[OFFSET(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 24))],
-        CAST(ROUND((90000 + s / 10 + MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) / 100.0) / 100.0, 2) AS NUMERIC),
+        CAST(ROUND((90000 + ($1 * $2 + s) / 10 + MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) / 100.0) / 100.0, 2) AS NUMERIC),
         SUBSTR(GENERATE_UUID(), 1, 15)
-      FROM UNNEST(GENERATE_ARRAY(1, $1)) AS s
+      FROM UNNEST(GENERATE_ARRAY(1, $2)) AS s
 
   - name: populate_partsupp
     args:
-      - parts
+      - batch(parts / batch_size, batch_size)
+      - batch_size
       - suppliers
     query: |-
       INSERT INTO partsupp (ps_partkey, ps_suppkey, ps_availqty,
         ps_supplycost, ps_comment)
       SELECT
-        p, MOD(p + si * CAST($2 / 4 AS INT64) - 1, $2) + 1,
+        p, MOD(p + si * CAST($3 / 4 AS INT64) - 1, $3) + 1,
         MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 9999) + 1,
         CAST(ROUND(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 100000) / 100.0 + 1, 2) AS NUMERIC),
         SUBSTR(GENERATE_UUID(), 1, 36)
-      FROM UNNEST(GENERATE_ARRAY(1, $1)) AS p
+      FROM UNNEST(GENERATE_ARRAY($1 + 1, $1 + $2)) AS p
       CROSS JOIN UNNEST(GENERATE_ARRAY(0, 3)) AS si
 
   - name: populate_customer
@@ -379,7 +381,7 @@ run:
         AVG(l_discount) AS avg_disc,
         COUNT(*) AS count_order
       FROM lineitem
-      WHERE l_shipdate <= DATE_SUB(DATE '1998-12-01', INTERVAL @p1 DAY)
+      WHERE l_shipdate <= DATE_SUB(DATE '1998-12-01', INTERVAL $1 DAY)
       GROUP BY l_returnflag, l_linestatus
       ORDER BY l_returnflag, l_linestatus
 
@@ -398,9 +400,9 @@ run:
       FROM customer c
       JOIN orders o ON c.c_custkey = o.o_custkey
       JOIN lineitem l ON l.l_orderkey = o.o_orderkey
-      WHERE c.c_mktsegment = @p1
-        AND o.o_orderdate < DATE_ADD(DATE '1995-03-01', INTERVAL @p2 DAY)
-        AND l.l_shipdate > DATE_ADD(DATE '1995-03-01', INTERVAL @p2 DAY)
+      WHERE c.c_mktsegment = $1
+        AND o.o_orderdate < DATE_ADD(DATE '1995-03-01', INTERVAL $2 DAY)
+        AND l.l_shipdate > DATE_ADD(DATE '1995-03-01', INTERVAL $2 DAY)
       GROUP BY l.l_orderkey, o.o_orderdate, o.o_shippriority
       ORDER BY revenue DESC, o.o_orderdate
       LIMIT 10
@@ -415,10 +417,10 @@ run:
     query: |-
       SELECT SUM(l_extendedprice * l_discount) AS revenue
       FROM lineitem
-      WHERE l_shipdate >= CAST(CONCAT(@p1, '-01-01') AS DATE)
-        AND l_shipdate < DATE_ADD(CAST(CONCAT(@p1, '-01-01') AS DATE), INTERVAL 1 YEAR)
-        AND l_discount BETWEEN CAST(@p2 AS NUMERIC) - 0.01 AND CAST(@p2 AS NUMERIC) + 0.01
-        AND l_quantity < CAST(@p3 AS NUMERIC)
+      WHERE l_shipdate >= CAST(CONCAT(CAST($1 AS STRING), '-01-01') AS DATE)
+        AND l_shipdate < DATE_ADD(CAST(CONCAT(CAST($1 AS STRING), '-01-01') AS DATE), INTERVAL 1 YEAR)
+        AND l_discount BETWEEN CAST($2 AS NUMERIC) - 0.01 AND CAST($2 AS NUMERIC) + 0.01
+        AND l_quantity < CAST($3 AS NUMERIC)
 
   # TPC-H Q14: Promotion Effect
   - name: q14_promotion_effect
@@ -433,7 +435,7 @@ run:
         / SUM(l.l_extendedprice * (1 - l.l_discount)) AS promo_revenue
       FROM lineitem l
       JOIN part p ON l.l_partkey = p.p_partkey
-      WHERE l.l_shipdate >= CAST(CONCAT(@p1, '-', LPAD(CAST(@p2 AS STRING), 2, '0'), '-01') AS DATE)
+      WHERE l.l_shipdate >= CAST(CONCAT(CAST($1 AS STRING), '-', LPAD(CAST($2 AS STRING), 2, '0'), '-01') AS DATE)
         AND l.l_shipdate < DATE_ADD(
-          CAST(CONCAT(@p1, '-', LPAD(CAST(@p2 AS STRING), 2, '0'), '-01') AS DATE),
+          CAST(CONCAT(CAST($1 AS STRING), '-', LPAD(CAST($2 AS STRING), 2, '0'), '-01') AS DATE),
           INTERVAL 1 MONTH)

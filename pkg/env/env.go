@@ -93,7 +93,8 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		"date":              gen.DateRand,        // Random date with custom format.
 		"distinct":          env.aggDistinct,     // Number of distinct values for a field in a dataset.
 		"duration":          gen.RandDuration,    // Random duration between min and max.
-		"env":               environ,             // Use a value in the environment.
+		"env":               environ,             // Use a value in the environment and return err if missing.
+		"env_nil":           environNil,          // Use a value in the environment and return nil if missing.
 		"exp_f":             gen.ExpRandF,        // Exponential-distribution random float with precision.
 		"exp":               gen.ExpRand,         // Exponential-distribution random float in [min, max].
 		"expr":              convert.Constant,    // Evaluate an arithmetic expression (e.g. expr(warehouses * 10)).
@@ -158,6 +159,29 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 
 	// Add each global variable to map itself for cleaner access.
 	maps.Copy(env.env, r.Globals)
+
+	// Evaluate string-valued globals as expressions so globals can
+	// use built-in functions and reference earlier globals.
+	// Processed in YAML document order for deterministic chaining.
+	// Compilation failure means the value is a plain string literal.
+	// Evaluation failure after successful compilation is a real error
+	// (e.g. missing env var) and is surfaced to the caller.
+	for _, name := range r.GlobalsOrder {
+		strVal, ok := r.Globals[name].(string)
+		if !ok {
+			continue
+		}
+		program, err := expr.Compile(strVal, expr.Env(env.env))
+		if err != nil {
+			continue // not a valid expression; keep as literal string
+		}
+		result, err := expr.Run(program, env.env)
+		if err != nil {
+			return nil, fmt.Errorf("evaluating global %q: %w", name, err)
+		}
+		env.env[name] = result
+		r.Globals[name] = result
+	}
 
 	// Load reference datasets into the environment so they're available
 	// via ref_rand, ref_same, etc. without a database query.

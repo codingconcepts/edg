@@ -37,6 +37,8 @@ func LoadConfig(path string) (*Request, error) {
 		return nil, fmt.Errorf("decoding %s: %w", path, err)
 	}
 
+	req.GlobalsOrder = extractGlobalsOrder(&doc)
+
 	return &req, nil
 }
 
@@ -52,5 +54,34 @@ func ParseConfig(data []byte) (*Request, error) {
 		return nil, fmt.Errorf("decoding config: %w", err)
 	}
 
+	req.GlobalsOrder = extractGlobalsOrder(&doc)
+
 	return &req, nil
+}
+
+// extractGlobalsOrder returns the keys of the globals mapping in
+// YAML document order. This allows expression-valued globals to
+// reference earlier globals deterministically.
+func extractGlobalsOrder(doc *yaml.Node) []string {
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return nil
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i < len(root.Content)-1; i += 2 {
+		if root.Content[i].Value == "globals" {
+			node := root.Content[i+1]
+			if node.Kind != yaml.MappingNode {
+				return nil
+			}
+			keys := make([]string, 0, len(node.Content)/2)
+			for j := 0; j < len(node.Content)-1; j += 2 {
+				keys = append(keys, node.Content[j].Value)
+			}
+			return keys
+		}
+	}
+	return nil
 }

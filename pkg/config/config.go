@@ -37,6 +37,7 @@ type Stage struct {
 
 type Request struct {
 	Globals      map[string]any              `json:"globals" yaml:"globals"`
+	GlobalsOrder []string                    `json:"-" yaml:"-"`
 	Expressions  map[string]string           `json:"expressions" yaml:"expressions"`
 	Rows         map[string][]string         `json:"rows" yaml:"rows"`
 	Reference    map[string][]map[string]any `json:"reference" yaml:"reference"`

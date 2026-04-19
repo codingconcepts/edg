@@ -593,6 +593,32 @@ func TestValidate_EnvPattern(t *testing.T) {
 	}
 }
 
+func TestParseConfig_GlobalsOrder(t *testing.T) {
+	input := `
+globals:
+  warehouses: 1
+  districts: 10
+  customers: 30000
+  batch_size: 500
+`
+	req, err := ParseConfig([]byte(input))
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"warehouses", "districts", "customers", "batch_size"}, req.GlobalsOrder)
+}
+
+func TestParseConfig_GlobalsOrder_NoGlobals(t *testing.T) {
+	input := `
+up:
+  - name: t
+    query: CREATE TABLE t (id INT)
+`
+	req, err := ParseConfig([]byte(input))
+	require.NoError(t, err)
+
+	assert.Nil(t, req.GlobalsOrder)
+}
+
 func TestLoadConfig_MultipleIncludes(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "shared/globals.yaml", `

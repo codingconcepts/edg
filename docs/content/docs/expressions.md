@@ -35,6 +35,7 @@ These are edg's built-in functions, available in any expression context (`args:`
 | `distinct(name, field)` | `int` | Number of distinct values for a field in a named dataset.<br><br>`distinct('fetch_products', 'category')` -> `3` |
 | `duration(min, max)` | `string` | Random duration between `min` and `max` (Go duration strings).<br><br>`duration('1h', '24h')` -> `14h32m17s` |
 | `env(name)` | `string` | Returns the value of a given environment variable (or an error if one doesn't exist with that name). Missing variables are caught at config load time, before any queries run. Can be composed with other functions, e.g. `upper(env('HOST'))`. For numeric values, use expr-lang conversion: `int(env('PORT'))`, `float(env('RATE'))`.<br><br>`env('API_KEY')` -> `ca3864628a8f29d644e1...` |
+| `env_nil(name)` | `any` | Returns the value of an environment variable as a string, or `nil` if unset. Unlike `env()`, does not error on missing variables. Designed for use with `coalesce()` to provide defaults: `int(coalesce(env_nil('PORT'), 8080))`. Always returns a string when the variable exists, so wrap with `int()` or `float()` when arithmetic is needed.<br><br>`env_nil('MISSING')` -> `nil`<br>`env_nil('HOST')` -> `localhost` |
 | `exp(rate, min, max)` | `float64` | Exponentially-distributed random number in [min, max], rounded to 0 decimal places.<br><br>`exp(0.5, 0, 100)` -> `4` |
 | `exp_f(rate, min, max, precision)` | `float64` | Exponentially-distributed random number in [min, max], rounded to `precision` decimal places.<br><br>`exp_f(0.5, 0, 100, 2)` -> `3.72` |
 | `expr(expression)` | `any` | Evaluates an arithmetic expression. Alias for `const`, the expr engine handles the arithmetic.<br><br>`expr(2 + 3)` -> `5` |
@@ -391,6 +392,7 @@ These expressions are used in the `args:` list of a `run` query. Each entry in `
 | `const(42)` | Always passes the integer 42 |
 | `expr(warehouses * 10)` | Evaluates an arithmetic expression using globals |
 | `global('warehouses')` | Looks up a global by name (equivalent to using the variable directly) |
+| `int(coalesce(env_nil('CUSTOMERS'), 10000))` | Environment variable with default fallback, converted to int |
 | `warehouses * 10` | Direct global reference in an expression (equivalent to `expr(...)`) |
 
 ### Dates & times

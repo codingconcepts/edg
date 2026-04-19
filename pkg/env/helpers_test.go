@@ -50,3 +50,38 @@ func TestEnviron(t *testing.T) {
 		})
 	}
 }
+
+func TestEnvironNil(t *testing.T) {
+	cases := []struct {
+		name      string
+		envKeySet string
+		envKeyGet string
+		envVal    string
+		exp       any
+	}{
+		{
+			name:      "missing env var returns nil",
+			envKeySet: "ABC",
+			envKeyGet: "DEF",
+			envVal:    "123",
+			exp:       nil,
+		},
+		{
+			name:      "valid env var returns string",
+			envKeySet: "ABC",
+			envKeyGet: "ABC",
+			envVal:    "123",
+			exp:       "123",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			test.CleanupEnv(t, c.envKeySet)
+			os.Setenv(c.envKeySet, c.envVal)
+
+			act := environNil(c.envKeyGet)
+			assert.Equal(t, c.exp, act)
+		})
+	}
+}

@@ -223,6 +223,10 @@ go run ./cmd/edg workload movr all \
 -w 10 \
 -d 5s
 
+CUSTOMERS="1000" \
+ORDERS="1000" \
+STOCK="1000" \
+ITEMS="1000" \
 SPANNER_EMULATOR_HOST=localhost:9010 \
 go run ./cmd/edg workload tpcc all \
 --driver spanner \
