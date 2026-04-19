@@ -30,6 +30,7 @@ Query arguments are written as expressions compiled at startup, giving you acces
 | Oracle | `oracle` | `oracle://system:password@localhost:1521/db` |
 | MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
 | MSSQL | `mssql` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
+| Google Cloud Spanner | `spanner` | `projects/PROJECT/instances/INSTANCE/databases/DATABASE` |
 
 ## Quick start
 

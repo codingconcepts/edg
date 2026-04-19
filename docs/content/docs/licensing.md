@@ -14,9 +14,9 @@ edg is free to use for PostgreSQL/CockroachDB and MySQL workloads. Enterprise dr
 | PostgreSQL / CockroachDB | `pgx` | No |
 | MySQL | `mysql` | No |
 | Oracle | `oracle` | Yes |
-| Microsoft SQL Server | `mssql` | Yes |
-| AWS Aurora DSQL | `dsql` | Yes |
-| Google Cloud Spanner | `spanner` | Yes |
+| Microsoft SQL Server | `mssql` | <strong>Yes</strong> |
+| AWS Aurora DSQL | `dsql` | <strong>Yes</strong> |
+| Google Cloud Spanner | `spanner` | <strong>Yes</strong> |
 
 Commands that don't connect to a database (`repl`, `validate config`, and bare expression evaluation) work without a license regardless of driver.
 
