@@ -4,10 +4,32 @@ import (
 	"os"
 	"testing"
 
+	"github.com/codingconcepts/edg/pkg/convert"
 	"github.com/codingconcepts/edg/pkg/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSep(t *testing.T) {
+	cases := []struct {
+		driver string
+		exp    convert.RawSQL
+	}{
+		{"pgx", "chr(31)"},
+		{"dsql", "chr(31)"},
+		{"mysql", "CHAR(31)"},
+		{"mssql", "CHAR(31)"},
+		{"spanner", "CODE_POINTS_TO_STRING([31])"},
+		{"oracle", "codepoints-to-string(31)"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.driver, func(t *testing.T) {
+			e := &Env{driver: c.driver}
+			assert.Equal(t, c.exp, e.sep())
+		})
+	}
+}
 
 func TestEnviron(t *testing.T) {
 	cases := []struct {

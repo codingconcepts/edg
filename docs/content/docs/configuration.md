@@ -173,9 +173,9 @@ seed:
       INSERT INTO customer (email, name, created_at)
       SELECT e, n, t
       FROM unnest(
-        string_to_array('$1', sep),
-        string_to_array('$2', sep),
-        string_to_array('$3', sep)
+        string_to_array('$1', __sep__),
+        string_to_array('$2', __sep__),
+        string_to_array('$3', __sep__)
       ) AS t(e, n, t)
 
 run:
@@ -210,7 +210,7 @@ seed:
       - gen_batch(1000, 100, 'email')
     query: |-
       INSERT INTO users (email)
-      SELECT unnest(string_to_array('$1', sep))
+      SELECT unnest(string_to_array('$1', __sep__))
 ```
 
 - **`up`** and **`down`** manage schema (CREATE/DROP).
@@ -253,7 +253,7 @@ seed:
       - gen('email')
     query: |-
       INSERT INTO users (email)
-      SELECT unnest(string_to_array('$1', sep))
+      SELECT unnest(string_to_array('$1', __sep__))
 ```
 
 Which resolves to the following query automatically by edg:
@@ -281,7 +281,7 @@ seed:
       INSERT INTO users (email)
       SELECT j.val
       FROM JSON_TABLE(
-        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
+        CONCAT('["', REPLACE('$1', __sep__, '","'), '"]'),
         '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
       ) j
 ```
@@ -319,12 +319,12 @@ seed:
       INSERT INTO users (name, email)
       SELECT x1.value, x2.value
       FROM xmltable(
-             'for $s in tokenize($v, codepoints-to-string(31)) return <r>{$s}</r>'
+             'for $s in tokenize($v, __sep__) return <r>{$s}</r>'
              PASSING '$1' AS "v"
              COLUMNS value VARCHAR2(255) PATH '.'
            ) x1
       JOIN xmltable(
-             'for $s in tokenize($v, codepoints-to-string(31)) return <r>{$s}</r>'
+             'for $s in tokenize($v, __sep__) return <r>{$s}</r>'
              PASSING '$2' AS "v"
              COLUMNS value VARCHAR2(255) PATH '.'
            ) x2 ON x1.rowid = x2.rowid
@@ -380,7 +380,7 @@ JOIN OPENJSON('["a@x.com","b@y.com",...,"z@x.com"]') j2
 
 #### Spanner (GoogleSQL)
 
-Spanner uses GoogleSQL syntax. Batch values are unpacked with `UNNEST(SPLIT(...))`. The unit-separator-delimited string is split using `CODE_POINTS_TO_STRING([31])` (Spanner's equivalent of `chr(31)`), and `UNNEST` converts the resulting array into rows. Multiple columns are correlated using `WITH OFFSET`:
+Spanner uses GoogleSQL syntax. Batch values are unpacked with `UNNEST(SPLIT(..., __sep__))`. The `__sep__` token resolves to `CODE_POINTS_TO_STRING([31])` for Spanner, and `UNNEST` converts the resulting array into rows. Multiple columns are correlated using `WITH OFFSET`:
 
 ```yaml
 seed:
@@ -393,7 +393,7 @@ seed:
     query: |-
       INSERT INTO users (email)
       SELECT val
-      FROM UNNEST(SPLIT('$1', CODE_POINTS_TO_STRING([31]))) AS val
+      FROM UNNEST(SPLIT('$1', __sep__)) AS val
 ```
 
 Which resolves to the following query automatically by edg:
@@ -421,8 +421,8 @@ seed:
     query: |-
       INSERT INTO contact (name, email)
       SELECT n, e
-      FROM UNNEST(SPLIT('$1', CODE_POINTS_TO_STRING([31]))) AS n WITH OFFSET o1
-      JOIN UNNEST(SPLIT('$2', CODE_POINTS_TO_STRING([31]))) AS e WITH OFFSET o2
+      FROM UNNEST(SPLIT('$1', __sep__)) AS n WITH OFFSET o1
+      JOIN UNNEST(SPLIT('$2', __sep__)) AS e WITH OFFSET o2
         ON o1 = o2
 ```
 
@@ -629,7 +629,7 @@ args:
   - gen_batch(1000, 100, 'email')
 query: |-
   INSERT INTO users (email)
-  SELECT unnest(string_to_array('$1', sep))
+  SELECT unnest(string_to_array('$1', __sep__))
 ```
 
 If `$1` evaluates to `alice@x.com\x1fbob@y.com\x1f...`, the SQL sent to the database becomes:

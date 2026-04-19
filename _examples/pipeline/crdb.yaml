@@ -36,7 +36,7 @@ seed:
       - gen_batch(a_rows, batch_size, 'word')
     query: |-
       INSERT INTO a (name)
-      SELECT unnest(string_to_array('$1', sep))
+      SELECT unnest(string_to_array('$1', __sep__))
 
   - name: populate_b
     args:

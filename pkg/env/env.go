@@ -124,7 +124,6 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		"ref_rand":          env.refRand,         // Use a random row.
 		"ref_same":          env.refSame,         // Use the same random row across multiple arguments.
 		"regex":             gen.GenRegex,        // Generate a string matching a regex pattern.
-		"sep":               env.sep(),           // Batch field separator, driver-aware (evaluated once at init).
 		"seq":               env.seq,             // Auto-incrementing sequence (start + counter * step).
 		"set_exp":           setExp,              // Pick from a set using exponential distribution.
 		"set_lognorm":       setLognormal,        // Pick from a set using log-normal distribution.
@@ -231,13 +230,13 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		}
 	}
 
-	// Replace the sep token in query text with the driver-specific SQL
-	// function (chr(31) for pgx/dsql, CHAR(31) for mysql/mssql) so it
+	// Replace the __sep__ token in query text with the driver-specific SQL
+	// function (chr(31) for pgx/dsql, CHAR(31) for mysql/mssql, etc.) so it
 	// can be used directly in SQL without being an expression arg.
 	sepSQL := string(env.sep())
 	for _, queries := range allQueries {
 		for _, query := range queries {
-			query.Query = strings.ReplaceAll(query.Query, ", sep)", ", "+sepSQL+")")
+			query.Query = strings.ReplaceAll(query.Query, "__sep__", sepSQL)
 		}
 	}
 
@@ -526,7 +525,7 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 		// Inline $N placeholders when batch expansion occurred
 		// (gen_batch/batch/ref_each/query_batch/exec_batch), when
 		// placeholders appear inside quoted strings (e.g.
-		// string_to_array('$1', sep)) where the driver can't see them,
+		// string_to_array('$1', __sep__)) where the driver can't see them,
 		// or when the query uses $N placeholders at all. The last case
 		// ensures cross-driver compatibility: only PostgreSQL/CockroachDB
 		// understand $N natively; MySQL, Oracle, and SQL Server do not.

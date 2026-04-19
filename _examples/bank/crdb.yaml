@@ -27,7 +27,7 @@ seed:
       - gen_batch(customers, batch_size, 'email')
     query: |-
       INSERT INTO customer (email)
-      SELECT unnest(string_to_array('$1', sep))
+      SELECT unnest(string_to_array('$1', __sep__))
 
   - name: populate_account
     args:
