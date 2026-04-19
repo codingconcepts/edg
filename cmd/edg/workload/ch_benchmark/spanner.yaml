@@ -1,0 +1,788 @@
+# CH-benCHmark Workload for Google Cloud Spanner
+# ================================================
+# Mixed OLTP+OLAP workload combining TPC-C transactions with
+# TPC-H-style analytical queries running concurrently on the
+# same TPC-C schema. Tests HTAP (Hybrid Transactional/Analytical
+# Processing) capability.
+#
+# Uses the full TPC-C schema with nation/region/supplier tables
+# added per the CH-benCHmark specification.
+#
+# Spanner does not support writable CTEs (DML inside WITH clauses),
+# so run-section OLTP transactions are simplified to their primary
+# operation, matching the SQL Server approach.
+#
+# Spanner has a 20,000-mutation limit per transaction. Seed queries
+# batch inserts to stay within this limit. Adjust batch_size and
+# ol_batch if you see "mutation limit exceeded" errors.
+#
+# Uses FARM_FINGERPRINT(GENERATE_UUID()) in place of RAND() for
+# emulator compatibility.
+#
+# Connection URL format:
+#   projects/PROJECT/instances/INSTANCE/databases/DATABASE
+#
+# OLTP transactions (80% of workload):
+#   new_order  - TPC-C new order (36%)
+#   payment    - TPC-C payment (34%)
+#   order_status - TPC-C order status (4%)
+#   delivery   - TPC-C delivery (4%)
+#   stock_level - TPC-C stock level (2%)
+#
+# OLAP queries (20% of workload):
+#   q1_pricing_summary    - Aggregate order_line (5%)
+#   q6_forecasting_revenue - Revenue from order_line (5%)
+#   q11_important_stock    - Top stock items by value (5%)
+#   q12_shipping_modes     - Order urgency by carrier (5%)
+
+globals:
+  warehouses: 1
+  districts: 10
+  customers: int(coalesce(env_nil('CUSTOMERS'), 10000))
+  orders: int(coalesce(env_nil('ORDERS'), 10000))
+  stock: int(coalesce(env_nil('STOCK'), 10000))
+  items: int(coalesce(env_nil('ITEMS'), 10000))
+  batch_size: 500
+  ol_batch: 100
+
+up:
+  - name: create_warehouse
+    query: |-
+      CREATE TABLE IF NOT EXISTS warehouse (
+        w_id INT64 NOT NULL,
+        w_name STRING(10) NOT NULL,
+        w_street_1 STRING(20) NOT NULL,
+        w_street_2 STRING(20) NOT NULL,
+        w_city STRING(20) NOT NULL,
+        w_state STRING(2) NOT NULL,
+        w_zip STRING(9) NOT NULL,
+        w_tax NUMERIC NOT NULL,
+        w_ytd NUMERIC NOT NULL
+      ) PRIMARY KEY (w_id)
+
+  - name: create_district
+    query: |-
+      CREATE TABLE IF NOT EXISTS district (
+        d_w_id INT64 NOT NULL,
+        d_id INT64 NOT NULL,
+        d_name STRING(10) NOT NULL,
+        d_street_1 STRING(20) NOT NULL,
+        d_street_2 STRING(20) NOT NULL,
+        d_city STRING(20) NOT NULL,
+        d_state STRING(2) NOT NULL,
+        d_zip STRING(9) NOT NULL,
+        d_tax NUMERIC NOT NULL,
+        d_ytd NUMERIC NOT NULL,
+        d_next_o_id INT64 NOT NULL
+      ) PRIMARY KEY (d_w_id, d_id)
+
+  - name: create_customer
+    query: |-
+      CREATE TABLE IF NOT EXISTS customer (
+        c_w_id INT64 NOT NULL,
+        c_d_id INT64 NOT NULL,
+        c_id INT64 NOT NULL,
+        c_first STRING(16) NOT NULL,
+        c_middle STRING(2) NOT NULL,
+        c_last STRING(16) NOT NULL,
+        c_street_1 STRING(20) NOT NULL,
+        c_street_2 STRING(20) NOT NULL,
+        c_city STRING(20) NOT NULL,
+        c_state STRING(2) NOT NULL,
+        c_zip STRING(9) NOT NULL,
+        c_phone STRING(16) NOT NULL,
+        c_since TIMESTAMP NOT NULL,
+        c_credit STRING(2) NOT NULL,
+        c_credit_lim NUMERIC NOT NULL,
+        c_discount NUMERIC NOT NULL,
+        c_balance NUMERIC NOT NULL,
+        c_ytd_payment NUMERIC NOT NULL,
+        c_payment_cnt INT64 NOT NULL,
+        c_delivery_cnt INT64 NOT NULL,
+        c_data STRING(500) NOT NULL
+      ) PRIMARY KEY (c_w_id, c_d_id, c_id)
+
+  - name: create_history
+    query: |-
+      CREATE TABLE IF NOT EXISTS history (
+        h_id STRING(36) NOT NULL DEFAULT (GENERATE_UUID()),
+        h_c_id INT64 NOT NULL,
+        h_c_d_id INT64 NOT NULL,
+        h_c_w_id INT64 NOT NULL,
+        h_d_id INT64 NOT NULL,
+        h_w_id INT64 NOT NULL,
+        h_date TIMESTAMP NOT NULL,
+        h_amount NUMERIC NOT NULL,
+        h_data STRING(24) NOT NULL
+      ) PRIMARY KEY (h_id)
+
+  - name: create_oorder
+    query: |-
+      CREATE TABLE IF NOT EXISTS oorder (
+        o_w_id INT64 NOT NULL,
+        o_d_id INT64 NOT NULL,
+        o_id INT64 NOT NULL,
+        o_c_id INT64 NOT NULL,
+        o_entry_d TIMESTAMP NOT NULL,
+        o_carrier_id INT64,
+        o_ol_cnt INT64 NOT NULL,
+        o_all_local INT64 NOT NULL
+      ) PRIMARY KEY (o_w_id, o_d_id, o_id)
+
+  - name: create_new_order
+    query: |-
+      CREATE TABLE IF NOT EXISTS new_order (
+        no_w_id INT64 NOT NULL,
+        no_d_id INT64 NOT NULL,
+        no_o_id INT64 NOT NULL
+      ) PRIMARY KEY (no_w_id, no_d_id, no_o_id)
+
+  - name: create_order_line
+    query: |-
+      CREATE TABLE IF NOT EXISTS order_line (
+        ol_w_id INT64 NOT NULL,
+        ol_d_id INT64 NOT NULL,
+        ol_o_id INT64 NOT NULL,
+        ol_number INT64 NOT NULL,
+        ol_i_id INT64 NOT NULL,
+        ol_supply_w_id INT64 NOT NULL,
+        ol_delivery_d TIMESTAMP,
+        ol_quantity INT64 NOT NULL,
+        ol_amount NUMERIC NOT NULL,
+        ol_dist_info STRING(24) NOT NULL
+      ) PRIMARY KEY (ol_w_id, ol_d_id, ol_o_id, ol_number)
+
+  - name: create_item
+    query: |-
+      CREATE TABLE IF NOT EXISTS item (
+        i_id INT64 NOT NULL,
+        i_im_id INT64 NOT NULL,
+        i_name STRING(24) NOT NULL,
+        i_price NUMERIC NOT NULL,
+        i_data STRING(50) NOT NULL
+      ) PRIMARY KEY (i_id)
+
+  - name: create_stock
+    query: |-
+      CREATE TABLE IF NOT EXISTS stock (
+        s_w_id INT64 NOT NULL,
+        s_i_id INT64 NOT NULL,
+        s_quantity INT64 NOT NULL,
+        s_dist_01 STRING(24) NOT NULL,
+        s_dist_02 STRING(24) NOT NULL,
+        s_dist_03 STRING(24) NOT NULL,
+        s_dist_04 STRING(24) NOT NULL,
+        s_dist_05 STRING(24) NOT NULL,
+        s_dist_06 STRING(24) NOT NULL,
+        s_dist_07 STRING(24) NOT NULL,
+        s_dist_08 STRING(24) NOT NULL,
+        s_dist_09 STRING(24) NOT NULL,
+        s_dist_10 STRING(24) NOT NULL,
+        s_ytd INT64 NOT NULL,
+        s_order_cnt INT64 NOT NULL,
+        s_remote_cnt INT64 NOT NULL,
+        s_data STRING(50) NOT NULL
+      ) PRIMARY KEY (s_w_id, s_i_id)
+
+  - name: create_nation
+    query: |-
+      CREATE TABLE IF NOT EXISTS nation (
+        n_nationkey INT64 NOT NULL,
+        n_name STRING(25) NOT NULL,
+        n_regionkey INT64 NOT NULL,
+        n_comment STRING(152)
+      ) PRIMARY KEY (n_nationkey)
+
+  - name: create_region
+    query: |-
+      CREATE TABLE IF NOT EXISTS region (
+        r_regionkey INT64 NOT NULL,
+        r_name STRING(25) NOT NULL,
+        r_comment STRING(152)
+      ) PRIMARY KEY (r_regionkey)
+
+  - name: create_supplier
+    query: |-
+      CREATE TABLE IF NOT EXISTS supplier (
+        su_suppkey INT64 NOT NULL,
+        su_name STRING(25) NOT NULL,
+        su_address STRING(40) NOT NULL,
+        su_nationkey INT64 NOT NULL,
+        su_phone STRING(15) NOT NULL,
+        su_acctbal NUMERIC NOT NULL,
+        su_comment STRING(101)
+      ) PRIMARY KEY (su_suppkey)
+
+  - name: create_idx_customer_name
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_customer_name
+      ON customer (c_w_id, c_d_id, c_last, c_first)
+
+  - name: create_idx_oorder_customer
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_oorder_customer
+      ON oorder (o_w_id, o_d_id, o_c_id, o_id DESC)
+
+seed:
+  - name: populate_region
+    query: |-
+      INSERT INTO region (r_regionkey, r_name, r_comment)
+      SELECT
+        s - 1,
+        (ARRAY<STRING>['AFRICA','AMERICA','ASIA','EUROPE','MIDDLE EAST'])[OFFSET(s - 1)],
+        SUBSTR(GENERATE_UUID(), 1, 30)
+      FROM UNNEST(GENERATE_ARRAY(1, 5)) AS s
+
+  - name: populate_nation
+    query: |-
+      INSERT INTO nation (n_nationkey, n_name, n_regionkey, n_comment)
+      VALUES
+        (0,'ALGERIA',0,''),    (1,'ARGENTINA',1,''),  (2,'BRAZIL',1,''),
+        (3,'CANADA',1,''),     (4,'EGYPT',4,''),      (5,'ETHIOPIA',0,''),
+        (6,'FRANCE',3,''),     (7,'GERMANY',3,''),    (8,'INDIA',2,''),
+        (9,'INDONESIA',2,''),  (10,'IRAN',4,''),      (11,'IRAQ',4,''),
+        (12,'JAPAN',2,''),     (13,'JORDAN',4,''),    (14,'KENYA',0,''),
+        (15,'MOROCCO',0,''),   (16,'MOZAMBIQUE',0,''), (17,'PERU',1,''),
+        (18,'CHINA',2,''),     (19,'ROMANIA',3,''),   (20,'SAUDI ARABIA',4,''),
+        (21,'VIETNAM',2,''),   (22,'RUSSIA',3,''),    (23,'UNITED KINGDOM',3,''),
+        (24,'UNITED STATES',1,'')
+
+  - name: populate_supplier
+    args:
+      - batch(10000 / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO supplier (su_suppkey, su_name, su_address, su_nationkey,
+        su_phone, su_acctbal, su_comment)
+      SELECT
+        $1 * $2 + s,
+        CONCAT('Supplier#', LPAD(CAST($1 * $2 + s AS STRING), 9, '0')),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 25) + 15),
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 25),
+        CONCAT(
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 90) + 10 AS STRING), 2, '0'), '-',
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 1000) AS STRING), 3, '0'), '-',
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 1000) AS STRING), 3, '0'), '-',
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) AS STRING), 4, '0')
+        ),
+        CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 1100000) / 100.0 - 1000 AS NUMERIC),
+        SUBSTR(GENERATE_UUID(), 1, 30)
+      FROM UNNEST(GENERATE_ARRAY(1, $2)) AS s
+
+  - name: populate_item
+    args:
+      - batch(items / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO item (i_id, i_im_id, i_name, i_price, i_data)
+      SELECT
+        $1 * $2 + s,
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) + 1,
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 18) + 6),
+        CAST(ROUND(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 9900) / 100.0 + 1, 2) AS NUMERIC),
+        CASE WHEN MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) = 0
+          THEN CONCAT('ORIGINAL', SUBSTR(GENERATE_UUID(), 1,
+            MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 16) + 18))
+          ELSE SUBSTR(CONCAT(GENERATE_UUID(), GENERATE_UUID()), 1,
+            MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 24) + 26)
+        END
+      FROM UNNEST(GENERATE_ARRAY(1, $2)) AS s
+
+  - name: populate_warehouse
+    args:
+      - warehouses
+    query: |-
+      INSERT INTO warehouse (w_id, w_name, w_street_1, w_street_2, w_city,
+        w_state, w_zip, w_tax, w_ytd)
+      SELECT
+        s,
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 4) + 6),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, 2),
+        CONCAT(LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) AS STRING), 4, '0'), '11111'),
+        CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 100000) / 500000.0 AS NUMERIC),
+        CAST(300000 AS NUMERIC)
+      FROM UNNEST(GENERATE_ARRAY(1, $1)) AS s
+
+  - name: populate_district
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - districts
+    query: |-
+      INSERT INTO district (d_w_id, d_id, d_name, d_street_1, d_street_2,
+        d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id)
+      SELECT
+        $1, d,
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 4) + 6),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, 2),
+        CONCAT(LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) AS STRING), 4, '0'), '11111'),
+        CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 100000) / 500000.0 AS NUMERIC),
+        CAST(30000 AS NUMERIC),
+        3001
+      FROM UNNEST(GENERATE_ARRAY(1, $2)) AS d
+
+  - name: populate_customer
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - batch(customers / batch_size)
+      - batch_size
+      - customers / districts
+    query: |-
+      INSERT INTO customer (c_w_id, c_d_id, c_id, c_first, c_middle, c_last,
+        c_street_1, c_street_2, c_city, c_state, c_zip, c_phone,
+        c_since, c_credit, c_credit_lim, c_discount, c_balance,
+        c_ytd_payment, c_payment_cnt, c_delivery_cnt, c_data)
+      WITH gen AS (
+        SELECT
+          s,
+          DIV($2 * $3 + s - 1, $4) + 1 AS d_id,
+          MOD($2 * $3 + s - 1, $4) + 1 AS c_id,
+          CASE WHEN MOD($2 * $3 + s - 1, $4) < 1000
+            THEN MOD($2 * $3 + s - 1, $4)
+            ELSE MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 1000)
+          END AS ln
+        FROM UNNEST(GENERATE_ARRAY(1, $3)) AS s
+      )
+      SELECT
+        $1, g.d_id, g.c_id,
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 6),
+        'OE',
+        CONCAT(
+          (ARRAY<STRING>['BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'])[OFFSET(DIV(g.ln, 100))],
+          (ARRAY<STRING>['BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'])[OFFSET(MOD(DIV(g.ln, 10), 10))],
+          (ARRAY<STRING>['BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'])[OFFSET(MOD(g.ln, 10))]
+        ),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 10),
+        SUBSTR(GENERATE_UUID(), 1, 2),
+        CONCAT(LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10000) AS STRING), 4, '0'), '11111'),
+        CONCAT(
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 9999) AS STRING), 4, '0'),
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 9999) AS STRING), 4, '0'),
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 9999) AS STRING), 4, '0'),
+          LPAD(CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 9999) AS STRING), 4, '0')
+        ),
+        CURRENT_TIMESTAMP(),
+        CASE WHEN MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) = 0 THEN 'BC' ELSE 'GC' END,
+        CAST(50000 AS NUMERIC),
+        CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 100000) / 200000.0 AS NUMERIC),
+        CAST(-10 AS NUMERIC),
+        CAST(10 AS NUMERIC),
+        1,
+        0,
+        SUBSTR(
+          CONCAT(GENERATE_UUID(), GENERATE_UUID(), GENERATE_UUID(),
+                 GENERATE_UUID(), GENERATE_UUID(), GENERATE_UUID(),
+                 GENERATE_UUID(), GENERATE_UUID(), GENERATE_UUID(),
+                 GENERATE_UUID(), GENERATE_UUID(), GENERATE_UUID(),
+                 GENERATE_UUID(), GENERATE_UUID(), GENERATE_UUID()),
+          1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 200) + 300
+        )
+      FROM gen g
+
+  - name: populate_history
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - batch(customers / batch_size)
+      - batch_size
+      - customers / districts
+    query: |-
+      INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id,
+        h_date, h_amount, h_data)
+      SELECT
+        MOD($2 * $3 + s - 1, $4) + 1,
+        DIV($2 * $3 + s - 1, $4) + 1,
+        $1,
+        DIV($2 * $3 + s - 1, $4) + 1,
+        $1,
+        CURRENT_TIMESTAMP(),
+        CAST(10 AS NUMERIC),
+        SUBSTR(GENERATE_UUID(), 1, MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 12) + 12)
+      FROM UNNEST(GENERATE_ARRAY(1, $3)) AS s
+
+  - name: populate_oorder
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - batch(orders / batch_size)
+      - batch_size
+      - orders / districts
+    query: |-
+      INSERT INTO oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
+        o_carrier_id, o_ol_cnt, o_all_local)
+      SELECT
+        $1,
+        DIV($2 * $3 + s - 1, $4) + 1,
+        MOD($2 * $3 + s - 1, $4) + 1,
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 3000) + 1,
+        CURRENT_TIMESTAMP(),
+        CASE WHEN MOD($2 * $3 + s - 1, $4) + 1 <= 2100
+          THEN MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) + 1
+          ELSE NULL
+        END,
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 11) + 5,
+        1
+      FROM UNNEST(GENERATE_ARRAY(1, $3)) AS s
+
+  - name: populate_new_order
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - batch(districts)
+      - orders / districts
+    query: |-
+      INSERT INTO new_order (no_w_id, no_d_id, no_o_id)
+      SELECT $1, $2 + 1, s
+      FROM UNNEST(GENERATE_ARRAY(2101, $3)) AS s
+
+  - name: populate_order_line
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - batch(orders / ol_batch)
+      - orders / districts / ol_batch
+      - ol_batch
+    query: |-
+      INSERT INTO order_line (ol_w_id, ol_d_id, ol_o_id, ol_number,
+        ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount,
+        ol_dist_info)
+      SELECT
+        o.o_w_id, o.o_d_id, o.o_id,
+        n,
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 100000) + 1,
+        o.o_w_id,
+        CASE WHEN o.o_id <= 2100 THEN o.o_entry_d ELSE NULL END,
+        5,
+        CASE WHEN o.o_id <= 2100 THEN CAST(0 AS NUMERIC)
+             ELSE CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 999900) / 100.0 AS NUMERIC)
+        END,
+        SUBSTR(GENERATE_UUID(), 1, 24)
+      FROM oorder o
+      CROSS JOIN UNNEST(GENERATE_ARRAY(1, 15)) AS n
+      WHERE n <= o.o_ol_cnt
+        AND o.o_w_id = $1
+        AND o.o_d_id = DIV($2, $3) + 1
+        AND o.o_id > MOD($2, $3) * $4
+        AND o.o_id <= (MOD($2, $3) + 1) * $4
+
+  - name: populate_stock
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - batch(stock / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO stock (s_w_id, s_i_id, s_quantity,
+        s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05,
+        s_dist_06, s_dist_07, s_dist_08, s_dist_09, s_dist_10,
+        s_ytd, s_order_cnt, s_remote_cnt, s_data)
+      SELECT
+        $1, $2 * $3 + s,
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 91) + 10,
+        SUBSTR(GENERATE_UUID(), 1, 24),
+        SUBSTR(GENERATE_UUID(), 1, 24),
+        SUBSTR(GENERATE_UUID(), 1, 24),
+        SUBSTR(GENERATE_UUID(), 1, 24),
+        SUBSTR(GENERATE_UUID(), 1, 24),
+        SUBSTR(GENERATE_UUID(), 1, 24),
+        SUBSTR(GENERATE_UUID(), 1, 24),
+        SUBSTR(GENERATE_UUID(), 1, 24),
+        SUBSTR(GENERATE_UUID(), 1, 24),
+        SUBSTR(GENERATE_UUID(), 1, 24),
+        0, 0, 0,
+        CASE WHEN MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 10) = 0
+          THEN CONCAT('ORIGINAL', SUBSTR(GENERATE_UUID(), 1,
+            MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 16) + 18))
+          ELSE SUBSTR(CONCAT(GENERATE_UUID(), GENERATE_UUID()), 1,
+            MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 24) + 26)
+        END
+      FROM UNNEST(GENERATE_ARRAY(1, $3)) AS s
+
+deseed:
+  - name: delete_order_line
+    type: exec
+    query: DELETE FROM order_line WHERE TRUE
+
+  - name: delete_new_order
+    type: exec
+    query: DELETE FROM new_order WHERE TRUE
+
+  - name: delete_oorder
+    type: exec
+    query: DELETE FROM oorder WHERE TRUE
+
+  - name: delete_history
+    type: exec
+    query: DELETE FROM history WHERE TRUE
+
+  - name: delete_stock
+    type: exec
+    query: DELETE FROM stock WHERE TRUE
+
+  - name: delete_customer
+    type: exec
+    query: DELETE FROM customer WHERE TRUE
+
+  - name: delete_district
+    type: exec
+    query: DELETE FROM district WHERE TRUE
+
+  - name: delete_warehouse
+    type: exec
+    query: DELETE FROM warehouse WHERE TRUE
+
+  - name: delete_item
+    type: exec
+    query: DELETE FROM item WHERE TRUE
+
+  - name: delete_supplier
+    type: exec
+    query: DELETE FROM supplier WHERE TRUE
+
+  - name: delete_nation
+    type: exec
+    query: DELETE FROM nation WHERE TRUE
+
+  - name: delete_region
+    type: exec
+    query: DELETE FROM region WHERE TRUE
+
+down:
+  - name: drop_order_line
+    type: exec
+    query: DROP TABLE IF EXISTS order_line
+
+  - name: drop_new_order
+    type: exec
+    query: DROP TABLE IF EXISTS new_order
+
+  - name: drop_oorder
+    type: exec
+    query: DROP TABLE IF EXISTS oorder
+
+  - name: drop_history
+    type: exec
+    query: DROP TABLE IF EXISTS history
+
+  - name: drop_stock
+    type: exec
+    query: DROP TABLE IF EXISTS stock
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer
+
+  - name: drop_district
+    type: exec
+    query: DROP TABLE IF EXISTS district
+
+  - name: drop_warehouse
+    type: exec
+    query: DROP TABLE IF EXISTS warehouse
+
+  - name: drop_item
+    type: exec
+    query: DROP TABLE IF EXISTS item
+
+  - name: drop_supplier
+    type: exec
+    query: DROP TABLE IF EXISTS supplier
+
+  - name: drop_nation
+    type: exec
+    query: DROP TABLE IF EXISTS nation
+
+  - name: drop_region
+    type: exec
+    query: DROP TABLE IF EXISTS region
+
+init:
+  - name: fetch_warehouses
+    type: query
+    query: SELECT w_id FROM warehouse
+
+run_weights:
+  # OLTP (80%)
+  new_order: 36
+  payment: 34
+  order_status: 4
+  delivery: 4
+  stock_level: 2
+  # OLAP (20%)
+  q1_pricing_summary: 5
+  q6_forecasting_revenue: 5
+  q11_important_stock: 5
+  q12_shipping_modes: 5
+
+run:
+  # === OLTP Transactions (TPC-C) ===
+
+  # New-Order transaction (TPC-C 2.4) - Simplified
+  - name: new_order
+    type: exec
+    wait: 18s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+      - gen('number:5,15')
+    query: |-
+      INSERT INTO oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
+        o_ol_cnt, o_all_local)
+      SELECT
+        CAST(@p1 AS INT64), CAST(@p2 AS INT64),
+        COALESCE((SELECT MAX(o_id) FROM oorder
+          WHERE o_w_id = CAST(@p1 AS INT64)
+            AND o_d_id = CAST(@p2 AS INT64)), 0) + 1,
+        CAST(@p3 AS INT64), CURRENT_TIMESTAMP(),
+        CAST(@p4 AS INT64), 1
+
+  # Payment transaction (TPC-C 2.5) - Simplified
+  - name: payment
+    type: exec
+    wait: 3s
+    args:
+      - gen('number:100,500000')
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+    query: |-
+      UPDATE customer SET
+        c_balance = c_balance - CAST(@p1 AS NUMERIC) / 100,
+        c_ytd_payment = c_ytd_payment + CAST(@p1 AS NUMERIC) / 100,
+        c_payment_cnt = c_payment_cnt + 1
+      WHERE c_w_id = CAST(@p2 AS INT64)
+        AND c_d_id = CAST(@p3 AS INT64)
+        AND c_id = CAST(@p4 AS INT64)
+
+  # Order-Status transaction (TPC-C 2.6) - Read-only
+  - name: order_status
+    type: query
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+    query: |-
+      SELECT o.o_id, o.o_entry_d, o.o_carrier_id,
+        ol.ol_i_id, ol.ol_supply_w_id, ol.ol_quantity,
+        ol.ol_amount, ol.ol_delivery_d
+      FROM oorder o
+      JOIN order_line ol
+        ON ol.ol_w_id = o.o_w_id AND ol.ol_d_id = o.o_d_id
+        AND ol.ol_o_id = o.o_id
+      WHERE o.o_w_id = CAST(@p1 AS INT64)
+        AND o.o_d_id = CAST(@p2 AS INT64)
+        AND o.o_c_id = CAST(@p3 AS INT64)
+        AND o.o_id = (
+          SELECT MAX(o2.o_id) FROM oorder o2
+          WHERE o2.o_w_id = CAST(@p1 AS INT64)
+            AND o2.o_d_id = CAST(@p2 AS INT64)
+            AND o2.o_c_id = CAST(@p3 AS INT64)
+        )
+
+  # Delivery transaction (TPC-C 2.7) - Simplified
+  - name: delivery
+    type: exec
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+    query: |-
+      DELETE FROM new_order
+      WHERE no_w_id = CAST(@p1 AS INT64)
+        AND no_d_id = CAST(@p2 AS INT64)
+        AND no_o_id = (
+          SELECT MIN(no_o_id) FROM new_order
+          WHERE no_w_id = CAST(@p1 AS INT64)
+            AND no_d_id = CAST(@p2 AS INT64)
+        )
+
+  # Stock-Level transaction (TPC-C 2.8) - Read-only
+  - name: stock_level
+    type: query
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:10,20')
+    query: |-
+      SELECT COUNT(DISTINCT s.s_i_id) AS low_stock
+      FROM district d
+      JOIN order_line ol
+        ON ol.ol_w_id = d.d_w_id AND ol.ol_d_id = d.d_id
+        AND ol.ol_o_id BETWEEN d.d_next_o_id - 20 AND d.d_next_o_id - 1
+      JOIN stock s
+        ON s.s_i_id = ol.ol_i_id AND s.s_w_id = d.d_w_id
+      WHERE d.d_w_id = CAST(@p1 AS INT64) AND d.d_id = CAST(@p2 AS INT64)
+        AND s.s_quantity < CAST(@p3 AS INT64)
+
+  # === OLAP Queries (TPC-H adapted to TPC-C schema) ===
+
+  # CH Q1: Pricing summary on order_line.
+  # Heavy aggregation over delivered order lines.
+  - name: q1_pricing_summary
+    type: query
+    query: |-
+      SELECT
+        ol_number,
+        SUM(ol_quantity) AS sum_qty,
+        SUM(ol_amount) AS sum_amount,
+        AVG(CAST(ol_quantity AS NUMERIC)) AS avg_qty,
+        AVG(ol_amount) AS avg_amount,
+        COUNT(*) AS count_order
+      FROM order_line
+      WHERE ol_delivery_d IS NOT NULL
+      GROUP BY ol_number
+      ORDER BY ol_number
+
+  # CH Q6: Revenue forecast on order_line.
+  # Single-table scan with range predicates.
+  - name: q6_forecasting_revenue
+    type: query
+    query: |-
+      SELECT SUM(ol_amount) AS revenue
+      FROM order_line
+      WHERE ol_delivery_d IS NOT NULL
+        AND ol_quantity BETWEEN 1 AND 100000
+
+  # CH Q11: Important stock - top items by value.
+  # Joins stock with supplier and nation for geographic filtering.
+  - name: q11_important_stock
+    type: query
+    args:
+      - ref_perm('fetch_warehouses').w_id
+    query: |-
+      SELECT s_i_id, SUM(s_quantity) AS total_qty
+      FROM stock
+      JOIN supplier ON supplier.su_suppkey = MOD(stock.s_i_id, 10000) + 1
+      JOIN nation ON nation.n_nationkey = supplier.su_nationkey
+      WHERE s_w_id = CAST(@p1 AS INT64)
+      GROUP BY s_i_id
+      HAVING SUM(s_quantity) > (
+        SELECT SUM(s_quantity) * 0.0001
+        FROM stock
+        WHERE s_w_id = CAST(@p1 AS INT64)
+      )
+      ORDER BY total_qty DESC
+
+  # CH Q12: Shipping modes - order urgency by carrier.
+  # Aggregates orders by carrier to measure high/low priority mix.
+  - name: q12_shipping_modes
+    type: query
+    query: |-
+      SELECT
+        o.o_ol_cnt,
+        SUM(CASE WHEN o.o_carrier_id BETWEEN 1 AND 5
+          THEN 1 ELSE 0 END) AS high_line_count,
+        SUM(CASE WHEN o.o_carrier_id > 5 OR o.o_carrier_id IS NULL
+          THEN 1 ELSE 0 END) AS low_line_count
+      FROM oorder o
+      JOIN order_line ol
+        ON o.o_w_id = ol.ol_w_id AND o.o_d_id = ol.ol_d_id
+        AND o.o_id = ol.ol_o_id
+      WHERE ol.ol_delivery_d IS NOT NULL
+      GROUP BY o.o_ol_cnt
+      ORDER BY o.o_ol_cnt

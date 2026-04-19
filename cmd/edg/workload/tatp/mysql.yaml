@@ -1,0 +1,554 @@
+# TATP Benchmark Workload for MySQL
+# ==================================
+# Telecom Application Transaction Processing benchmark.
+# Models a mobile phone subscriber database with 80% reads
+# and 20% writes. Simple schema, high throughput.
+#
+# Schema:
+#   subscriber       - Phone subscribers with data fields
+#   access_info      - Access records per subscriber
+#   special_facility - Special facility flags per subscriber
+#   call_forwarding  - Call forwarding rules
+#
+# Transaction profiles (per TATP spec):
+#   get_subscriber_data    - Point lookup by subscriber ID (35%)
+#   get_new_destination    - Call forwarding lookup (10%)
+#   get_access_data        - Access info lookup (35%)
+#   update_subscriber_data - Toggle a subscriber bit (2%)
+#   update_location        - Update subscriber location (14%)
+#   insert_call_forwarding - Add a forwarding rule (2%)
+#   delete_call_forwarding - Remove a forwarding rule (2%)
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
+globals:
+  subscribers: 100000
+  batch_size: 10000
+
+up:
+
+  - name: create_subscriber
+    query: |-
+      CREATE TABLE IF NOT EXISTS subscriber (
+        s_id INT NOT NULL PRIMARY KEY,
+        sub_nbr VARCHAR(15) NOT NULL,
+        bit_1 INT NOT NULL DEFAULT 0,
+        bit_2 INT NOT NULL DEFAULT 0,
+        bit_3 INT NOT NULL DEFAULT 0,
+        bit_4 INT NOT NULL DEFAULT 0,
+        bit_5 INT NOT NULL DEFAULT 0,
+        bit_6 INT NOT NULL DEFAULT 0,
+        bit_7 INT NOT NULL DEFAULT 0,
+        bit_8 INT NOT NULL DEFAULT 0,
+        bit_9 INT NOT NULL DEFAULT 0,
+        bit_10 INT NOT NULL DEFAULT 0,
+        hex_1 INT NOT NULL DEFAULT 0,
+        hex_2 INT NOT NULL DEFAULT 0,
+        hex_3 INT NOT NULL DEFAULT 0,
+        hex_4 INT NOT NULL DEFAULT 0,
+        hex_5 INT NOT NULL DEFAULT 0,
+        hex_6 INT NOT NULL DEFAULT 0,
+        hex_7 INT NOT NULL DEFAULT 0,
+        hex_8 INT NOT NULL DEFAULT 0,
+        hex_9 INT NOT NULL DEFAULT 0,
+        hex_10 INT NOT NULL DEFAULT 0,
+        byte2_1 INT NOT NULL DEFAULT 0,
+        byte2_2 INT NOT NULL DEFAULT 0,
+        byte2_3 INT NOT NULL DEFAULT 0,
+        byte2_4 INT NOT NULL DEFAULT 0,
+        byte2_5 INT NOT NULL DEFAULT 0,
+        byte2_6 INT NOT NULL DEFAULT 0,
+        byte2_7 INT NOT NULL DEFAULT 0,
+        byte2_8 INT NOT NULL DEFAULT 0,
+        byte2_9 INT NOT NULL DEFAULT 0,
+        byte2_10 INT NOT NULL DEFAULT 0,
+        msc_location INT NOT NULL DEFAULT 0,
+        vlr_location INT NOT NULL DEFAULT 0,
+        UNIQUE (sub_nbr)
+      )
+
+  - name: create_access_info
+    query: |-
+      CREATE TABLE IF NOT EXISTS access_info (
+        s_id INT NOT NULL,
+        ai_type INT NOT NULL,
+        data1 INT NOT NULL DEFAULT 0,
+        data2 INT NOT NULL DEFAULT 0,
+        data3 VARCHAR(3) NOT NULL DEFAULT '',
+        data4 VARCHAR(5) NOT NULL DEFAULT '',
+        PRIMARY KEY (s_id, ai_type)
+      )
+
+  - name: create_special_facility
+    query: |-
+      CREATE TABLE IF NOT EXISTS special_facility (
+        s_id INT NOT NULL,
+        sf_type INT NOT NULL,
+        is_active INT NOT NULL DEFAULT 1,
+        error_cntrl INT NOT NULL DEFAULT 0,
+        data_a INT NOT NULL DEFAULT 0,
+        data_b VARCHAR(5) NOT NULL DEFAULT '',
+        PRIMARY KEY (s_id, sf_type)
+      )
+
+  - name: create_call_forwarding
+    query: |-
+      CREATE TABLE IF NOT EXISTS call_forwarding (
+        s_id INT NOT NULL,
+        sf_type INT NOT NULL,
+        start_time INT NOT NULL,
+        end_time INT NOT NULL,
+        numberx VARCHAR(15) NOT NULL,
+        PRIMARY KEY (s_id, sf_type, start_time)
+      )
+
+seed:
+
+  - name: populate_subscriber
+    type: exec_batch
+    count: subscribers
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - template('%015d', seq(1, 1))
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,65535')
+      - gen('number:0,65535')
+    query: |-
+      INSERT INTO subscriber (s_id, sub_nbr,
+        bit_1, bit_2, bit_3, bit_4, bit_5,
+        bit_6, bit_7, bit_8, bit_9, bit_10,
+        hex_1, hex_2, hex_3, hex_4, hex_5,
+        hex_6, hex_7, hex_8, hex_9, hex_10,
+        byte2_1, byte2_2, byte2_3, byte2_4, byte2_5,
+        byte2_6, byte2_7, byte2_8, byte2_9, byte2_10,
+        msc_location, vlr_location)
+      SELECT
+        j1.val, j2.val,
+        j3.val, j4.val, j5.val, j6.val, j7.val,
+        j8.val, j9.val, j10.val, j11.val, j12.val,
+        j13.val, j14.val, j15.val, j16.val, j17.val,
+        j18.val, j19.val, j20.val, j21.val, j22.val,
+        j23.val, j24.val, j25.val, j26.val, j27.val,
+        j28.val, j29.val, j30.val, j31.val, j32.val,
+        j33.val, j34.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j1
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$2', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(15) PATH '$', rn FOR ORDINALITY)
+      ) j2 ON j1.rn = j2.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j3 ON j1.rn = j3.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$4', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j4 ON j1.rn = j4.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$5', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j5 ON j1.rn = j5.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$6', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j6 ON j1.rn = j6.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$7', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j7 ON j1.rn = j7.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$8', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j8 ON j1.rn = j8.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$9', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j9 ON j1.rn = j9.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$10', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j10 ON j1.rn = j10.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$11', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j11 ON j1.rn = j11.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$12', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j12 ON j1.rn = j12.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$13', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j13 ON j1.rn = j13.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$14', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j14 ON j1.rn = j14.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$15', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j15 ON j1.rn = j15.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$16', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j16 ON j1.rn = j16.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$17', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j17 ON j1.rn = j17.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$18', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j18 ON j1.rn = j18.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$19', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j19 ON j1.rn = j19.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$20', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j20 ON j1.rn = j20.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$21', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j21 ON j1.rn = j21.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$22', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j22 ON j1.rn = j22.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$23', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j23 ON j1.rn = j23.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$24', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j24 ON j1.rn = j24.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$25', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j25 ON j1.rn = j25.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$26', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j26 ON j1.rn = j26.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$27', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j27 ON j1.rn = j27.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$28', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j28 ON j1.rn = j28.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$29', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j29 ON j1.rn = j29.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$30', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j30 ON j1.rn = j30.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$31', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j31 ON j1.rn = j31.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$32', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j32 ON j1.rn = j32.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$33', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j33 ON j1.rn = j33.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$34', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j34 ON j1.rn = j34.rn
+
+  - name: populate_access_info
+    type: exec_batch
+    count: subscribers
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - gen('number:1,4')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - regex('[a-z]{3}')
+      - regex('[a-z]{5}')
+    query: |-
+      INSERT IGNORE INTO access_info (s_id, ai_type, data1, data2, data3, data4)
+      SELECT j1.val, j2.val, j3.val, j4.val, j5.val, j6.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j1
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$2', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j2 ON j1.rn = j2.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j3 ON j1.rn = j3.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$4', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j4 ON j1.rn = j4.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$5', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(3) PATH '$', rn FOR ORDINALITY)
+      ) j5 ON j1.rn = j5.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$6', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(5) PATH '$', rn FOR ORDINALITY)
+      ) j6 ON j1.rn = j6.rn
+
+  - name: populate_special_facility
+    type: exec_batch
+    count: subscribers
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - gen('number:1,4')
+      - gen('number:0,1')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - regex('[a-z]{5}')
+    query: |-
+      INSERT IGNORE INTO special_facility (s_id, sf_type, is_active,
+        error_cntrl, data_a, data_b)
+      SELECT j1.val, j2.val, j3.val, j4.val, j5.val, j6.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j1
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$2', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j2 ON j1.rn = j2.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j3 ON j1.rn = j3.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$4', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j4 ON j1.rn = j4.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$5', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j5 ON j1.rn = j5.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$6', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(5) PATH '$', rn FOR ORDINALITY)
+      ) j6 ON j1.rn = j6.rn
+
+  - name: populate_call_forwarding
+    type: exec_batch
+    count: subscribers
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - gen('number:1,4')
+      - gen('number:0,2')
+      - gen('number:1,8')
+      - template('%015d', gen('number:1,999999999'))
+    query: |-
+      INSERT IGNORE INTO call_forwarding (s_id, sf_type, start_time,
+        end_time, numberx)
+      SELECT j1.val, j2.val, j3.val * 8, j3.val * 8 + j4.val, j5.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j1
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$2', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j2 ON j1.rn = j2.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j3 ON j1.rn = j3.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$4', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val INT PATH '$', rn FOR ORDINALITY)
+      ) j4 ON j1.rn = j4.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$5', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(15) PATH '$', rn FOR ORDINALITY)
+      ) j5 ON j1.rn = j5.rn
+
+deseed:
+
+  - name: delete_call_forwarding
+    type: exec
+    query: DELETE FROM call_forwarding
+
+  - name: delete_special_facility
+    type: exec
+    query: DELETE FROM special_facility
+
+  - name: delete_access_info
+    type: exec
+    query: DELETE FROM access_info
+
+  - name: delete_subscriber
+    type: exec
+    query: DELETE FROM subscriber
+
+down:
+
+  - name: drop_call_forwarding
+    type: exec
+    query: DROP TABLE IF EXISTS call_forwarding
+
+  - name: drop_special_facility
+    type: exec
+    query: DROP TABLE IF EXISTS special_facility
+
+  - name: drop_access_info
+    type: exec
+    query: DROP TABLE IF EXISTS access_info
+
+  - name: drop_subscriber
+    type: exec
+    query: DROP TABLE IF EXISTS subscriber
+
+init:
+
+  - name: fetch_subscribers
+    type: query
+    query: SELECT s_id, sub_nbr FROM subscriber ORDER BY RAND()
+
+run_weights:
+  get_subscriber_data: 35
+  get_new_destination: 10
+  get_access_data: 35
+  update_subscriber_data: 2
+  update_location: 14
+  insert_call_forwarding: 2
+  delete_call_forwarding: 2
+
+run:
+
+  # Point lookup by subscriber ID.
+  - name: get_subscriber_data
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+    query: |-
+      SELECT * FROM subscriber WHERE s_id = ?
+
+  # Look up call forwarding rules for a subscriber.
+  - name: get_new_destination
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+      - gen('number:1,24')
+    query: |-
+      SELECT cf.numberx
+      FROM special_facility sf
+      JOIN call_forwarding cf
+        ON cf.s_id = sf.s_id AND cf.sf_type = sf.sf_type
+      WHERE sf.s_id = ? AND sf.sf_type = ?
+        AND sf.is_active = 1
+        AND cf.start_time <= ? AND cf.end_time > ?
+
+  # Look up access info for a subscriber.
+  - name: get_access_data
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+    query: |-
+      SELECT data1, data2, data3, data4
+      FROM access_info
+      WHERE s_id = ? AND ai_type = ?
+
+  # Toggle a bit field on a subscriber.
+  - name: update_subscriber_data
+    type: exec
+    args:
+      - gen('number:0,1')
+      - ref_rand('fetch_subscribers').s_id
+    query: |-
+      UPDATE subscriber SET bit_1 = ?
+      WHERE s_id = ?
+
+  # Update subscriber location.
+  - name: update_location
+    type: exec
+    args:
+      - gen('number:0,65535')
+      - ref_rand('fetch_subscribers').sub_nbr
+    query: |-
+      UPDATE subscriber SET vlr_location = ?
+      WHERE sub_nbr = ?
+
+  # Insert a new call forwarding rule.
+  - name: insert_call_forwarding
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+      - gen('number:1,24')
+      - template('%015d', gen('number:1,999999999'))
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+    query: |-
+      INSERT IGNORE INTO call_forwarding (s_id, sf_type, start_time,
+        end_time, numberx)
+      SELECT ?, ?, ?, ?, ?
+      FROM special_facility
+      WHERE s_id = ? AND sf_type = ?
+      LIMIT 1
+
+  # Remove a call forwarding rule.
+  - name: delete_call_forwarding
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+    query: |-
+      DELETE FROM call_forwarding
+      WHERE s_id = ? AND sf_type = ?
+        AND start_time = ?

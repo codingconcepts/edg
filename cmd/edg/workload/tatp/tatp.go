@@ -1,0 +1,17 @@
+package tatp
+
+import (
+	"embed"
+
+	"github.com/codingconcepts/edg/cmd/edg/workload"
+	"github.com/spf13/cobra"
+)
+
+//go:embed *.yaml
+var yamlFS embed.FS
+
+func Cmd(deps workload.Deps) *cobra.Command {
+	cmd := &cobra.Command{Use: "tatp", Short: "Run the TATP workload"}
+	workload.AddSubcommands(cmd, workload.WithWorkload(deps, yamlFS, "tatp"))
+	return cmd
+}

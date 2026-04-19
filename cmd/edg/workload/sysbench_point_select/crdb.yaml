@@ -1,0 +1,62 @@
+# Sysbench oltp_point_select Workload
+# ====================================
+# Pure point-select micro-benchmark. Every operation is a single
+# primary-key lookup. Useful for measuring read latency floor and
+# connection overhead.
+#
+# Schema matches standard sysbench sbtest1 table.
+
+globals:
+  records: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_sbtest1
+    query: |-
+      CREATE TABLE IF NOT EXISTS sbtest1 (
+        id INT NOT NULL PRIMARY KEY,
+        k INT NOT NULL DEFAULT 0,
+        c CHAR(120) NOT NULL DEFAULT '',
+        pad CHAR(60) NOT NULL DEFAULT ''
+      )
+
+  - name: create_idx_k
+    query: |-
+      CREATE INDEX IF NOT EXISTS k_1 ON sbtest1(k)
+
+seed:
+
+  - name: populate_sbtest1
+    args:
+      - batch(records / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO sbtest1 (id, k, c, pad)
+      SELECT
+        $1::INT * $2::INT + s,
+        floor(random()::FLOAT8 * $2::INT)::INT,
+        lpad('', 120, md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text)),
+        lpad('', 60, md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text))
+      FROM generate_series(1, $2::INT) AS s
+
+deseed:
+
+  - name: truncate_sbtest1
+    type: exec
+    query: TRUNCATE TABLE sbtest1
+
+down:
+
+  - name: drop_sbtest1
+    type: exec
+    query: DROP TABLE IF EXISTS sbtest1
+
+run:
+
+  - name: point_select
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT c FROM sbtest1 WHERE id = $1::INT

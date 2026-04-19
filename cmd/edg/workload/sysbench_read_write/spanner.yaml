@@ -1,0 +1,142 @@
+# Sysbench oltp_read_write Workload for Google Cloud Spanner
+# ============================================================
+# Mixed read-write micro-benchmark matching sysbench's
+# oltp_read_write profile. Each "transaction" combines point
+# selects, range scans, aggregations, index updates, non-index
+# updates, a delete, and an insert.
+#
+# Connection URL format:
+#   projects/PROJECT/instances/INSTANCE/databases/DATABASE
+
+globals:
+  records: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_sbtest1
+    query: |-
+      CREATE TABLE IF NOT EXISTS sbtest1 (
+        id INT64 NOT NULL,
+        k INT64 NOT NULL DEFAULT (0),
+        c STRING(120) NOT NULL DEFAULT (''),
+        pad STRING(60) NOT NULL DEFAULT ('')
+      ) PRIMARY KEY (id)
+
+  - name: create_idx_k
+    query: |-
+      CREATE INDEX IF NOT EXISTS k_1 ON sbtest1(k)
+
+seed:
+
+  - name: populate_sbtest1
+    type: exec_batch
+    count: records
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - gen('number:0,10000')
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      INSERT INTO sbtest1 (id, k, c, pad)
+      VALUES ($1, $2, $3, $4)
+
+deseed:
+
+  - name: delete_sbtest1
+    type: exec
+    query: DELETE FROM sbtest1 WHERE TRUE
+
+down:
+
+  - name: drop_sbtest1
+    type: exec
+    query: DROP TABLE IF EXISTS sbtest1
+
+run_weights:
+  point_select: 50
+  range_select: 5
+  range_sum: 5
+  range_order: 5
+  range_distinct: 5
+  update_index: 10
+  update_non_index: 10
+  delete_insert: 10
+
+run:
+
+  # Point select by primary key.
+  - name: point_select
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT c FROM sbtest1 WHERE id = $1
+
+  # Range select: 100 rows from a random start.
+  - name: range_select
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT c FROM sbtest1
+      WHERE id BETWEEN $1 AND $1 + 99
+
+  # Range sum: aggregate over 100 rows.
+  - name: range_sum
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT SUM(k) FROM sbtest1
+      WHERE id BETWEEN $1 AND $1 + 99
+
+  # Range order: 100 rows ordered by c.
+  - name: range_order
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT c FROM sbtest1
+      WHERE id BETWEEN $1 AND $1 + 99
+      ORDER BY c
+
+  # Range distinct: distinct k in 100 rows ordered by c.
+  - name: range_distinct
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT DISTINCT c FROM sbtest1
+      WHERE id BETWEEN $1 AND $1 + 99
+      ORDER BY c
+
+  # Update indexed column k.
+  - name: update_index
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      UPDATE sbtest1 SET k = k + 1 WHERE id = $1
+
+  # Update non-indexed column c.
+  - name: update_non_index
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+      - regex('[a-zA-Z0-9]{120}')
+    query: |-
+      UPDATE sbtest1 SET c = $2 WHERE id = $1
+
+  # Upsert to replace the row (Spanner equivalent of delete+insert).
+  - name: delete_insert
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+      - gen('number:0,10000')
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      INSERT OR UPDATE INTO sbtest1 (id, k, c, pad)
+      VALUES ($1, $2, $3, $4)

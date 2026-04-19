@@ -1,0 +1,146 @@
+# Sysbench oltp_read_write Workload
+# ==================================
+# Mixed read-write micro-benchmark matching sysbench's
+# oltp_read_write profile. Each "transaction" combines point
+# selects, range scans, aggregations, index updates, non-index
+# updates, a delete, and an insert.
+#
+# Schema matches standard sysbench sbtest1 table.
+
+globals:
+  records: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_sbtest1
+    query: |-
+      CREATE TABLE IF NOT EXISTS sbtest1 (
+        id INT NOT NULL PRIMARY KEY,
+        k INT NOT NULL DEFAULT 0,
+        c CHAR(120) NOT NULL DEFAULT '',
+        pad CHAR(60) NOT NULL DEFAULT ''
+      )
+
+  - name: create_idx_k
+    query: |-
+      CREATE INDEX IF NOT EXISTS k_1 ON sbtest1(k)
+
+seed:
+
+  - name: populate_sbtest1
+    args:
+      - batch(records / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO sbtest1 (id, k, c, pad)
+      SELECT
+        $1::INT * $2::INT + s,
+        floor(random()::FLOAT8 * $2::INT)::INT,
+        lpad('', 120, md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text)),
+        lpad('', 60, md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text))
+      FROM generate_series(1, $2::INT) AS s
+
+deseed:
+
+  - name: truncate_sbtest1
+    type: exec
+    query: TRUNCATE TABLE sbtest1
+
+down:
+
+  - name: drop_sbtest1
+    type: exec
+    query: DROP TABLE IF EXISTS sbtest1
+
+run_weights:
+  point_select: 50
+  range_select: 5
+  range_sum: 5
+  range_order: 5
+  range_distinct: 5
+  update_index: 10
+  update_non_index: 10
+  delete_insert: 10
+
+run:
+
+  # Point select by primary key.
+  - name: point_select
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT c FROM sbtest1 WHERE id = $1::INT
+
+  # Range select: 100 rows from a random start.
+  - name: range_select
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT c FROM sbtest1
+      WHERE id BETWEEN $1::INT AND $1::INT + 99
+
+  # Range sum: aggregate over 100 rows.
+  - name: range_sum
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT SUM(k) FROM sbtest1
+      WHERE id BETWEEN $1::INT AND $1::INT + 99
+
+  # Range order: 100 rows ordered by c.
+  - name: range_order
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT c FROM sbtest1
+      WHERE id BETWEEN $1::INT AND $1::INT + 99
+      ORDER BY c
+
+  # Range distinct: distinct k in 100 rows ordered by c.
+  - name: range_distinct
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT DISTINCT c FROM sbtest1
+      WHERE id BETWEEN $1::INT AND $1::INT + 99
+      ORDER BY c
+
+  # Update indexed column k.
+  - name: update_index
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      UPDATE sbtest1 SET k = k + 1 WHERE id = $1::INT
+
+  # Update non-indexed column c.
+  - name: update_non_index
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+      - regex('[a-zA-Z0-9]{120}')
+    query: |-
+      UPDATE sbtest1 SET c = $2 WHERE id = $1::INT
+
+  # Delete then insert to maintain row count.
+  - name: delete_insert
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      WITH del AS (
+        DELETE FROM sbtest1 WHERE id = $1::INT
+        RETURNING id
+      )
+      INSERT INTO sbtest1 (id, k, c, pad)
+      SELECT $1::INT,
+        floor(random()::FLOAT8 * 10000)::INT,
+        $2, $3

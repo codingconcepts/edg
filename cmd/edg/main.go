@@ -11,8 +11,15 @@ import (
 
 	"github.com/codingconcepts/edg/cmd/edg/workload"
 	"github.com/codingconcepts/edg/cmd/edg/workload/bank"
+	"github.com/codingconcepts/edg/cmd/edg/workload/ch_benchmark"
 	"github.com/codingconcepts/edg/cmd/edg/workload/kv"
 	"github.com/codingconcepts/edg/cmd/edg/workload/movr"
+	"github.com/codingconcepts/edg/cmd/edg/workload/seats"
+	"github.com/codingconcepts/edg/cmd/edg/workload/sysbench_insert"
+	"github.com/codingconcepts/edg/cmd/edg/workload/sysbench_point_select"
+	"github.com/codingconcepts/edg/cmd/edg/workload/sysbench_read_write"
+	"github.com/codingconcepts/edg/cmd/edg/workload/sysbench_update_index"
+	"github.com/codingconcepts/edg/cmd/edg/workload/tatp"
 	"github.com/codingconcepts/edg/cmd/edg/workload/tpcc"
 	"github.com/codingconcepts/edg/cmd/edg/workload/tpch"
 	"github.com/codingconcepts/edg/cmd/edg/workload/ttlbench"
@@ -88,8 +95,15 @@ func main() {
 	wCmd := workload.Cmd()
 	wCmd.AddCommand(
 		bank.Cmd(deps),
+		ch_benchmark.Cmd(deps),
 		kv.Cmd(deps),
 		movr.Cmd(deps),
+		seats.Cmd(deps),
+		sysbench_insert.Cmd(deps),
+		sysbench_point_select.Cmd(deps),
+		sysbench_read_write.Cmd(deps),
+		sysbench_update_index.Cmd(deps),
+		tatp.Cmd(deps),
 		tpcc.Cmd(deps),
 		tpch.Cmd(deps),
 		ttlbench.Cmd(deps),

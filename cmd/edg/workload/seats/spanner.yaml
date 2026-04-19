@@ -1,0 +1,391 @@
+# SEATS Benchmark Workload for Google Cloud Spanner
+# ===================================================
+# Airline reservation system benchmark. Models flights, customers,
+# and reservations with contention on seat availability.
+#
+# Connection URL format:
+#   projects/PROJECT/instances/INSTANCE/databases/DATABASE
+#
+# Example:
+#   edg up --driver spanner --config cmd/edg/workload/seats/spanner.yaml \
+#     --url "projects/my-project/instances/my-instance/databases/seats"
+
+globals:
+  countries: 50
+  airports: 200
+  airlines: 20
+  customers: 10000
+  flights: 5000
+  seats_per_flight: 150
+  reservations_per_flight: 120
+  batch_size: 1000
+
+up:
+
+  - name: create_country
+    query: |-
+      CREATE TABLE IF NOT EXISTS country (
+        co_id INT64 NOT NULL,
+        co_name STRING(64) NOT NULL
+      ) PRIMARY KEY (co_id)
+
+  - name: create_airport
+    query: |-
+      CREATE TABLE IF NOT EXISTS airport (
+        ap_id INT64 NOT NULL,
+        ap_code STRING(3) NOT NULL,
+        ap_name STRING(128) NOT NULL,
+        ap_city STRING(64) NOT NULL,
+        ap_co_id INT64 NOT NULL
+      ) PRIMARY KEY (ap_id)
+
+  - name: create_airport_code_idx
+    query: |-
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_airport_code
+      ON airport (ap_code)
+
+  - name: create_airline
+    query: |-
+      CREATE TABLE IF NOT EXISTS airline (
+        al_id INT64 NOT NULL,
+        al_iata_code STRING(2) NOT NULL,
+        al_name STRING(128) NOT NULL
+      ) PRIMARY KEY (al_id)
+
+  - name: create_airline_iata_idx
+    query: |-
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_airline_iata
+      ON airline (al_iata_code)
+
+  - name: create_customer
+    query: |-
+      CREATE TABLE IF NOT EXISTS customer (
+        c_id INT64 NOT NULL,
+        c_base_ap_id INT64 NOT NULL,
+        c_balance FLOAT64 NOT NULL,
+        c_sattr00 STRING(32) NOT NULL,
+        c_sattr01 STRING(32) NOT NULL,
+        c_iattr00 INT64 NOT NULL,
+        c_iattr01 INT64 NOT NULL
+      ) PRIMARY KEY (c_id)
+
+  - name: create_flight
+    query: |-
+      CREATE TABLE IF NOT EXISTS flight (
+        f_id INT64 NOT NULL,
+        f_al_id INT64 NOT NULL,
+        f_depart_ap_id INT64 NOT NULL,
+        f_arrive_ap_id INT64 NOT NULL,
+        f_depart_time TIMESTAMP NOT NULL,
+        f_arrive_time TIMESTAMP NOT NULL,
+        f_seats_total INT64 NOT NULL,
+        f_seats_left INT64 NOT NULL,
+        f_base_price FLOAT64 NOT NULL
+      ) PRIMARY KEY (f_id)
+
+  - name: create_reservation
+    query: |-
+      CREATE TABLE IF NOT EXISTS reservation (
+        r_id STRING(36) NOT NULL DEFAULT (GENERATE_UUID()),
+        r_c_id INT64 NOT NULL,
+        r_f_id INT64 NOT NULL,
+        r_seat INT64 NOT NULL,
+        r_price FLOAT64 NOT NULL,
+        r_iattr00 INT64 NOT NULL,
+        r_iattr01 INT64 NOT NULL
+      ) PRIMARY KEY (r_id)
+
+  - name: create_idx_reservation_flight
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_reservation_flight
+      ON reservation (r_f_id)
+
+  - name: create_idx_reservation_customer
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_reservation_customer
+      ON reservation (r_c_id)
+
+  - name: create_idx_flight_depart
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_flight_depart
+      ON flight (f_depart_ap_id, f_depart_time)
+
+seed:
+
+  - name: populate_country
+    type: exec_batch
+    count: countries
+    size: batch_size
+    args:
+      - iter()
+    query: |-
+      INSERT INTO country (co_id, co_name)
+      SELECT val, CONCAT('Country_', LPAD(CAST(val AS STRING), 3, '0'))
+      FROM UNNEST(SPLIT(CAST($1 AS STRING), ',')) AS val
+
+  - name: populate_airport
+    type: exec_batch
+    count: airports
+    size: batch_size
+    args:
+      - iter()
+      - countries
+    query: |-
+      INSERT INTO airport (ap_id, ap_code, ap_name, ap_city, ap_co_id)
+      VALUES ($1,
+        SUBSTR(TO_HEX(MD5(CAST($1 AS STRING))), 1, 3),
+        CONCAT('Airport_', LPAD(CAST($1 AS STRING), 4, '0')),
+        CONCAT('City_', LPAD(CAST($1 AS STRING), 4, '0')),
+        MOD($1 - 1, $2) + 1)
+
+  - name: populate_airline
+    type: exec_batch
+    count: airlines
+    size: batch_size
+    args:
+      - iter()
+    query: |-
+      INSERT INTO airline (al_id, al_iata_code, al_name)
+      VALUES ($1,
+        CONCAT(CODE_POINTS_TO_STRING([65 + DIV($1 - 1, 26)]),
+               CODE_POINTS_TO_STRING([65 + MOD($1 - 1, 26)])),
+        CONCAT('Airline_', LPAD(CAST($1 AS STRING), 3, '0')))
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    size: batch_size
+    args:
+      - iter()
+      - airports
+    query: |-
+      INSERT INTO customer (c_id, c_base_ap_id, c_balance,
+        c_sattr00, c_sattr01, c_iattr00, c_iattr01)
+      VALUES ($1,
+        CAST(FLOOR(1 + RAND() * $2) AS INT64),
+        0,
+        SUBSTR(TO_HEX(MD5(CAST(RAND() AS STRING))), 1, 16),
+        SUBSTR(TO_HEX(MD5(CAST(RAND() AS STRING))), 1, 16),
+        CAST(FLOOR(RAND() * 1000) AS INT64),
+        CAST(FLOOR(RAND() * 1000) AS INT64))
+
+  - name: populate_flight
+    type: exec_batch
+    count: flights
+    size: batch_size
+    args:
+      - iter()
+      - airports
+      - airlines
+      - seats_per_flight
+    query: |-
+      INSERT INTO flight (f_id, f_al_id, f_depart_ap_id, f_arrive_ap_id,
+        f_depart_time, f_arrive_time, f_seats_total, f_seats_left,
+        f_base_price)
+      VALUES ($1,
+        CAST(FLOOR(1 + RAND() * $3) AS INT64),
+        CAST(FLOOR(1 + RAND() * $2) AS INT64),
+        CAST(FLOOR(1 + RAND() * $2) AS INT64),
+        TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL CAST(FLOOR(RAND() * 30 * 24 * 60) AS INT64) MINUTE),
+        TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL CAST(FLOOR(RAND() * 30 * 24 * 60 + 120) AS INT64) MINUTE),
+        $4,
+        $4,
+        ROUND(RAND() * 900 + 100, 2))
+
+  - name: populate_reservation
+    args:
+      - batch(flights / batch_size, batch_size)
+      - batch_size
+      - reservations_per_flight
+      - customers
+    query: |-
+      INSERT INTO reservation (r_c_id, r_f_id, r_seat, r_price,
+        r_iattr00, r_iattr01)
+      SELECT
+        CAST(FLOOR(1 + RAND() * $4) AS INT64),
+        fb.f_id,
+        s,
+        ROUND(RAND() * 500 + 50, 2),
+        CAST(FLOOR(RAND() * 100) AS INT64),
+        CAST(FLOOR(RAND() * 100) AS INT64)
+      FROM (
+        SELECT f_id FROM flight
+        ORDER BY f_id
+        LIMIT $2
+        OFFSET $1
+      ) fb
+      CROSS JOIN UNNEST(GENERATE_ARRAY(1, $3)) AS s
+
+  - name: update_seats_left
+    type: exec
+    query: |-
+      UPDATE flight SET f_seats_left = f_seats_total - (
+        SELECT COUNT(*) FROM reservation WHERE r_f_id = flight.f_id
+      )
+      WHERE TRUE
+
+deseed:
+
+  - name: delete_reservation
+    type: exec
+    query: DELETE FROM reservation WHERE TRUE
+
+  - name: delete_flight
+    type: exec
+    query: DELETE FROM flight WHERE TRUE
+
+  - name: delete_customer
+    type: exec
+    query: DELETE FROM customer WHERE TRUE
+
+  - name: delete_airline
+    type: exec
+    query: DELETE FROM airline WHERE TRUE
+
+  - name: delete_airport
+    type: exec
+    query: DELETE FROM airport WHERE TRUE
+
+  - name: delete_country
+    type: exec
+    query: DELETE FROM country WHERE TRUE
+
+down:
+
+  - name: drop_reservation
+    type: exec
+    query: DROP TABLE IF EXISTS reservation
+
+  - name: drop_flight
+    type: exec
+    query: DROP TABLE IF EXISTS flight
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer
+
+  - name: drop_airline
+    type: exec
+    query: DROP TABLE IF EXISTS airline
+
+  - name: drop_airport
+    type: exec
+    query: DROP TABLE IF EXISTS airport
+
+  - name: drop_country
+    type: exec
+    query: DROP TABLE IF EXISTS country
+
+init:
+
+  - name: fetch_flights
+    type: query
+    query: SELECT f_id, f_depart_ap_id, f_seats_left FROM flight TABLESAMPLE RESERVOIR (10000 ROWS)
+
+  - name: fetch_customers
+    type: query
+    query: SELECT c_id FROM customer TABLESAMPLE RESERVOIR (10000 ROWS)
+
+  - name: fetch_reservations
+    type: query
+    query: SELECT r_id, r_c_id, r_f_id FROM reservation TABLESAMPLE RESERVOIR (10000 ROWS)
+
+  - name: fetch_airports
+    type: query
+    query: SELECT ap_id FROM airport
+
+run_weights:
+  find_flights: 10
+  find_open_seats: 35
+  new_reservation: 15
+  update_customer: 10
+  update_reservation: 10
+  delete_reservation: 20
+
+run:
+
+  # Look up flights departing from an airport.
+  - name: find_flights
+    type: query
+    args:
+      - ref_rand('fetch_airports').ap_id
+    query: |-
+      SELECT f_id, f_al_id, f_depart_ap_id, f_arrive_ap_id,
+        f_depart_time, f_arrive_time, f_seats_left, f_base_price
+      FROM flight
+      WHERE f_depart_ap_id = $1
+        AND f_depart_time > CURRENT_TIMESTAMP()
+      ORDER BY f_depart_time
+      LIMIT 10
+
+  # Check how many seats are left on a flight.
+  - name: find_open_seats
+    type: query
+    args:
+      - ref_rand('fetch_flights').f_id
+    query: |-
+      SELECT f_seats_left FROM flight WHERE f_id = $1
+
+  # Book a seat: decrement seats_left and insert reservation.
+  # Spanner runs this as a read-write transaction automatically.
+  - name: new_reservation
+    type: exec
+    args:
+      - ref_rand('fetch_customers').c_id
+      - ref_rand('fetch_flights').f_id
+      - gen('number:1,150')
+      - gen('number:50,1000')
+    query: |-
+      UPDATE flight SET f_seats_left = f_seats_left - 1
+      WHERE f_id = $2 AND f_seats_left > 0
+
+  - name: new_reservation_insert
+    type: exec
+    args:
+      - ref_rand('fetch_customers').c_id
+      - ref_rand('fetch_flights').f_id
+      - gen('number:1,150')
+      - gen('number:50,1000')
+    query: |-
+      INSERT INTO reservation (r_c_id, r_f_id, r_seat, r_price,
+        r_iattr00, r_iattr01)
+      VALUES ($1, $2, $3,
+        (SELECT f_base_price FROM flight WHERE f_id = $2) + CAST($4 AS FLOAT64),
+        0, 0)
+
+  # Update customer attributes.
+  - name: update_customer
+    type: exec
+    args:
+      - ref_rand('fetch_customers').c_id
+      - gen('number:0,1000')
+      - gen('number:0,1000')
+    query: |-
+      UPDATE customer SET c_iattr00 = $2, c_iattr01 = $3
+      WHERE c_id = $1
+
+  # Change reservation attributes.
+  - name: update_reservation
+    type: exec
+    args:
+      - ref_rand('fetch_reservations').r_id
+      - gen('number:0,100')
+    query: |-
+      UPDATE reservation SET r_iattr00 = $2
+      WHERE r_id = $1
+
+  # Cancel a reservation and release the seat.
+  - name: delete_reservation
+    type: exec
+    args:
+      - ref_rand('fetch_reservations').r_id
+    query: |-
+      DELETE FROM reservation WHERE r_id = $1
+
+  - name: delete_reservation_update
+    type: exec
+    args:
+      - ref_rand('fetch_reservations').r_f_id
+    query: |-
+      UPDATE flight SET f_seats_left = f_seats_left + 1
+      WHERE f_id = $1

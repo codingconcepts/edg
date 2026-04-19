@@ -83,15 +83,22 @@ edg all \
 
 ### Workload
 
-The `workload` command runs a built-in workload without needing a config file. Eight benchmarks are embedded in the binary. Each workload supports all six lifecycle commands (`up`, `seed`, `run`, `deseed`, `down`, `all`) and selects the correct config for the `--driver` automatically.
+The `workload` command runs a built-in workload without needing a config file. Fifteen benchmarks are embedded in the binary. Each workload supports all six lifecycle commands (`up`, `seed`, `run`, `deseed`, `down`, `all`) and selects the correct config for the `--driver` automatically.
 
 Built-in workloads:
 
 | Workload | Description |
 |---|---|
 | `bank` | Bank account operations for contention and correctness testing |
+| `ch-benchmark` | CH-benCHmark mixed OLTP+OLAP (TPC-C transactions + TPC-H analytical queries) |
 | `kv` | Simple key-value read/write benchmark |
 | `movr` | Vehicle-sharing application with rides, vehicles, and users |
+| `seats` | Airline reservation system with flight booking contention |
+| `sysbench-insert` | Sysbench `oltp_insert` pure insert micro-benchmark |
+| `sysbench-point-select` | Sysbench `oltp_point_select` pure read micro-benchmark |
+| `sysbench-read-write` | Sysbench `oltp_read_write` mixed read-write micro-benchmark |
+| `sysbench-update-index` | Sysbench `oltp_update_index` indexed column update micro-benchmark |
+| `tatp` | Telecom Application Transaction Processing (80% reads, 20% writes) |
 | `tpcc` | Full TPC-C benchmark with all 5 transaction profiles |
 | `tpch` | TPC-H decision-support benchmark with analytical queries |
 | `ttlbench` | Insert throughput under row-level TTL garbage collection pressure |

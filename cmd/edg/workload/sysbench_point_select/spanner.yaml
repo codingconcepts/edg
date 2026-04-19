@@ -1,0 +1,63 @@
+# Sysbench oltp_point_select Workload for Google Cloud Spanner
+# =============================================================
+# Pure point-select micro-benchmark. Every operation is a single
+# primary-key lookup. Useful for measuring read latency floor and
+# connection overhead.
+#
+# Connection URL format:
+#   projects/PROJECT/instances/INSTANCE/databases/DATABASE
+
+globals:
+  records: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_sbtest1
+    query: |-
+      CREATE TABLE IF NOT EXISTS sbtest1 (
+        id INT64 NOT NULL,
+        k INT64 NOT NULL DEFAULT (0),
+        c STRING(120) NOT NULL DEFAULT (''),
+        pad STRING(60) NOT NULL DEFAULT ('')
+      ) PRIMARY KEY (id)
+
+  - name: create_idx_k
+    query: |-
+      CREATE INDEX IF NOT EXISTS k_1 ON sbtest1(k)
+
+seed:
+
+  - name: populate_sbtest1
+    type: exec_batch
+    count: records
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - gen('number:0,10000')
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      INSERT INTO sbtest1 (id, k, c, pad)
+      VALUES ($1, $2, $3, $4)
+
+deseed:
+
+  - name: delete_sbtest1
+    type: exec
+    query: DELETE FROM sbtest1 WHERE TRUE
+
+down:
+
+  - name: drop_sbtest1
+    type: exec
+    query: DROP TABLE IF EXISTS sbtest1
+
+run:
+
+  - name: point_select
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT c FROM sbtest1 WHERE id = $1

@@ -1,0 +1,75 @@
+# Sysbench oltp_insert Workload for SQL Server
+# ==============================================
+# Pure insert micro-benchmark. Every operation inserts a new row
+# with a unique key. Useful for measuring ingestion throughput,
+# index build cost, and storage engine write path.
+#
+# Connection URL format:
+#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#
+# Example:
+#   edg up --driver sqlserver --config mssql.yaml \
+#     --url "sqlserver://sa:Password123!@localhost:1433?database=sysbench&encrypt=disable"
+
+globals:
+  records: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_sbtest1
+    query: |-
+      IF OBJECT_ID('sbtest1', 'U') IS NULL
+      CREATE TABLE sbtest1 (
+        id INT NOT NULL PRIMARY KEY,
+        k INT NOT NULL DEFAULT 0,
+        c CHAR(120) NOT NULL DEFAULT '',
+        pad CHAR(60) NOT NULL DEFAULT ''
+      )
+
+  - name: create_idx_k
+    query: |-
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'k_1' AND object_id = OBJECT_ID('sbtest1'))
+      CREATE INDEX k_1 ON sbtest1(k)
+
+seed:
+
+  - name: populate_sbtest1
+    type: exec_batch
+    count: records
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - gen('number:0,10000')
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      INSERT INTO sbtest1 (id, k, c, pad)
+      VALUES (@p1, @p2, @p3, @p4)
+
+deseed:
+
+  - name: delete_sbtest1
+    type: exec
+    query: DELETE FROM sbtest1
+
+down:
+
+  - name: drop_sbtest1
+    type: exec
+    query: DROP TABLE IF EXISTS sbtest1
+
+run:
+
+  # Insert with large random key to avoid conflicts under concurrency.
+  - name: insert
+    type: exec
+    args:
+      - gen('number:1,2147483647')
+      - gen('number:0,10000')
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      IF NOT EXISTS (SELECT 1 FROM sbtest1 WHERE id = @p1)
+        INSERT INTO sbtest1 (id, k, c, pad)
+        VALUES (@p1, @p2, @p3, @p4)

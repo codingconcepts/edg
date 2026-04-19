@@ -11,6 +11,7 @@ Complete workload configs you can run directly or use as starting points for you
 |---|---|
 | [Aggregation](https://github.com/codingconcepts/edg/tree/main/_examples/aggregation/) | Demonstrates aggregation functions (sum, avg, min, max, count, distinct) |
 | [Bank](https://github.com/codingconcepts/edg/tree/main/_examples/bank/) | Bank account operations for contention and correctness testing |
+| [CH-benCHmark](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/ch_benchmark/) | Mixed OLTP+OLAP workload combining TPC-C transactions with TPC-H-style analytical queries |
 | [Batch](https://github.com/codingconcepts/edg/tree/main/_examples/batch/) | Demonstrates `query_batch` and `exec_batch` query types for batch inserts and updates |
 | [Blob](https://github.com/codingconcepts/edg/tree/main/_examples/blob/) | Binary data with `blob()` (all databases) and `bytes()` (PostgreSQL/CockroachDB) |
 | [Distributions](https://github.com/codingconcepts/edg/tree/main/_examples/distributions/) | All five distribution functions (uniform, zipf, norm_f, exp_f, lognorm_f) |
@@ -30,10 +31,16 @@ Complete workload configs you can run directly or use as starting points for you
 | [Prepared](https://github.com/codingconcepts/edg/tree/main/_examples/prepared/) | Prepared statements for reduced parse overhead in high-throughput workloads |
 | [Reference Data](https://github.com/codingconcepts/edg/tree/main/_examples/reference_data/) | Static reference datasets without database queries |
 | [SaaS](https://github.com/codingconcepts/edg/tree/main/_examples/saas/) | Multi-tenant SaaS with tenants, users, projects, and tasks |
+| [SEATS](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/seats/) | Airline reservation system benchmark with flight booking contention |
 | [Social](https://github.com/codingconcepts/edg/tree/main/_examples/social/) | Social network with users, posts, follows, and tags |
 | [Stages](https://github.com/codingconcepts/edg/tree/main/_examples/stages/) | Staged execution with different worker counts and durations per phase |
+| [Sysbench Insert](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/sysbench_insert/) | Pure insert micro-benchmark (`oltp_insert`) for ingestion throughput |
+| [Sysbench Point Select](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/sysbench_point_select/) | Pure point-select micro-benchmark (`oltp_point_select`) for read latency |
+| [Sysbench Read Write](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/sysbench_read_write/) | Mixed read-write micro-benchmark (`oltp_read_write`) with scans, updates, and deletes |
+| [Sysbench Update Index](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/sysbench_update_index/) | Pure indexed-column update micro-benchmark (`oltp_update_index`) |
+| [TATP](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/tatp/) | Telecom Application Transaction Processing benchmark (80% reads, 20% writes) |
 | [TPC-C](https://github.com/codingconcepts/edg/tree/main/_examples/tpcc/) | Full TPC-C benchmark with all 5 transaction profiles |
 | [Transaction](https://github.com/codingconcepts/edg/tree/main/_examples/transaction/) | Multi-statement transactions with read-then-write patterns inside BEGIN/COMMIT |
 | [Vector](https://github.com/codingconcepts/edg/tree/main/_examples/vector/) | pgvector-compatible embeddings with clustered vectors for similarity search |
-| [Workload](https://github.com/codingconcepts/edg/tree/main/_examples/workload/) | Built-in workloads (bank, kv, movr, tpcc, tpch, ttlbench, ttllogger, ycsb) without a config file |
+| [Workload](https://github.com/codingconcepts/edg/tree/main/_examples/workload/) | Built-in workloads (bank, ch, kv, movr, seats, sysbench-insert, sysbench-point-select, sysbench-read-write, sysbench-update-index, tatp, tpcc, tpch, ttlbench, ttllogger, ycsb) without a config file |
 | [YCSB](https://github.com/codingconcepts/edg/tree/main/_examples/ycsb/) | Yahoo! Cloud Serving Benchmark with a single usertable and configurable workload profiles |

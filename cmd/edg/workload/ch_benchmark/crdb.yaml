@@ -1,0 +1,897 @@
+# CH-benCHmark Workload
+# =====================
+# Mixed OLTP+OLAP workload combining TPC-C transactions with
+# TPC-H-style analytical queries running concurrently on the
+# same TPC-C schema. Tests HTAP (Hybrid Transactional/Analytical
+# Processing) capability.
+#
+# Uses the full TPC-C schema with nation/region/supplier tables
+# added per the CH-benCHmark specification.
+#
+# OLTP transactions (80% of workload):
+#   new_order  - TPC-C new order (36%)
+#   payment    - TPC-C payment (34%)
+#   order_status - TPC-C order status (4%)
+#   delivery   - TPC-C delivery (4%)
+#   stock_level - TPC-C stock level (2%)
+#
+# OLAP queries (20% of workload):
+#   q1_pricing_summary    - Aggregate order_line (5%)
+#   q6_forecasting_revenue - Revenue from order_line (5%)
+#   q11_important_stock    - Top stock items by value (5%)
+#   q12_shipping_modes     - Order urgency by carrier (5%)
+
+globals:
+  warehouses: 1
+  districts: 10
+  customers: 30000
+  orders: 30000
+  stock: 100000
+  items: 100000
+
+up:
+
+  - name: create_warehouse
+    query: |-
+      CREATE TABLE IF NOT EXISTS warehouse (
+        w_id INT NOT NULL,
+        w_name VARCHAR(10) NOT NULL,
+        w_street_1 VARCHAR(20) NOT NULL,
+        w_street_2 VARCHAR(20) NOT NULL,
+        w_city VARCHAR(20) NOT NULL,
+        w_state CHAR(2) NOT NULL,
+        w_zip CHAR(9) NOT NULL,
+        w_tax DECIMAL(4,4) NOT NULL,
+        w_ytd DECIMAL(12,2) NOT NULL,
+        PRIMARY KEY (w_id)
+      )
+
+  - name: create_district
+    query: |-
+      CREATE TABLE IF NOT EXISTS district (
+        d_w_id INT NOT NULL,
+        d_id INT NOT NULL,
+        d_name VARCHAR(10) NOT NULL,
+        d_street_1 VARCHAR(20) NOT NULL,
+        d_street_2 VARCHAR(20) NOT NULL,
+        d_city VARCHAR(20) NOT NULL,
+        d_state CHAR(2) NOT NULL,
+        d_zip CHAR(9) NOT NULL,
+        d_tax DECIMAL(4,4) NOT NULL,
+        d_ytd DECIMAL(12,2) NOT NULL,
+        d_next_o_id INT NOT NULL,
+        PRIMARY KEY (d_w_id, d_id)
+      )
+
+  - name: create_customer
+    query: |-
+      CREATE TABLE IF NOT EXISTS customer (
+        c_w_id INT NOT NULL,
+        c_d_id INT NOT NULL,
+        c_id INT NOT NULL,
+        c_first VARCHAR(16) NOT NULL,
+        c_middle CHAR(2) NOT NULL,
+        c_last VARCHAR(16) NOT NULL,
+        c_street_1 VARCHAR(20) NOT NULL,
+        c_street_2 VARCHAR(20) NOT NULL,
+        c_city VARCHAR(20) NOT NULL,
+        c_state CHAR(2) NOT NULL,
+        c_zip CHAR(9) NOT NULL,
+        c_phone CHAR(16) NOT NULL,
+        c_since TIMESTAMP NOT NULL,
+        c_credit CHAR(2) NOT NULL,
+        c_credit_lim DECIMAL(12,2) NOT NULL,
+        c_discount DECIMAL(4,4) NOT NULL,
+        c_balance DECIMAL(12,2) NOT NULL,
+        c_ytd_payment DECIMAL(12,2) NOT NULL,
+        c_payment_cnt INT NOT NULL,
+        c_delivery_cnt INT NOT NULL,
+        c_data VARCHAR(500) NOT NULL,
+        PRIMARY KEY (c_w_id, c_d_id, c_id)
+      )
+
+  - name: create_history
+    query: |-
+      CREATE TABLE IF NOT EXISTS history (
+        h_id UUID NOT NULL DEFAULT gen_random_uuid(),
+        h_c_id INT NOT NULL,
+        h_c_d_id INT NOT NULL,
+        h_c_w_id INT NOT NULL,
+        h_d_id INT NOT NULL,
+        h_w_id INT NOT NULL,
+        h_date TIMESTAMP NOT NULL,
+        h_amount DECIMAL(6,2) NOT NULL,
+        h_data VARCHAR(24) NOT NULL,
+        PRIMARY KEY (h_id)
+      )
+
+  - name: create_oorder
+    query: |-
+      CREATE TABLE IF NOT EXISTS oorder (
+        o_w_id INT NOT NULL,
+        o_d_id INT NOT NULL,
+        o_id INT NOT NULL,
+        o_c_id INT NOT NULL,
+        o_entry_d TIMESTAMP NOT NULL,
+        o_carrier_id INT,
+        o_ol_cnt INT NOT NULL,
+        o_all_local INT NOT NULL,
+        PRIMARY KEY (o_w_id, o_d_id, o_id)
+      )
+
+  - name: create_new_order
+    query: |-
+      CREATE TABLE IF NOT EXISTS new_order (
+        no_w_id INT NOT NULL,
+        no_d_id INT NOT NULL,
+        no_o_id INT NOT NULL,
+        PRIMARY KEY (no_w_id, no_d_id, no_o_id)
+      )
+
+  - name: create_order_line
+    query: |-
+      CREATE TABLE IF NOT EXISTS order_line (
+        ol_w_id INT NOT NULL,
+        ol_d_id INT NOT NULL,
+        ol_o_id INT NOT NULL,
+        ol_number INT NOT NULL,
+        ol_i_id INT NOT NULL,
+        ol_supply_w_id INT NOT NULL,
+        ol_delivery_d TIMESTAMP,
+        ol_quantity INT NOT NULL,
+        ol_amount DECIMAL(6,2) NOT NULL,
+        ol_dist_info CHAR(24) NOT NULL,
+        PRIMARY KEY (ol_w_id, ol_d_id, ol_o_id, ol_number)
+      )
+
+  - name: create_item
+    query: |-
+      CREATE TABLE IF NOT EXISTS item (
+        i_id INT NOT NULL,
+        i_im_id INT NOT NULL,
+        i_name VARCHAR(24) NOT NULL,
+        i_price DECIMAL(5,2) NOT NULL,
+        i_data VARCHAR(50) NOT NULL,
+        PRIMARY KEY (i_id)
+      )
+
+  - name: create_stock
+    query: |-
+      CREATE TABLE IF NOT EXISTS stock (
+        s_w_id INT NOT NULL,
+        s_i_id INT NOT NULL,
+        s_quantity INT NOT NULL,
+        s_dist_01 CHAR(24) NOT NULL,
+        s_dist_02 CHAR(24) NOT NULL,
+        s_dist_03 CHAR(24) NOT NULL,
+        s_dist_04 CHAR(24) NOT NULL,
+        s_dist_05 CHAR(24) NOT NULL,
+        s_dist_06 CHAR(24) NOT NULL,
+        s_dist_07 CHAR(24) NOT NULL,
+        s_dist_08 CHAR(24) NOT NULL,
+        s_dist_09 CHAR(24) NOT NULL,
+        s_dist_10 CHAR(24) NOT NULL,
+        s_ytd INT NOT NULL,
+        s_order_cnt INT NOT NULL,
+        s_remote_cnt INT NOT NULL,
+        s_data VARCHAR(50) NOT NULL,
+        PRIMARY KEY (s_w_id, s_i_id)
+      )
+
+  - name: create_nation
+    query: |-
+      CREATE TABLE IF NOT EXISTS nation (
+        n_nationkey INT NOT NULL PRIMARY KEY,
+        n_name VARCHAR(25) NOT NULL,
+        n_regionkey INT NOT NULL,
+        n_comment VARCHAR(152)
+      )
+
+  - name: create_region
+    query: |-
+      CREATE TABLE IF NOT EXISTS region (
+        r_regionkey INT NOT NULL PRIMARY KEY,
+        r_name VARCHAR(25) NOT NULL,
+        r_comment VARCHAR(152)
+      )
+
+  - name: create_supplier
+    query: |-
+      CREATE TABLE IF NOT EXISTS supplier (
+        su_suppkey INT NOT NULL PRIMARY KEY,
+        su_name VARCHAR(25) NOT NULL,
+        su_address VARCHAR(40) NOT NULL,
+        su_nationkey INT NOT NULL,
+        su_phone VARCHAR(15) NOT NULL,
+        su_acctbal DECIMAL(12,2) NOT NULL,
+        su_comment VARCHAR(101)
+      )
+
+  - name: create_idx_customer_name
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_customer_name
+      ON customer (c_w_id, c_d_id, c_last, c_first)
+
+  - name: create_idx_oorder_customer
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_oorder_customer
+      ON oorder (o_w_id, o_d_id, o_c_id, o_id DESC)
+
+seed:
+
+  - name: populate_region
+    query: |-
+      INSERT INTO region (r_regionkey, r_name, r_comment)
+      SELECT s - 1,
+        (ARRAY['AFRICA','AMERICA','ASIA','EUROPE','MIDDLE EAST'])[s],
+        substr(md5(random()::FLOAT8::text), 1, 30)
+      FROM generate_series(1, 5) AS s
+
+  - name: populate_nation
+    query: |-
+      INSERT INTO nation (n_nationkey, n_name, n_regionkey, n_comment)
+      VALUES
+        (0,'ALGERIA',0,''),    (1,'ARGENTINA',1,''),  (2,'BRAZIL',1,''),
+        (3,'CANADA',1,''),     (4,'EGYPT',4,''),      (5,'ETHIOPIA',0,''),
+        (6,'FRANCE',3,''),     (7,'GERMANY',3,''),    (8,'INDIA',2,''),
+        (9,'INDONESIA',2,''),  (10,'IRAN',4,''),      (11,'IRAQ',4,''),
+        (12,'JAPAN',2,''),     (13,'JORDAN',4,''),    (14,'KENYA',0,''),
+        (15,'MOROCCO',0,''),   (16,'MOZAMBIQUE',0,''), (17,'PERU',1,''),
+        (18,'CHINA',2,''),     (19,'ROMANIA',3,''),   (20,'SAUDI ARABIA',4,''),
+        (21,'VIETNAM',2,''),   (22,'RUSSIA',3,''),    (23,'UNITED KINGDOM',3,''),
+        (24,'UNITED STATES',1,'')
+
+  - name: populate_supplier
+    query: |-
+      INSERT INTO supplier (su_suppkey, su_name, su_address, su_nationkey,
+        su_phone, su_acctbal, su_comment)
+      SELECT
+        s,
+        'Supplier#' || lpad(s::TEXT, 9, '0'),
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 25 + 15)::INT),
+        floor(random()::FLOAT8 * 25)::INT,
+        lpad(floor(random()::FLOAT8 * 90 + 10)::INT::TEXT, 2, '0') || '-' ||
+        lpad(floor(random()::FLOAT8 * 1000)::INT::TEXT, 3, '0') || '-' ||
+        lpad(floor(random()::FLOAT8 * 1000)::INT::TEXT, 3, '0') || '-' ||
+        lpad(floor(random()::FLOAT8 * 10000)::INT::TEXT, 4, '0'),
+        (random()::FLOAT8 * 10000 - 1000)::DECIMAL(12,2),
+        substr(md5(random()::FLOAT8::text), 1, 30)
+      FROM generate_series(1, 10000) AS s
+
+  - name: populate_item
+    args:
+      - items
+    query: |-
+      INSERT INTO item (i_id, i_im_id, i_name, i_price, i_data)
+      SELECT
+        s,
+        floor(random()::FLOAT8 * 10000 + 1)::INT,
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 18 + 6)::INT),
+        (random()::FLOAT8 * 99 + 1)::DECIMAL(5,2),
+        CASE WHEN random()::FLOAT8 < 0.1::FLOAT8
+          THEN 'ORIGINAL' || substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 16 + 18)::INT)
+          ELSE substr(md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 24 + 26)::INT)
+        END
+      FROM generate_series(1, $1) AS s
+
+  - name: populate_warehouse
+    args:
+      - warehouses
+    query: |-
+      INSERT INTO warehouse (w_id, w_name, w_street_1, w_street_2, w_city,
+        w_state, w_zip, w_tax, w_ytd)
+      SELECT
+        s,
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 4 + 6)::INT),
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 10 + 10)::INT),
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 10 + 10)::INT),
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 10 + 10)::INT),
+        substr(md5(random()::FLOAT8::text), 1, 2),
+        lpad((floor(random()::FLOAT8 * 10000)::INT)::TEXT, 4, '0') || '11111',
+        random()::FLOAT8 / 5,
+        300000
+      FROM generate_series(1, $1) AS s
+
+  - name: populate_district
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - districts
+    query: |-
+      INSERT INTO district (d_w_id, d_id, d_name, d_street_1, d_street_2,
+        d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id)
+      SELECT
+        $1::INT, d,
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 4 + 6)::INT),
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 10 + 10)::INT),
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 10 + 10)::INT),
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 10 + 10)::INT),
+        substr(md5(random()::FLOAT8::text), 1, 2),
+        lpad((floor(random()::FLOAT8 * 10000)::INT)::TEXT, 4, '0') || '11111',
+        random()::FLOAT8 / 5,
+        30000,
+        3001
+      FROM generate_series(1, $2) AS d
+
+  - name: populate_customer
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - districts
+      - customers / districts
+    query: |-
+      INSERT INTO customer (c_w_id, c_d_id, c_id, c_first, c_middle, c_last,
+        c_street_1, c_street_2, c_city, c_state, c_zip, c_phone,
+        c_since, c_credit, c_credit_lim, c_discount, c_balance,
+        c_ytd_payment, c_payment_cnt, c_delivery_cnt, c_data)
+      SELECT
+        $1::INT, d, c,
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 10 + 6)::INT),
+        'OE',
+        (ARRAY['BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'])[ln.n // 100 + 1] ||
+        (ARRAY['BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'])[(ln.n // 10) % 10 + 1] ||
+        (ARRAY['BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'])[ln.n % 10 + 1],
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 10 + 10)::INT),
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 10 + 10)::INT),
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 10 + 10)::INT),
+        substr(md5(random()::FLOAT8::text), 1, 2),
+        lpad((floor(random()::FLOAT8 * 10000)::INT)::TEXT, 4, '0') || '11111',
+        lpad((floor(random()::FLOAT8 * 9999)::INT)::TEXT, 4, '0') ||
+        lpad((floor(random()::FLOAT8 * 9999)::INT)::TEXT, 4, '0') ||
+        lpad((floor(random()::FLOAT8 * 9999)::INT)::TEXT, 4, '0') ||
+        lpad((floor(random()::FLOAT8 * 9999)::INT)::TEXT, 4, '0'),
+        now(),
+        CASE WHEN random()::FLOAT8 < 0.1::FLOAT8 THEN 'BC' ELSE 'GC' END,
+        50000,
+        random()::FLOAT8 / 2,
+        -10,
+        10,
+        1,
+        0,
+        substr(repeat(md5(random()::FLOAT8::text), 16), 1, (random()::FLOAT8 * 200 + 300)::INT)
+      FROM generate_series(1, $2) AS d
+      CROSS JOIN generate_series(1, $3) AS c
+      CROSS JOIN LATERAL (
+        SELECT CASE WHEN c <= 1000 THEN c - 1
+                    ELSE floor(random()::FLOAT8 * 1000)::INT
+               END AS n
+      ) AS ln
+
+  - name: populate_history
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+    query: |-
+      INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id,
+        h_date, h_amount, h_data)
+      SELECT
+        c.c_id, c.c_d_id, c.c_w_id,
+        c.c_d_id, c.c_w_id,
+        now(),
+        10,
+        substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 12 + 12)::INT)
+      FROM customer c
+      WHERE c.c_w_id = $1::INT
+
+  - name: populate_oorder
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - districts
+      - orders / districts
+    query: |-
+      INSERT INTO oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
+        o_carrier_id, o_ol_cnt, o_all_local)
+      SELECT
+        $1::INT, d, o,
+        floor(random()::FLOAT8 * 3000 + 1)::INT,
+        now(),
+        CASE WHEN o <= 2100 THEN floor(random()::FLOAT8 * 10 + 1)::INT ELSE NULL END,
+        floor(random()::FLOAT8 * 11 + 5)::INT,
+        1
+      FROM generate_series(1, $2) AS d
+      CROSS JOIN generate_series(1, $3) AS o
+
+  - name: populate_new_order
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - districts
+      - orders / districts
+    query: |-
+      INSERT INTO new_order (no_w_id, no_d_id, no_o_id)
+      SELECT $1::INT, d, o
+      FROM generate_series(1, $2) AS d
+      CROSS JOIN generate_series(2101, $3) AS o
+
+  - name: populate_order_line
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+    query: |-
+      INSERT INTO order_line (ol_w_id, ol_d_id, ol_o_id, ol_number,
+        ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount,
+        ol_dist_info)
+      SELECT
+        o.o_w_id, o.o_d_id, o.o_id,
+        n,
+        floor(random()::FLOAT8 * 100000 + 1)::INT,
+        o.o_w_id,
+        CASE WHEN o.o_id <= 2100 THEN o.o_entry_d ELSE NULL END,
+        5,
+        CASE WHEN o.o_id <= 2100 THEN 0
+             ELSE random()::FLOAT8 * 9999
+        END,
+        substr(md5(random()::FLOAT8::text), 1, 24)
+      FROM oorder o
+      JOIN LATERAL generate_series(1, o.o_ol_cnt) AS n ON true
+      WHERE o.o_w_id = $1::INT
+
+  - name: populate_stock
+    args:
+      - ref_each('SELECT w_id FROM warehouse')
+      - stock
+    query: |-
+      INSERT INTO stock (s_w_id, s_i_id, s_quantity,
+        s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05,
+        s_dist_06, s_dist_07, s_dist_08, s_dist_09, s_dist_10,
+        s_ytd, s_order_cnt, s_remote_cnt, s_data)
+      SELECT
+        $1::INT, i,
+        floor(random()::FLOAT8 * 91 + 10)::INT,
+        substr(md5(random()::FLOAT8::text), 1, 24),
+        substr(md5(random()::FLOAT8::text), 1, 24),
+        substr(md5(random()::FLOAT8::text), 1, 24),
+        substr(md5(random()::FLOAT8::text), 1, 24),
+        substr(md5(random()::FLOAT8::text), 1, 24),
+        substr(md5(random()::FLOAT8::text), 1, 24),
+        substr(md5(random()::FLOAT8::text), 1, 24),
+        substr(md5(random()::FLOAT8::text), 1, 24),
+        substr(md5(random()::FLOAT8::text), 1, 24),
+        substr(md5(random()::FLOAT8::text), 1, 24),
+        0, 0, 0,
+        CASE WHEN random()::FLOAT8 < 0.1::FLOAT8
+          THEN 'ORIGINAL' || substr(md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 16 + 18)::INT)
+          ELSE substr(md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text), 1, (random()::FLOAT8 * 24 + 26)::INT)
+        END
+      FROM generate_series(1, $2) AS i
+
+deseed:
+  - name: truncate_order_line
+    type: exec
+    query: TRUNCATE TABLE order_line
+  - name: truncate_new_order
+    type: exec
+    query: TRUNCATE TABLE new_order
+  - name: truncate_oorder
+    type: exec
+    query: TRUNCATE TABLE oorder
+  - name: truncate_history
+    type: exec
+    query: TRUNCATE TABLE history
+  - name: truncate_stock
+    type: exec
+    query: TRUNCATE TABLE stock
+  - name: truncate_customer
+    type: exec
+    query: TRUNCATE TABLE customer
+  - name: truncate_district
+    type: exec
+    query: TRUNCATE TABLE district
+  - name: truncate_warehouse
+    type: exec
+    query: TRUNCATE TABLE warehouse
+  - name: truncate_item
+    type: exec
+    query: TRUNCATE TABLE item
+  - name: truncate_supplier
+    type: exec
+    query: TRUNCATE TABLE supplier
+  - name: truncate_nation
+    type: exec
+    query: TRUNCATE TABLE nation
+  - name: truncate_region
+    type: exec
+    query: TRUNCATE TABLE region
+
+down:
+  - name: drop_order_line
+    type: exec
+    query: DROP TABLE IF EXISTS order_line
+  - name: drop_new_order
+    type: exec
+    query: DROP TABLE IF EXISTS new_order
+  - name: drop_oorder
+    type: exec
+    query: DROP TABLE IF EXISTS oorder
+  - name: drop_history
+    type: exec
+    query: DROP TABLE IF EXISTS history
+  - name: drop_stock
+    type: exec
+    query: DROP TABLE IF EXISTS stock
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS customer
+  - name: drop_district
+    type: exec
+    query: DROP TABLE IF EXISTS district
+  - name: drop_warehouse
+    type: exec
+    query: DROP TABLE IF EXISTS warehouse
+  - name: drop_item
+    type: exec
+    query: DROP TABLE IF EXISTS item
+  - name: drop_supplier
+    type: exec
+    query: DROP TABLE IF EXISTS supplier
+  - name: drop_nation
+    type: exec
+    query: DROP TABLE IF EXISTS nation
+  - name: drop_region
+    type: exec
+    query: DROP TABLE IF EXISTS region
+
+init:
+  - name: fetch_warehouses
+    type: query
+    query: SELECT w_id FROM warehouse
+
+run_weights:
+  # OLTP (80%)
+  new_order: 36
+  payment: 34
+  order_status: 4
+  delivery: 4
+  stock_level: 2
+  # OLAP (20%)
+  q1_pricing_summary: 5
+  q6_forecasting_revenue: 5
+  q11_important_stock: 5
+  q12_shipping_modes: 5
+
+run:
+
+  # === OLTP Transactions (TPC-C) ===
+
+  - name: new_order
+    type: query
+    wait: 18s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+      - nurand_n(8191, 1, items, 5, 15)
+    query: |-
+      WITH
+        items AS (
+          SELECT v::INT AS i_id, ordinality AS ol_number,
+            (floor(random()::FLOAT8 * 10) + 1)::INT AS qty
+          FROM unnest(string_to_array($4, ','))
+            WITH ORDINALITY AS t(v, ordinality)
+        ),
+        district_update AS (
+          UPDATE district SET d_next_o_id = d_next_o_id + 1
+          WHERE d_w_id = $1::INT AND d_id = $2::INT
+          RETURNING d_tax, d_next_o_id - 1 AS next_o_id
+        ),
+        warehouse_info AS (
+          SELECT w_tax FROM warehouse WHERE w_id = $1::INT
+        ),
+        customer_info AS (
+          SELECT c_discount, c_last, c_credit
+          FROM customer
+          WHERE c_w_id = $1::INT AND c_d_id = $2::INT AND c_id = $3::INT
+        ),
+        new_order_insert AS (
+          INSERT INTO new_order (no_w_id, no_d_id, no_o_id)
+          SELECT $1::INT, $2::INT, du.next_o_id
+          FROM district_update du
+          RETURNING 1
+        ),
+        order_insert AS (
+          INSERT INTO oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
+          SELECT $1::INT, $2::INT, du.next_o_id, $3::INT, now(),
+            (SELECT count(*) FROM items), 1
+          FROM district_update du
+          RETURNING 1
+        ),
+        stock_update AS (
+          UPDATE stock SET
+            s_quantity = CASE
+              WHEN s_quantity >= it.qty + 10 THEN s_quantity - it.qty
+              ELSE s_quantity - it.qty + 91
+            END,
+            s_ytd = s_ytd + it.qty,
+            s_order_cnt = s_order_cnt + 1
+          FROM items it
+          WHERE s_i_id = it.i_id AND s_w_id = $1::INT
+          RETURNING s_i_id, s_quantity,
+            CASE $2::INT
+              WHEN 1 THEN s_dist_01 WHEN 2 THEN s_dist_02
+              WHEN 3 THEN s_dist_03 WHEN 4 THEN s_dist_04
+              WHEN 5 THEN s_dist_05 WHEN 6 THEN s_dist_06
+              WHEN 7 THEN s_dist_07 WHEN 8 THEN s_dist_08
+              WHEN 9 THEN s_dist_09 WHEN 10 THEN s_dist_10
+            END AS ol_dist_info,
+            it.qty, it.ol_number
+        ),
+        order_line_insert AS (
+          INSERT INTO order_line (ol_w_id, ol_d_id, ol_o_id, ol_number,
+            ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info)
+          SELECT $1::INT, $2::INT, du.next_o_id, su.ol_number, su.s_i_id,
+            $1::INT, su.qty, su.qty * i.i_price, su.ol_dist_info
+          FROM district_update du
+          CROSS JOIN stock_update su
+          JOIN item i ON i.i_id = su.s_i_id
+          RETURNING 1
+        )
+      SELECT du.next_o_id AS o_id, wi.w_tax, du.d_tax,
+        ci.c_discount, ci.c_last
+      FROM district_update du, warehouse_info wi, customer_info ci
+
+  - name: payment
+    type: query
+    wait: 3s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+      - gen('number:100,500000')
+    query: |-
+      WITH
+        remote AS (
+          SELECT CASE
+            WHEN random()::FLOAT8 < 0.85
+              THEN $1::INT
+            ELSE COALESCE(
+              (SELECT w_id FROM warehouse WHERE w_id != $1::INT
+               ORDER BY random()::FLOAT8 LIMIT 1),
+              $1::INT
+            )
+          END AS c_w_id
+        ),
+        customer_resolve AS (
+          SELECT c_id FROM (
+            SELECT c_id,
+              ROW_NUMBER() OVER (ORDER BY c_first) AS rn,
+              CEIL(COUNT(*) OVER ()::FLOAT8 / 2) AS mid
+            FROM customer
+            WHERE c_w_id = (SELECT c_w_id FROM remote)
+              AND c_d_id = $2::INT
+              AND c_last = (
+                SELECT c_last FROM customer
+                WHERE c_w_id = (SELECT c_w_id FROM remote)
+                  AND c_d_id = $2::INT AND c_id = $3::INT
+              )
+          ) sub
+          WHERE rn = mid
+        ),
+        target_customer AS (
+          SELECT CASE WHEN random()::FLOAT8 < 0.6
+            THEN (SELECT c_id FROM customer_resolve)
+            ELSE $3::INT
+          END AS c_id
+        ),
+        warehouse_update AS (
+          UPDATE warehouse SET w_ytd = w_ytd + $4::DECIMAL / 100
+          WHERE w_id = $1::INT
+          RETURNING w_name, w_street_1, w_street_2, w_city, w_state, w_zip
+        ),
+        district_update AS (
+          UPDATE district SET d_ytd = d_ytd + $4::DECIMAL / 100
+          WHERE d_w_id = $1::INT AND d_id = $2::INT
+          RETURNING d_name, d_street_1, d_street_2, d_city, d_state, d_zip
+        ),
+        customer_update AS (
+          UPDATE customer SET
+            c_balance = c_balance - $4::DECIMAL / 100,
+            c_ytd_payment = c_ytd_payment + $4::DECIMAL / 100,
+            c_payment_cnt = c_payment_cnt + 1,
+            c_data = CASE WHEN c_credit = 'BC'
+              THEN LEFT(
+                (SELECT c_id FROM target_customer)::TEXT || ' ' ||
+                $2::TEXT || ' ' ||
+                (SELECT c_w_id FROM remote)::TEXT || ' ' ||
+                $2::TEXT || ' ' ||
+                $1::TEXT || ' ' ||
+                ($4::DECIMAL / 100)::TEXT || ' | ' || c_data,
+                500)
+              ELSE c_data
+            END
+          WHERE c_w_id = (SELECT c_w_id FROM remote)
+            AND c_d_id = $2::INT
+            AND c_id = (SELECT c_id FROM target_customer)
+          RETURNING c_first, c_middle, c_last, c_balance, c_w_id
+        ),
+        history_insert AS (
+          INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id,
+            h_date, h_amount, h_data)
+          SELECT (SELECT c_id FROM target_customer), $2::INT, cu.c_w_id,
+            $2::INT, $1::INT, now(), $4::DECIMAL / 100,
+            wu.w_name || '    ' || du.d_name
+          FROM warehouse_update wu, district_update du, customer_update cu
+          RETURNING 1
+        )
+      SELECT cu.c_first, cu.c_middle, cu.c_last, cu.c_balance
+      FROM customer_update cu
+
+  - name: order_status
+    type: query
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+    query: |-
+      WITH
+        target_customer AS (
+          SELECT CASE WHEN random()::FLOAT8 < 0.6
+            THEN (
+              SELECT c_id FROM (
+                SELECT c_id,
+                  ROW_NUMBER() OVER (ORDER BY c_first) AS rn,
+                  COUNT(*) OVER () AS cnt
+                FROM customer
+                WHERE c_w_id = $1::INT AND c_d_id = $2::INT
+                  AND c_last = (
+                    SELECT c_last FROM customer
+                    WHERE c_w_id = $1::INT AND c_d_id = $2::INT
+                      AND c_id = $3::INT
+                  )
+              ) sub WHERE rn = CEIL(cnt::FLOAT8 / 2)
+            )
+            ELSE $3::INT
+          END AS c_id
+        ),
+        latest_order AS (
+          SELECT o_id, o_entry_d, o_carrier_id
+          FROM oorder
+          WHERE o_w_id = $1::INT AND o_d_id = $2::INT
+            AND o_c_id = (SELECT c_id FROM target_customer)
+          ORDER BY o_id DESC
+          LIMIT 1
+        )
+      SELECT lo.o_id, lo.o_entry_d, lo.o_carrier_id,
+        ol.ol_i_id, ol.ol_supply_w_id, ol.ol_quantity,
+        ol.ol_amount, ol.ol_delivery_d
+      FROM latest_order lo
+      JOIN order_line ol
+        ON ol.ol_w_id = $1::INT AND ol.ol_d_id = $2::INT
+        AND ol.ol_o_id = lo.o_id
+
+  - name: delivery
+    type: exec
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+    query: |-
+      WITH
+        oldest AS (
+          SELECT DISTINCT ON (no_d_id) no_o_id, no_d_id, no_w_id
+          FROM new_order
+          WHERE no_w_id = $1::INT
+          ORDER BY no_d_id, no_o_id
+        ),
+        del_no AS (
+          DELETE FROM new_order
+          USING oldest o
+          WHERE new_order.no_w_id = o.no_w_id
+            AND new_order.no_d_id = o.no_d_id
+            AND new_order.no_o_id = o.no_o_id
+          RETURNING new_order.no_o_id, new_order.no_d_id, new_order.no_w_id
+        ),
+        upd_order AS (
+          UPDATE oorder SET o_carrier_id = $2::INT
+          FROM del_no d
+          WHERE oorder.o_w_id = d.no_w_id
+            AND oorder.o_d_id = d.no_d_id
+            AND oorder.o_id = d.no_o_id
+          RETURNING oorder.o_id, oorder.o_d_id, oorder.o_w_id, oorder.o_c_id
+        ),
+        upd_ol AS (
+          UPDATE order_line SET ol_delivery_d = now()
+          FROM upd_order u
+          WHERE order_line.ol_w_id = u.o_w_id
+            AND order_line.ol_d_id = u.o_d_id
+            AND order_line.ol_o_id = u.o_id
+          RETURNING order_line.ol_amount, order_line.ol_w_id,
+            order_line.ol_d_id, order_line.ol_o_id
+        ),
+        totals AS (
+          SELECT u.o_c_id, u.o_w_id, u.o_d_id,
+            COALESCE(SUM(ol.ol_amount), 0) AS total
+          FROM upd_order u
+          LEFT JOIN upd_ol ol
+            ON ol.ol_w_id = u.o_w_id AND ol.ol_d_id = u.o_d_id
+            AND ol.ol_o_id = u.o_id
+          GROUP BY u.o_c_id, u.o_w_id, u.o_d_id
+        )
+      UPDATE customer SET
+        c_balance = c_balance + t.total,
+        c_delivery_cnt = c_delivery_cnt + 1
+      FROM totals t
+      WHERE customer.c_w_id = t.o_w_id
+        AND customer.c_d_id = t.o_d_id
+        AND customer.c_id = t.o_c_id
+
+  - name: stock_level
+    type: query
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:10,20')
+    query: |-
+      SELECT COUNT(DISTINCT s.s_i_id) AS low_stock
+      FROM district d
+      JOIN order_line ol
+        ON ol.ol_w_id = d.d_w_id AND ol.ol_d_id = d.d_id
+        AND ol.ol_o_id BETWEEN d.d_next_o_id - 20 AND d.d_next_o_id - 1
+      JOIN stock s
+        ON s.s_i_id = ol.ol_i_id AND s.s_w_id = d.d_w_id
+      WHERE d.d_w_id = $1::INT AND d.d_id = $2::INT
+        AND s.s_quantity < $3::INT
+
+  # === OLAP Queries (TPC-H adapted to TPC-C schema) ===
+
+  # CH Q1: Pricing summary on order_line.
+  # Heavy aggregation over delivered order lines.
+  - name: q1_pricing_summary
+    type: query
+    query: |-
+      SELECT
+        ol_number,
+        SUM(ol_quantity) AS sum_qty,
+        SUM(ol_amount) AS sum_amount,
+        AVG(ol_quantity) AS avg_qty,
+        AVG(ol_amount) AS avg_amount,
+        COUNT(*) AS count_order
+      FROM order_line
+      WHERE ol_delivery_d IS NOT NULL
+      GROUP BY ol_number
+      ORDER BY ol_number
+
+  # CH Q6: Revenue forecast on order_line.
+  # Single-table scan with range predicates.
+  - name: q6_forecasting_revenue
+    type: query
+    query: |-
+      SELECT SUM(ol_amount) AS revenue
+      FROM order_line
+      WHERE ol_delivery_d IS NOT NULL
+        AND ol_quantity BETWEEN 1 AND 100000
+
+  # CH Q11: Important stock - top items by value.
+  # Joins stock with supplier and nation for geographic filtering.
+  - name: q11_important_stock
+    type: query
+    args:
+      - ref_perm('fetch_warehouses').w_id
+    query: |-
+      SELECT s_i_id, SUM(s_quantity) AS total_qty
+      FROM stock
+      JOIN supplier ON supplier.su_suppkey = stock.s_i_id % 10000 + 1
+      JOIN nation ON nation.n_nationkey = supplier.su_nationkey
+      WHERE s_w_id = $1::INT
+      GROUP BY s_i_id
+      HAVING SUM(s_quantity) > (
+        SELECT SUM(s_quantity) * 0.0001
+        FROM stock
+        WHERE s_w_id = $1::INT
+      )
+      ORDER BY total_qty DESC
+
+  # CH Q12: Shipping modes - order urgency by carrier.
+  # Aggregates orders by carrier to measure high/low priority mix.
+  - name: q12_shipping_modes
+    type: query
+    query: |-
+      SELECT
+        o.o_ol_cnt,
+        SUM(CASE WHEN o.o_carrier_id BETWEEN 1 AND 5
+          THEN 1 ELSE 0 END) AS high_line_count,
+        SUM(CASE WHEN o.o_carrier_id > 5 OR o.o_carrier_id IS NULL
+          THEN 1 ELSE 0 END) AS low_line_count
+      FROM oorder o
+      JOIN order_line ol
+        ON o.o_w_id = ol.ol_w_id AND o.o_d_id = ol.ol_d_id
+        AND o.o_id = ol.ol_o_id
+      WHERE ol.ol_delivery_d IS NOT NULL
+      GROUP BY o.o_ol_cnt
+      ORDER BY o.o_ol_cnt

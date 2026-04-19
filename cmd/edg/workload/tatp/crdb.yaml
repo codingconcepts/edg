@@ -1,0 +1,323 @@
+# TATP Benchmark Workload
+# =======================
+# Telecom Application Transaction Processing benchmark.
+# Models a mobile phone subscriber database with 80% reads
+# and 20% writes. Simple schema, high throughput.
+#
+# Schema:
+#   subscriber       - Phone subscribers with data fields
+#   access_info      - Access records per subscriber
+#   special_facility - Special facility flags per subscriber
+#   call_forwarding  - Call forwarding rules
+#
+# Transaction profiles (per TATP spec):
+#   get_subscriber_data    - Point lookup by subscriber ID (35%)
+#   get_new_destination    - Call forwarding lookup (10%)
+#   get_access_data        - Access info lookup (35%)
+#   update_subscriber_data - Toggle a subscriber bit (2%)
+#   update_location        - Update subscriber location (14%)
+#   insert_call_forwarding - Add a forwarding rule (2%)
+#   delete_call_forwarding - Remove a forwarding rule (2%)
+
+globals:
+  subscribers: 100000
+  batch_size: 10000
+
+up:
+
+  - name: create_subscriber
+    query: |-
+      CREATE TABLE IF NOT EXISTS subscriber (
+        s_id INT NOT NULL PRIMARY KEY,
+        sub_nbr VARCHAR(15) NOT NULL,
+        bit_1 INT NOT NULL DEFAULT 0,
+        bit_2 INT NOT NULL DEFAULT 0,
+        bit_3 INT NOT NULL DEFAULT 0,
+        bit_4 INT NOT NULL DEFAULT 0,
+        bit_5 INT NOT NULL DEFAULT 0,
+        bit_6 INT NOT NULL DEFAULT 0,
+        bit_7 INT NOT NULL DEFAULT 0,
+        bit_8 INT NOT NULL DEFAULT 0,
+        bit_9 INT NOT NULL DEFAULT 0,
+        bit_10 INT NOT NULL DEFAULT 0,
+        hex_1 INT NOT NULL DEFAULT 0,
+        hex_2 INT NOT NULL DEFAULT 0,
+        hex_3 INT NOT NULL DEFAULT 0,
+        hex_4 INT NOT NULL DEFAULT 0,
+        hex_5 INT NOT NULL DEFAULT 0,
+        hex_6 INT NOT NULL DEFAULT 0,
+        hex_7 INT NOT NULL DEFAULT 0,
+        hex_8 INT NOT NULL DEFAULT 0,
+        hex_9 INT NOT NULL DEFAULT 0,
+        hex_10 INT NOT NULL DEFAULT 0,
+        byte2_1 INT NOT NULL DEFAULT 0,
+        byte2_2 INT NOT NULL DEFAULT 0,
+        byte2_3 INT NOT NULL DEFAULT 0,
+        byte2_4 INT NOT NULL DEFAULT 0,
+        byte2_5 INT NOT NULL DEFAULT 0,
+        byte2_6 INT NOT NULL DEFAULT 0,
+        byte2_7 INT NOT NULL DEFAULT 0,
+        byte2_8 INT NOT NULL DEFAULT 0,
+        byte2_9 INT NOT NULL DEFAULT 0,
+        byte2_10 INT NOT NULL DEFAULT 0,
+        msc_location INT NOT NULL DEFAULT 0,
+        vlr_location INT NOT NULL DEFAULT 0,
+        UNIQUE (sub_nbr)
+      )
+
+  - name: create_access_info
+    query: |-
+      CREATE TABLE IF NOT EXISTS access_info (
+        s_id INT NOT NULL,
+        ai_type INT NOT NULL,
+        data1 INT NOT NULL DEFAULT 0,
+        data2 INT NOT NULL DEFAULT 0,
+        data3 VARCHAR(3) NOT NULL DEFAULT '',
+        data4 VARCHAR(5) NOT NULL DEFAULT '',
+        PRIMARY KEY (s_id, ai_type)
+      )
+
+  - name: create_special_facility
+    query: |-
+      CREATE TABLE IF NOT EXISTS special_facility (
+        s_id INT NOT NULL,
+        sf_type INT NOT NULL,
+        is_active INT NOT NULL DEFAULT 1,
+        error_cntrl INT NOT NULL DEFAULT 0,
+        data_a INT NOT NULL DEFAULT 0,
+        data_b VARCHAR(5) NOT NULL DEFAULT '',
+        PRIMARY KEY (s_id, sf_type)
+      )
+
+  - name: create_call_forwarding
+    query: |-
+      CREATE TABLE IF NOT EXISTS call_forwarding (
+        s_id INT NOT NULL,
+        sf_type INT NOT NULL,
+        start_time INT NOT NULL,
+        end_time INT NOT NULL,
+        numberx VARCHAR(15) NOT NULL,
+        PRIMARY KEY (s_id, sf_type, start_time)
+      )
+
+seed:
+
+  - name: populate_subscriber
+    args:
+      - batch(subscribers / batch_size)
+      - batch_size
+    query: |-
+      INSERT INTO subscriber (s_id, sub_nbr,
+        bit_1, bit_2, bit_3, bit_4, bit_5,
+        bit_6, bit_7, bit_8, bit_9, bit_10,
+        hex_1, hex_2, hex_3, hex_4, hex_5,
+        hex_6, hex_7, hex_8, hex_9, hex_10,
+        byte2_1, byte2_2, byte2_3, byte2_4, byte2_5,
+        byte2_6, byte2_7, byte2_8, byte2_9, byte2_10,
+        msc_location, vlr_location)
+      SELECT
+        $1::INT * $2::INT + s,
+        lpad(($1::INT * $2::INT + s)::TEXT, 15, '0'),
+        floor(random()::FLOAT8 * 2)::INT, floor(random()::FLOAT8 * 2)::INT,
+        floor(random()::FLOAT8 * 2)::INT, floor(random()::FLOAT8 * 2)::INT,
+        floor(random()::FLOAT8 * 2)::INT, floor(random()::FLOAT8 * 2)::INT,
+        floor(random()::FLOAT8 * 2)::INT, floor(random()::FLOAT8 * 2)::INT,
+        floor(random()::FLOAT8 * 2)::INT, floor(random()::FLOAT8 * 2)::INT,
+        floor(random()::FLOAT8 * 16)::INT, floor(random()::FLOAT8 * 16)::INT,
+        floor(random()::FLOAT8 * 16)::INT, floor(random()::FLOAT8 * 16)::INT,
+        floor(random()::FLOAT8 * 16)::INT, floor(random()::FLOAT8 * 16)::INT,
+        floor(random()::FLOAT8 * 16)::INT, floor(random()::FLOAT8 * 16)::INT,
+        floor(random()::FLOAT8 * 16)::INT, floor(random()::FLOAT8 * 16)::INT,
+        floor(random()::FLOAT8 * 256)::INT, floor(random()::FLOAT8 * 256)::INT,
+        floor(random()::FLOAT8 * 256)::INT, floor(random()::FLOAT8 * 256)::INT,
+        floor(random()::FLOAT8 * 256)::INT, floor(random()::FLOAT8 * 256)::INT,
+        floor(random()::FLOAT8 * 256)::INT, floor(random()::FLOAT8 * 256)::INT,
+        floor(random()::FLOAT8 * 256)::INT, floor(random()::FLOAT8 * 256)::INT,
+        floor(random()::FLOAT8 * 65536)::INT,
+        floor(random()::FLOAT8 * 65536)::INT
+      FROM generate_series(1, $2::INT) AS s
+
+  - name: populate_access_info
+    args:
+      - subscribers
+    query: |-
+      INSERT INTO access_info (s_id, ai_type, data1, data2, data3, data4)
+      SELECT
+        s,
+        t,
+        floor(random()::FLOAT8 * 256)::INT,
+        floor(random()::FLOAT8 * 256)::INT,
+        substr(md5(random()::FLOAT8::text), 1, 3),
+        substr(md5(random()::FLOAT8::text), 1, 5)
+      FROM generate_series(1, $1) AS s
+      CROSS JOIN generate_series(1, floor(random()::FLOAT8 * 4 + 1)::INT) AS t
+
+  - name: populate_special_facility
+    args:
+      - subscribers
+    query: |-
+      INSERT INTO special_facility (s_id, sf_type, is_active,
+        error_cntrl, data_a, data_b)
+      SELECT
+        s,
+        t,
+        CASE WHEN random()::FLOAT8 < 0.85 THEN 1 ELSE 0 END,
+        floor(random()::FLOAT8 * 256)::INT,
+        floor(random()::FLOAT8 * 256)::INT,
+        substr(md5(random()::FLOAT8::text), 1, 5)
+      FROM generate_series(1, $1) AS s
+      CROSS JOIN generate_series(1, floor(random()::FLOAT8 * 4 + 1)::INT) AS t
+
+  - name: populate_call_forwarding
+    args:
+      - subscribers
+    query: |-
+      INSERT INTO call_forwarding (s_id, sf_type, start_time,
+        end_time, numberx)
+      SELECT
+        sf.s_id,
+        sf.sf_type,
+        t * 8,
+        t * 8 + floor(random()::FLOAT8 * 8 + 1)::INT,
+        lpad(floor(random()::FLOAT8 * 1000000000)::TEXT, 15, '0')
+      FROM special_facility sf
+      CROSS JOIN generate_series(0, floor(random()::FLOAT8 * 3)::INT) AS t
+      ON CONFLICT DO NOTHING
+
+deseed:
+
+  - name: truncate_call_forwarding
+    type: exec
+    query: TRUNCATE TABLE call_forwarding
+
+  - name: truncate_special_facility
+    type: exec
+    query: TRUNCATE TABLE special_facility
+
+  - name: truncate_access_info
+    type: exec
+    query: TRUNCATE TABLE access_info
+
+  - name: truncate_subscriber
+    type: exec
+    query: TRUNCATE TABLE subscriber
+
+down:
+
+  - name: drop_call_forwarding
+    type: exec
+    query: DROP TABLE IF EXISTS call_forwarding
+
+  - name: drop_special_facility
+    type: exec
+    query: DROP TABLE IF EXISTS special_facility
+
+  - name: drop_access_info
+    type: exec
+    query: DROP TABLE IF EXISTS access_info
+
+  - name: drop_subscriber
+    type: exec
+    query: DROP TABLE IF EXISTS subscriber
+
+init:
+
+  - name: fetch_subscribers
+    type: query
+    query: SELECT s_id, sub_nbr FROM subscriber ORDER BY random()
+
+run_weights:
+  get_subscriber_data: 35
+  get_new_destination: 10
+  get_access_data: 35
+  update_subscriber_data: 2
+  update_location: 14
+  insert_call_forwarding: 2
+  delete_call_forwarding: 2
+
+run:
+
+  # Point lookup by subscriber ID.
+  - name: get_subscriber_data
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+    query: |-
+      SELECT * FROM subscriber WHERE s_id = $1::INT
+
+  # Look up call forwarding rules for a subscriber.
+  - name: get_new_destination
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+      - gen('number:1,24')
+    query: |-
+      SELECT cf.numberx
+      FROM special_facility sf
+      JOIN call_forwarding cf
+        ON cf.s_id = sf.s_id AND cf.sf_type = sf.sf_type
+      WHERE sf.s_id = $1::INT AND sf.sf_type = $2::INT
+        AND sf.is_active = 1
+        AND cf.start_time <= $3::INT AND cf.end_time > $4::INT
+
+  # Look up access info for a subscriber.
+  - name: get_access_data
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+    query: |-
+      SELECT data1, data2, data3, data4
+      FROM access_info
+      WHERE s_id = $1::INT AND ai_type = $2::INT
+
+  # Toggle a bit field on a subscriber.
+  - name: update_subscriber_data
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:0,1')
+    query: |-
+      UPDATE subscriber SET bit_1 = $2::INT
+      WHERE s_id = $1::INT
+
+  # Update subscriber location.
+  - name: update_location
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').sub_nbr
+      - gen('number:0,65535')
+    query: |-
+      UPDATE subscriber SET vlr_location = $2::INT
+      WHERE sub_nbr = $1
+
+  # Insert a new call forwarding rule.
+  - name: insert_call_forwarding
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+      - gen('number:1,24')
+    query: |-
+      INSERT INTO call_forwarding (s_id, sf_type, start_time,
+        end_time, numberx)
+      SELECT $1::INT, $2::INT, $3::INT, $4::INT,
+        lpad(floor(random()::FLOAT8 * 1000000000)::TEXT, 15, '0')
+      FROM special_facility
+      WHERE s_id = $1::INT AND sf_type = $2::INT
+      ON CONFLICT DO NOTHING
+
+  # Remove a call forwarding rule.
+  - name: delete_call_forwarding
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+    query: |-
+      DELETE FROM call_forwarding
+      WHERE s_id = $1::INT AND sf_type = $2::INT
+        AND start_time = $3::INT

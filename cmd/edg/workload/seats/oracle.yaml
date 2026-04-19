@@ -1,0 +1,495 @@
+# SEATS Benchmark Workload for Oracle
+# ====================================
+# Airline reservation system benchmark. Models flights, customers,
+# and reservations with contention on seat availability.
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+#
+# Example:
+#   edg up --driver oracle --config cmd/edg/workload/seats/oracle.yaml \
+#     --url "oracle://system:password@localhost:1521/FREEPDB1"
+
+globals:
+  countries: 50
+  airports: 200
+  airlines: 20
+  customers: 100000
+  flights: 50000
+  seats_per_flight: 150
+  reservations_per_flight: 120
+  batch_size: 10000
+
+up:
+
+  - name: create_country
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE country (
+            co_id NUMBER NOT NULL,
+            co_name VARCHAR2(64) NOT NULL,
+            PRIMARY KEY (co_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_airport
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE airport (
+            ap_id NUMBER NOT NULL,
+            ap_code CHAR(3) NOT NULL,
+            ap_name VARCHAR2(128) NOT NULL,
+            ap_city VARCHAR2(64) NOT NULL,
+            ap_co_id NUMBER NOT NULL,
+            PRIMARY KEY (ap_id),
+            UNIQUE (ap_code),
+            FOREIGN KEY (ap_co_id) REFERENCES country(co_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_airline
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE airline (
+            al_id NUMBER NOT NULL,
+            al_iata_code CHAR(2) NOT NULL,
+            al_name VARCHAR2(128) NOT NULL,
+            PRIMARY KEY (al_id),
+            UNIQUE (al_iata_code)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_customer
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE customer (
+            c_id NUMBER NOT NULL,
+            c_base_ap_id NUMBER NOT NULL,
+            c_balance NUMBER(12,2) NOT NULL,
+            c_sattr00 VARCHAR2(32) NOT NULL,
+            c_sattr01 VARCHAR2(32) NOT NULL,
+            c_iattr00 NUMBER NOT NULL,
+            c_iattr01 NUMBER NOT NULL,
+            PRIMARY KEY (c_id),
+            FOREIGN KEY (c_base_ap_id) REFERENCES airport(ap_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_flight
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE flight (
+            f_id NUMBER NOT NULL,
+            f_al_id NUMBER NOT NULL,
+            f_depart_ap_id NUMBER NOT NULL,
+            f_arrive_ap_id NUMBER NOT NULL,
+            f_depart_time TIMESTAMP NOT NULL,
+            f_arrive_time TIMESTAMP NOT NULL,
+            f_seats_total NUMBER NOT NULL,
+            f_seats_left NUMBER NOT NULL,
+            f_base_price NUMBER(12,2) NOT NULL,
+            PRIMARY KEY (f_id),
+            FOREIGN KEY (f_al_id) REFERENCES airline(al_id),
+            FOREIGN KEY (f_depart_ap_id) REFERENCES airport(ap_id),
+            FOREIGN KEY (f_arrive_ap_id) REFERENCES airport(ap_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_reservation
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE reservation (
+            r_id RAW(16) DEFAULT SYS_GUID() NOT NULL,
+            r_c_id NUMBER NOT NULL,
+            r_f_id NUMBER NOT NULL,
+            r_seat NUMBER NOT NULL,
+            r_price NUMBER(12,2) NOT NULL,
+            r_iattr00 NUMBER NOT NULL,
+            r_iattr01 NUMBER NOT NULL,
+            PRIMARY KEY (r_id),
+            FOREIGN KEY (r_c_id) REFERENCES customer(c_id),
+            FOREIGN KEY (r_f_id) REFERENCES flight(f_id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_idx_reservation_flight
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_reservation_flight ON reservation (r_f_id)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_idx_reservation_customer
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_reservation_customer ON reservation (r_c_id)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_idx_flight_depart
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE INDEX idx_flight_depart ON flight (f_depart_ap_id, f_depart_time)
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+seed:
+
+  - name: populate_country
+    type: exec_batch
+    count: countries
+    size: batch_size
+    args:
+      - iter()
+    query: |-
+      INSERT INTO country (co_id, co_name)
+      SELECT LEVEL, 'Country_' || LPAD(TO_CHAR(LEVEL), 3, '0')
+      FROM DUAL
+      WHERE LEVEL = :1
+      CONNECT BY LEVEL <= :1
+
+  - name: populate_airport
+    type: exec_batch
+    count: airports
+    size: batch_size
+    args:
+      - iter()
+      - countries
+    query: |-
+      INSERT INTO airport (ap_id, ap_code, ap_name, ap_city, ap_co_id)
+      VALUES (:1,
+        SUBSTR(STANDARD_HASH(TO_CHAR(:1), 'MD5'), 1, 3),
+        'Airport_' || LPAD(TO_CHAR(:1), 4, '0'),
+        'City_' || LPAD(TO_CHAR(:1), 4, '0'),
+        MOD(:1 - 1, :2) + 1)
+
+  - name: populate_airline
+    type: exec_batch
+    count: airlines
+    size: batch_size
+    args:
+      - iter()
+    query: |-
+      INSERT INTO airline (al_id, al_iata_code, al_name)
+      VALUES (:1,
+        CHR(65 + TRUNC((:1 - 1) / 26)) || CHR(65 + MOD(:1 - 1, 26)),
+        'Airline_' || LPAD(TO_CHAR(:1), 3, '0'))
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    size: batch_size
+    args:
+      - iter()
+      - airports
+    query: |-
+      INSERT INTO customer (c_id, c_base_ap_id, c_balance,
+        c_sattr00, c_sattr01, c_iattr00, c_iattr01)
+      VALUES (:1,
+        TRUNC(DBMS_RANDOM.VALUE(1, :2 + 1)),
+        0,
+        SUBSTR(STANDARD_HASH(TO_CHAR(DBMS_RANDOM.VALUE), 'MD5'), 1, 16),
+        SUBSTR(STANDARD_HASH(TO_CHAR(DBMS_RANDOM.VALUE), 'MD5'), 1, 16),
+        TRUNC(DBMS_RANDOM.VALUE(0, 1000)),
+        TRUNC(DBMS_RANDOM.VALUE(0, 1000)))
+
+  - name: populate_flight
+    type: exec_batch
+    count: flights
+    size: batch_size
+    args:
+      - iter()
+      - airports
+      - airlines
+      - seats_per_flight
+    query: |-
+      INSERT INTO flight (f_id, f_al_id, f_depart_ap_id, f_arrive_ap_id,
+        f_depart_time, f_arrive_time, f_seats_total, f_seats_left,
+        f_base_price)
+      VALUES (:1,
+        TRUNC(DBMS_RANDOM.VALUE(1, :3 + 1)),
+        TRUNC(DBMS_RANDOM.VALUE(1, :2 + 1)),
+        TRUNC(DBMS_RANDOM.VALUE(1, :2 + 1)),
+        SYSTIMESTAMP + DBMS_RANDOM.VALUE(0, 30),
+        SYSTIMESTAMP + DBMS_RANDOM.VALUE(0, 30) + INTERVAL '2' HOUR,
+        :4,
+        :4,
+        ROUND(DBMS_RANDOM.VALUE(100, 1000), 2))
+
+  - name: populate_reservation
+    args:
+      - batch(flights / batch_size)
+      - batch_size
+      - reservations_per_flight
+      - customers
+    query: |-
+      INSERT INTO reservation (r_c_id, r_f_id, r_seat, r_price,
+        r_iattr00, r_iattr01)
+      SELECT
+        TRUNC(DBMS_RANDOM.VALUE(1, :4 + 1)),
+        fb.f_id,
+        s.lv,
+        ROUND(DBMS_RANDOM.VALUE(50, 550), 2),
+        TRUNC(DBMS_RANDOM.VALUE(0, 100)),
+        TRUNC(DBMS_RANDOM.VALUE(0, 100))
+      FROM (
+        SELECT f_id FROM flight
+        ORDER BY f_id
+        OFFSET :1 * :2 ROWS FETCH NEXT :2 ROWS ONLY
+      ) fb
+      CROSS JOIN (
+        SELECT LEVEL AS lv FROM DUAL
+        CONNECT BY LEVEL <= :3
+      ) s
+
+  - name: update_seats_left
+    type: exec
+    query: |-
+      UPDATE flight SET f_seats_left = f_seats_total - (
+        SELECT COUNT(*) FROM reservation WHERE r_f_id = flight.f_id
+      )
+
+deseed:
+
+  - name: truncate_reservation
+    type: exec
+    query: TRUNCATE TABLE reservation
+
+  - name: truncate_flight
+    type: exec
+    query: TRUNCATE TABLE flight
+
+  - name: truncate_customer
+    type: exec
+    query: TRUNCATE TABLE customer
+
+  - name: truncate_airline
+    type: exec
+    query: TRUNCATE TABLE airline
+
+  - name: truncate_airport
+    type: exec
+    query: TRUNCATE TABLE airport
+
+  - name: truncate_country
+    type: exec
+    query: TRUNCATE TABLE country
+
+down:
+
+  - name: drop_reservation
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE reservation CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_flight
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE flight CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_customer
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE customer CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_airline
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE airline CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_airport
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE airport CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_country
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE country CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+init:
+
+  - name: fetch_flights
+    type: query
+    query: SELECT f_id, f_depart_ap_id, f_seats_left FROM flight
+
+  - name: fetch_customers
+    type: query
+    query: SELECT c_id FROM customer
+
+  - name: fetch_reservations
+    type: query
+    query: SELECT r_id, r_c_id, r_f_id FROM reservation
+
+  - name: fetch_airports
+    type: query
+    query: SELECT ap_id FROM airport
+
+run_weights:
+  find_flights: 10
+  find_open_seats: 35
+  new_reservation: 15
+  update_customer: 10
+  update_reservation: 10
+  delete_reservation: 20
+
+run:
+
+  # Look up flights departing from an airport.
+  - name: find_flights
+    type: query
+    args:
+      - ref_rand('fetch_airports').ap_id
+    query: |-
+      SELECT f_id, f_al_id, f_depart_ap_id, f_arrive_ap_id,
+        f_depart_time, f_arrive_time, f_seats_left, f_base_price
+      FROM flight
+      WHERE f_depart_ap_id = :1
+        AND f_depart_time > SYSTIMESTAMP
+      ORDER BY f_depart_time
+      FETCH FIRST 10 ROWS ONLY
+
+  # Check how many seats are left on a flight.
+  - name: find_open_seats
+    type: query
+    args:
+      - ref_rand('fetch_flights').f_id
+    query: |-
+      SELECT f_seats_left FROM flight WHERE f_id = :1
+
+  # Book a seat: decrement seats_left, insert reservation,
+  # charge the customer.
+  - name: new_reservation
+    type: exec
+    args:
+      - ref_rand('fetch_customers').c_id
+      - ref_rand('fetch_flights').f_id
+      - gen('number:1,150')
+      - gen('number:50,1000')
+    query: |-
+      DECLARE
+        v_c_id NUMBER := :1;
+        v_f_id NUMBER := :2;
+        v_seat NUMBER := :3;
+        v_extra NUMBER := :4;
+        v_base_price NUMBER;
+        v_rows NUMBER;
+      BEGIN
+        UPDATE flight SET f_seats_left = f_seats_left - 1
+        WHERE f_id = v_f_id AND f_seats_left > 0;
+        v_rows := SQL%ROWCOUNT;
+        IF v_rows > 0 THEN
+          SELECT f_base_price INTO v_base_price
+          FROM flight WHERE f_id = v_f_id;
+          INSERT INTO reservation (r_c_id, r_f_id, r_seat, r_price,
+            r_iattr00, r_iattr01)
+          VALUES (v_c_id, v_f_id, v_seat, v_base_price + v_extra, 0, 0);
+          UPDATE customer SET c_balance = c_balance + v_base_price + v_extra
+          WHERE c_id = v_c_id;
+        END IF;
+      END;
+
+  # Update customer attributes.
+  - name: update_customer
+    type: exec
+    args:
+      - ref_rand('fetch_customers').c_id
+      - gen('number:0,1000')
+      - gen('number:0,1000')
+    query: |-
+      UPDATE customer SET c_iattr00 = :2, c_iattr01 = :3
+      WHERE c_id = :1
+
+  # Change reservation attributes.
+  - name: update_reservation
+    type: exec
+    args:
+      - ref_rand('fetch_reservations').r_id
+      - gen('number:0,100')
+    query: |-
+      UPDATE reservation SET r_iattr00 = :2
+      WHERE r_id = :1
+
+  # Cancel a reservation and release the seat.
+  - name: delete_reservation
+    type: exec
+    args:
+      - ref_rand('fetch_reservations').r_id
+      - ref_rand('fetch_reservations').r_f_id
+    query: |-
+      DECLARE
+        v_r_id RAW(16) := :1;
+        v_f_id NUMBER := :2;
+      BEGIN
+        DELETE FROM reservation WHERE r_id = v_r_id;
+        IF SQL%ROWCOUNT > 0 THEN
+          UPDATE flight SET f_seats_left = f_seats_left + 1
+          WHERE f_id = v_f_id;
+        END IF;
+      END;

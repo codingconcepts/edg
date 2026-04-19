@@ -1,0 +1,426 @@
+# TATP Benchmark Workload for Google Cloud Spanner
+# ==================================================
+# Telecom Application Transaction Processing benchmark.
+# Models a mobile phone subscriber database with 80% reads
+# and 20% writes. Simple schema, high throughput.
+#
+# Schema:
+#   subscriber       - Phone subscribers with data fields
+#   access_info      - Access records per subscriber
+#   special_facility - Special facility flags per subscriber
+#   call_forwarding  - Call forwarding rules
+#
+# Transaction profiles (per TATP spec):
+#   get_subscriber_data    - Point lookup by subscriber ID (35%)
+#   get_new_destination    - Call forwarding lookup (10%)
+#   get_access_data        - Access info lookup (35%)
+#   update_subscriber_data - Toggle a subscriber bit (2%)
+#   update_location        - Update subscriber location (14%)
+#   insert_call_forwarding - Add a forwarding rule (2%)
+#   delete_call_forwarding - Remove a forwarding rule (2%)
+#
+# Connection URL format:
+#   projects/PROJECT/instances/INSTANCE/databases/DATABASE
+
+globals:
+  subscribers: 100000
+  batch_size: 10000
+
+up:
+
+  - name: create_subscriber
+    query: |-
+      CREATE TABLE IF NOT EXISTS subscriber (
+        s_id INT64 NOT NULL,
+        sub_nbr STRING(15) NOT NULL,
+        bit_1 INT64 NOT NULL DEFAULT (0),
+        bit_2 INT64 NOT NULL DEFAULT (0),
+        bit_3 INT64 NOT NULL DEFAULT (0),
+        bit_4 INT64 NOT NULL DEFAULT (0),
+        bit_5 INT64 NOT NULL DEFAULT (0),
+        bit_6 INT64 NOT NULL DEFAULT (0),
+        bit_7 INT64 NOT NULL DEFAULT (0),
+        bit_8 INT64 NOT NULL DEFAULT (0),
+        bit_9 INT64 NOT NULL DEFAULT (0),
+        bit_10 INT64 NOT NULL DEFAULT (0),
+        hex_1 INT64 NOT NULL DEFAULT (0),
+        hex_2 INT64 NOT NULL DEFAULT (0),
+        hex_3 INT64 NOT NULL DEFAULT (0),
+        hex_4 INT64 NOT NULL DEFAULT (0),
+        hex_5 INT64 NOT NULL DEFAULT (0),
+        hex_6 INT64 NOT NULL DEFAULT (0),
+        hex_7 INT64 NOT NULL DEFAULT (0),
+        hex_8 INT64 NOT NULL DEFAULT (0),
+        hex_9 INT64 NOT NULL DEFAULT (0),
+        hex_10 INT64 NOT NULL DEFAULT (0),
+        byte2_1 INT64 NOT NULL DEFAULT (0),
+        byte2_2 INT64 NOT NULL DEFAULT (0),
+        byte2_3 INT64 NOT NULL DEFAULT (0),
+        byte2_4 INT64 NOT NULL DEFAULT (0),
+        byte2_5 INT64 NOT NULL DEFAULT (0),
+        byte2_6 INT64 NOT NULL DEFAULT (0),
+        byte2_7 INT64 NOT NULL DEFAULT (0),
+        byte2_8 INT64 NOT NULL DEFAULT (0),
+        byte2_9 INT64 NOT NULL DEFAULT (0),
+        byte2_10 INT64 NOT NULL DEFAULT (0),
+        msc_location INT64 NOT NULL DEFAULT (0),
+        vlr_location INT64 NOT NULL DEFAULT (0),
+      ) PRIMARY KEY (s_id)
+
+  - name: create_subscriber_unique_index
+    query: |-
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriber_sub_nbr
+      ON subscriber (sub_nbr)
+
+  - name: create_access_info
+    query: |-
+      CREATE TABLE IF NOT EXISTS access_info (
+        s_id INT64 NOT NULL,
+        ai_type INT64 NOT NULL,
+        data1 INT64 NOT NULL DEFAULT (0),
+        data2 INT64 NOT NULL DEFAULT (0),
+        data3 STRING(3) NOT NULL DEFAULT (''),
+        data4 STRING(5) NOT NULL DEFAULT (''),
+      ) PRIMARY KEY (s_id, ai_type)
+
+  - name: create_special_facility
+    query: |-
+      CREATE TABLE IF NOT EXISTS special_facility (
+        s_id INT64 NOT NULL,
+        sf_type INT64 NOT NULL,
+        is_active INT64 NOT NULL DEFAULT (1),
+        error_cntrl INT64 NOT NULL DEFAULT (0),
+        data_a INT64 NOT NULL DEFAULT (0),
+        data_b STRING(5) NOT NULL DEFAULT (''),
+      ) PRIMARY KEY (s_id, sf_type)
+
+  - name: create_call_forwarding
+    query: |-
+      CREATE TABLE IF NOT EXISTS call_forwarding (
+        s_id INT64 NOT NULL,
+        sf_type INT64 NOT NULL,
+        start_time INT64 NOT NULL,
+        end_time INT64 NOT NULL,
+        numberx STRING(15) NOT NULL,
+      ) PRIMARY KEY (s_id, sf_type, start_time)
+
+seed:
+
+  - name: populate_subscriber
+    type: exec_batch
+    count: subscribers
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - template('%015d', seq(1, 1))
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,65535')
+      - gen('number:0,65535')
+    query: |-
+      INSERT INTO subscriber (s_id, sub_nbr,
+        bit_1, bit_2, bit_3, bit_4, bit_5,
+        bit_6, bit_7, bit_8, bit_9, bit_10,
+        hex_1, hex_2, hex_3, hex_4, hex_5,
+        hex_6, hex_7, hex_8, hex_9, hex_10,
+        byte2_1, byte2_2, byte2_3, byte2_4, byte2_5,
+        byte2_6, byte2_7, byte2_8, byte2_9, byte2_10,
+        msc_location, vlr_location)
+      SELECT
+        s_id, sub_nbr,
+        b1, b2, b3, b4, b5,
+        b6, b7, b8, b9, b10,
+        h1, h2, h3, h4, h5,
+        h6, h7, h8, h9, h10,
+        y1, y2, y3, y4, y5,
+        y6, y7, y8, y9, y10,
+        msc, vlr
+      FROM UNNEST(
+        SPLIT('$1', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$2', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$3', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$4', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$5', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$6', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$7', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$8', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$9', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$10', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$11', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$12', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$13', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$14', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$15', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$16', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$17', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$18', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$19', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$20', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$21', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$22', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$23', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$24', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$25', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$26', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$27', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$28', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$29', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$30', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$31', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$32', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$33', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$34', CODE_POINTS_TO_STRING([31]))
+      ) AS v(
+        s_id, sub_nbr,
+        b1, b2, b3, b4, b5,
+        b6, b7, b8, b9, b10,
+        h1, h2, h3, h4, h5,
+        h6, h7, h8, h9, h10,
+        y1, y2, y3, y4, y5,
+        y6, y7, y8, y9, y10,
+        msc, vlr
+      )
+
+  - name: populate_access_info
+    type: exec_batch
+    count: subscribers
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - gen('number:1,4')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - regex('[a-z]{3}')
+      - regex('[a-z]{5}')
+    query: |-
+      INSERT OR IGNORE INTO access_info (s_id, ai_type, data1, data2, data3, data4)
+      SELECT
+        CAST(v1 AS INT64), CAST(v2 AS INT64),
+        CAST(v3 AS INT64), CAST(v4 AS INT64), v5, v6
+      FROM UNNEST(
+        SPLIT('$1', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$2', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$3', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$4', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$5', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$6', CODE_POINTS_TO_STRING([31]))
+      ) AS v(v1, v2, v3, v4, v5, v6)
+
+  - name: populate_special_facility
+    type: exec_batch
+    count: subscribers
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - gen('number:1,4')
+      - gen('number:0,1')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - regex('[a-z]{5}')
+    query: |-
+      INSERT OR IGNORE INTO special_facility (s_id, sf_type, is_active,
+        error_cntrl, data_a, data_b)
+      SELECT
+        CAST(v1 AS INT64), CAST(v2 AS INT64),
+        CAST(v3 AS INT64), CAST(v4 AS INT64),
+        CAST(v5 AS INT64), v6
+      FROM UNNEST(
+        SPLIT('$1', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$2', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$3', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$4', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$5', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$6', CODE_POINTS_TO_STRING([31]))
+      ) AS v(v1, v2, v3, v4, v5, v6)
+
+  - name: populate_call_forwarding
+    type: exec_batch
+    count: subscribers
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - gen('number:1,4')
+      - gen('number:0,2')
+      - gen('number:1,8')
+      - template('%015d', gen('number:1,999999999'))
+    query: |-
+      INSERT OR IGNORE INTO call_forwarding (s_id, sf_type, start_time,
+        end_time, numberx)
+      SELECT
+        CAST(v1 AS INT64), CAST(v2 AS INT64),
+        CAST(v3 AS INT64) * 8,
+        CAST(v3 AS INT64) * 8 + CAST(v4 AS INT64), v5
+      FROM UNNEST(
+        SPLIT('$1', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$2', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$3', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$4', CODE_POINTS_TO_STRING([31])),
+        SPLIT('$5', CODE_POINTS_TO_STRING([31]))
+      ) AS v(v1, v2, v3, v4, v5)
+
+deseed:
+
+  - name: delete_call_forwarding
+    type: exec
+    query: DELETE FROM call_forwarding WHERE TRUE
+
+  - name: delete_special_facility
+    type: exec
+    query: DELETE FROM special_facility WHERE TRUE
+
+  - name: delete_access_info
+    type: exec
+    query: DELETE FROM access_info WHERE TRUE
+
+  - name: delete_subscriber
+    type: exec
+    query: DELETE FROM subscriber WHERE TRUE
+
+down:
+
+  - name: drop_call_forwarding
+    type: exec
+    query: DROP TABLE IF EXISTS call_forwarding
+
+  - name: drop_special_facility
+    type: exec
+    query: DROP TABLE IF EXISTS special_facility
+
+  - name: drop_access_info
+    type: exec
+    query: DROP TABLE IF EXISTS access_info
+
+  - name: drop_subscriber_index
+    type: exec
+    query: DROP INDEX IF EXISTS idx_subscriber_sub_nbr
+
+  - name: drop_subscriber
+    type: exec
+    query: DROP TABLE IF EXISTS subscriber
+
+init:
+
+  - name: fetch_subscribers
+    type: query
+    query: SELECT s_id, sub_nbr FROM subscriber TABLESAMPLE RESERVOIR (100000 ROWS)
+
+run_weights:
+  get_subscriber_data: 35
+  get_new_destination: 10
+  get_access_data: 35
+  update_subscriber_data: 2
+  update_location: 14
+  insert_call_forwarding: 2
+  delete_call_forwarding: 2
+
+run:
+
+  # Point lookup by subscriber ID.
+  - name: get_subscriber_data
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+    query: |-
+      SELECT * FROM subscriber WHERE s_id = @p1
+
+  # Look up call forwarding rules for a subscriber.
+  - name: get_new_destination
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+      - gen('number:1,24')
+    query: |-
+      SELECT cf.numberx
+      FROM special_facility sf
+      JOIN call_forwarding cf
+        ON cf.s_id = sf.s_id AND cf.sf_type = sf.sf_type
+      WHERE sf.s_id = @p1 AND sf.sf_type = @p2
+        AND sf.is_active = 1
+        AND cf.start_time <= @p3 AND cf.end_time > @p4
+
+  # Look up access info for a subscriber.
+  - name: get_access_data
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+    query: |-
+      SELECT data1, data2, data3, data4
+      FROM access_info
+      WHERE s_id = @p1 AND ai_type = @p2
+
+  # Toggle a bit field on a subscriber.
+  - name: update_subscriber_data
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:0,1')
+    query: |-
+      UPDATE subscriber SET bit_1 = @p2
+      WHERE s_id = @p1
+
+  # Update subscriber location.
+  - name: update_location
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').sub_nbr
+      - gen('number:0,65535')
+    query: |-
+      UPDATE subscriber SET vlr_location = @p2
+      WHERE sub_nbr = @p1
+
+  # Insert a new call forwarding rule.
+  - name: insert_call_forwarding
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+      - gen('number:1,24')
+      - template('%015d', gen('number:1,999999999'))
+    query: |-
+      INSERT OR IGNORE INTO call_forwarding (s_id, sf_type, start_time,
+        end_time, numberx)
+      VALUES (@p1, @p2, @p3, @p4, @p5)
+
+  # Remove a call forwarding rule.
+  - name: delete_call_forwarding
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+    query: |-
+      DELETE FROM call_forwarding
+      WHERE s_id = @p1 AND sf_type = @p2
+        AND start_time = @p3

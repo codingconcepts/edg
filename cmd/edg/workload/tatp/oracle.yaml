@@ -1,0 +1,467 @@
+# TATP Benchmark Workload for Oracle
+# ===================================
+# Telecom Application Transaction Processing benchmark.
+# Models a mobile phone subscriber database with 80% reads
+# and 20% writes. Simple schema, high throughput.
+#
+# Schema:
+#   subscriber       - Phone subscribers with data fields
+#   access_info      - Access records per subscriber
+#   special_facility - Special facility flags per subscriber
+#   call_forwarding  - Call forwarding rules
+#
+# Transaction profiles (per TATP spec):
+#   get_subscriber_data    - Point lookup by subscriber ID (35%)
+#   get_new_destination    - Call forwarding lookup (10%)
+#   get_access_data        - Access info lookup (35%)
+#   update_subscriber_data - Toggle a subscriber bit (2%)
+#   update_location        - Update subscriber location (14%)
+#   insert_call_forwarding - Add a forwarding rule (2%)
+#   delete_call_forwarding - Remove a forwarding rule (2%)
+#
+# Connection URL format:
+#   oracle://user:password@host:port/service
+
+globals:
+  subscribers: 100000
+  batch_size: 10000
+
+up:
+
+  - name: create_subscriber
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE subscriber (
+            s_id NUMBER NOT NULL,
+            sub_nbr VARCHAR2(15) NOT NULL,
+            bit_1 NUMBER DEFAULT 0 NOT NULL,
+            bit_2 NUMBER DEFAULT 0 NOT NULL,
+            bit_3 NUMBER DEFAULT 0 NOT NULL,
+            bit_4 NUMBER DEFAULT 0 NOT NULL,
+            bit_5 NUMBER DEFAULT 0 NOT NULL,
+            bit_6 NUMBER DEFAULT 0 NOT NULL,
+            bit_7 NUMBER DEFAULT 0 NOT NULL,
+            bit_8 NUMBER DEFAULT 0 NOT NULL,
+            bit_9 NUMBER DEFAULT 0 NOT NULL,
+            bit_10 NUMBER DEFAULT 0 NOT NULL,
+            hex_1 NUMBER DEFAULT 0 NOT NULL,
+            hex_2 NUMBER DEFAULT 0 NOT NULL,
+            hex_3 NUMBER DEFAULT 0 NOT NULL,
+            hex_4 NUMBER DEFAULT 0 NOT NULL,
+            hex_5 NUMBER DEFAULT 0 NOT NULL,
+            hex_6 NUMBER DEFAULT 0 NOT NULL,
+            hex_7 NUMBER DEFAULT 0 NOT NULL,
+            hex_8 NUMBER DEFAULT 0 NOT NULL,
+            hex_9 NUMBER DEFAULT 0 NOT NULL,
+            hex_10 NUMBER DEFAULT 0 NOT NULL,
+            byte2_1 NUMBER DEFAULT 0 NOT NULL,
+            byte2_2 NUMBER DEFAULT 0 NOT NULL,
+            byte2_3 NUMBER DEFAULT 0 NOT NULL,
+            byte2_4 NUMBER DEFAULT 0 NOT NULL,
+            byte2_5 NUMBER DEFAULT 0 NOT NULL,
+            byte2_6 NUMBER DEFAULT 0 NOT NULL,
+            byte2_7 NUMBER DEFAULT 0 NOT NULL,
+            byte2_8 NUMBER DEFAULT 0 NOT NULL,
+            byte2_9 NUMBER DEFAULT 0 NOT NULL,
+            byte2_10 NUMBER DEFAULT 0 NOT NULL,
+            msc_location NUMBER DEFAULT 0 NOT NULL,
+            vlr_location NUMBER DEFAULT 0 NOT NULL,
+            PRIMARY KEY (s_id),
+            UNIQUE (sub_nbr)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_access_info
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE access_info (
+            s_id NUMBER NOT NULL,
+            ai_type NUMBER NOT NULL,
+            data1 NUMBER DEFAULT 0 NOT NULL,
+            data2 NUMBER DEFAULT 0 NOT NULL,
+            data3 VARCHAR2(3) DEFAULT '''' NOT NULL,
+            data4 VARCHAR2(5) DEFAULT '''' NOT NULL,
+            PRIMARY KEY (s_id, ai_type)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_special_facility
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE special_facility (
+            s_id NUMBER NOT NULL,
+            sf_type NUMBER NOT NULL,
+            is_active NUMBER DEFAULT 1 NOT NULL,
+            error_cntrl NUMBER DEFAULT 0 NOT NULL,
+            data_a NUMBER DEFAULT 0 NOT NULL,
+            data_b VARCHAR2(5) DEFAULT '''' NOT NULL,
+            PRIMARY KEY (s_id, sf_type)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_call_forwarding
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE call_forwarding (
+            s_id NUMBER NOT NULL,
+            sf_type NUMBER NOT NULL,
+            start_time NUMBER NOT NULL,
+            end_time NUMBER NOT NULL,
+            numberx VARCHAR2(15) NOT NULL,
+            PRIMARY KEY (s_id, sf_type, start_time)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+seed:
+
+  - name: clear_call_forwarding
+    type: exec
+    query: TRUNCATE TABLE call_forwarding
+
+  - name: clear_special_facility
+    type: exec
+    query: TRUNCATE TABLE special_facility
+
+  - name: clear_access_info
+    type: exec
+    query: TRUNCATE TABLE access_info
+
+  - name: clear_subscriber
+    type: exec
+    query: TRUNCATE TABLE subscriber
+
+  - name: populate_subscriber
+    type: exec_batch
+    count: subscribers
+    size: 100
+    args:
+      - seq(1, 1)
+      - template('%015d', seq(1, 1))
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,65535')
+      - gen('number:0,65535')
+    query: |-
+      INSERT INTO subscriber (s_id, sub_nbr,
+        bit_1, bit_2, bit_3, bit_4, bit_5,
+        bit_6, bit_7, bit_8, bit_9, bit_10,
+        hex_1, hex_2, hex_3, hex_4, hex_5,
+        hex_6, hex_7, hex_8, hex_9, hex_10,
+        byte2_1, byte2_2, byte2_3, byte2_4, byte2_5,
+        byte2_6, byte2_7, byte2_8, byte2_9, byte2_10,
+        msc_location, vlr_location)
+      SELECT
+        n1.val, n2.val,
+        n3.val, n4.val, n5.val, n6.val, n7.val,
+        n8.val, n9.val, n10.val, n11.val, n12.val,
+        n13.val, n14.val, n15.val, n16.val, n17.val,
+        n18.val, n19.val, n20.val, n21.val, n22.val,
+        n23.val, n24.val, n25.val, n26.val, n27.val,
+        n28.val, n29.val, n30.val, n31.val, n32.val,
+        n33.val, n34.val
+      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n1
+      JOIN XMLTABLE(('"' || REPLACE('$2', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(15) PATH '.') n2 ON n1.rn = n2.rn
+      JOIN XMLTABLE(('"' || REPLACE('$3', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n3 ON n1.rn = n3.rn
+      JOIN XMLTABLE(('"' || REPLACE('$4', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n4 ON n1.rn = n4.rn
+      JOIN XMLTABLE(('"' || REPLACE('$5', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n5 ON n1.rn = n5.rn
+      JOIN XMLTABLE(('"' || REPLACE('$6', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n6 ON n1.rn = n6.rn
+      JOIN XMLTABLE(('"' || REPLACE('$7', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n7 ON n1.rn = n7.rn
+      JOIN XMLTABLE(('"' || REPLACE('$8', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n8 ON n1.rn = n8.rn
+      JOIN XMLTABLE(('"' || REPLACE('$9', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n9 ON n1.rn = n9.rn
+      JOIN XMLTABLE(('"' || REPLACE('$10', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n10 ON n1.rn = n10.rn
+      JOIN XMLTABLE(('"' || REPLACE('$11', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n11 ON n1.rn = n11.rn
+      JOIN XMLTABLE(('"' || REPLACE('$12', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n12 ON n1.rn = n12.rn
+      JOIN XMLTABLE(('"' || REPLACE('$13', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n13 ON n1.rn = n13.rn
+      JOIN XMLTABLE(('"' || REPLACE('$14', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n14 ON n1.rn = n14.rn
+      JOIN XMLTABLE(('"' || REPLACE('$15', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n15 ON n1.rn = n15.rn
+      JOIN XMLTABLE(('"' || REPLACE('$16', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n16 ON n1.rn = n16.rn
+      JOIN XMLTABLE(('"' || REPLACE('$17', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n17 ON n1.rn = n17.rn
+      JOIN XMLTABLE(('"' || REPLACE('$18', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n18 ON n1.rn = n18.rn
+      JOIN XMLTABLE(('"' || REPLACE('$19', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n19 ON n1.rn = n19.rn
+      JOIN XMLTABLE(('"' || REPLACE('$20', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n20 ON n1.rn = n20.rn
+      JOIN XMLTABLE(('"' || REPLACE('$21', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n21 ON n1.rn = n21.rn
+      JOIN XMLTABLE(('"' || REPLACE('$22', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n22 ON n1.rn = n22.rn
+      JOIN XMLTABLE(('"' || REPLACE('$23', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n23 ON n1.rn = n23.rn
+      JOIN XMLTABLE(('"' || REPLACE('$24', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n24 ON n1.rn = n24.rn
+      JOIN XMLTABLE(('"' || REPLACE('$25', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n25 ON n1.rn = n25.rn
+      JOIN XMLTABLE(('"' || REPLACE('$26', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n26 ON n1.rn = n26.rn
+      JOIN XMLTABLE(('"' || REPLACE('$27', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n27 ON n1.rn = n27.rn
+      JOIN XMLTABLE(('"' || REPLACE('$28', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n28 ON n1.rn = n28.rn
+      JOIN XMLTABLE(('"' || REPLACE('$29', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n29 ON n1.rn = n29.rn
+      JOIN XMLTABLE(('"' || REPLACE('$30', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n30 ON n1.rn = n30.rn
+      JOIN XMLTABLE(('"' || REPLACE('$31', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n31 ON n1.rn = n31.rn
+      JOIN XMLTABLE(('"' || REPLACE('$32', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n32 ON n1.rn = n32.rn
+      JOIN XMLTABLE(('"' || REPLACE('$33', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n33 ON n1.rn = n33.rn
+      JOIN XMLTABLE(('"' || REPLACE('$34', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n34 ON n1.rn = n34.rn
+
+  - name: populate_access_info
+    type: exec_batch
+    count: subscribers
+    size: 100
+    args:
+      - seq(1, 1)
+      - gen('number:1,4')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - regex('[a-z]{3}')
+      - regex('[a-z]{5}')
+    query: |-
+      INSERT INTO access_info (s_id, ai_type, data1, data2, data3, data4)
+      SELECT n1.val, n2.val, n3.val, n4.val, n5.val, n6.val
+      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n1
+      JOIN XMLTABLE(('"' || REPLACE('$2', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n2 ON n1.rn = n2.rn
+      JOIN XMLTABLE(('"' || REPLACE('$3', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n3 ON n1.rn = n3.rn
+      JOIN XMLTABLE(('"' || REPLACE('$4', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n4 ON n1.rn = n4.rn
+      JOIN XMLTABLE(('"' || REPLACE('$5', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(3) PATH '.') n5 ON n1.rn = n5.rn
+      JOIN XMLTABLE(('"' || REPLACE('$6', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(5) PATH '.') n6 ON n1.rn = n6.rn
+      WHERE (n1.val, n2.val) NOT IN (SELECT s_id, ai_type FROM access_info)
+
+  - name: populate_special_facility
+    type: exec_batch
+    count: subscribers
+    size: 100
+    args:
+      - seq(1, 1)
+      - gen('number:1,4')
+      - gen('number:0,1')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - regex('[a-z]{5}')
+    query: |-
+      INSERT INTO special_facility (s_id, sf_type, is_active,
+        error_cntrl, data_a, data_b)
+      SELECT n1.val, n2.val, n3.val, n4.val, n5.val, n6.val
+      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n1
+      JOIN XMLTABLE(('"' || REPLACE('$2', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n2 ON n1.rn = n2.rn
+      JOIN XMLTABLE(('"' || REPLACE('$3', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n3 ON n1.rn = n3.rn
+      JOIN XMLTABLE(('"' || REPLACE('$4', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n4 ON n1.rn = n4.rn
+      JOIN XMLTABLE(('"' || REPLACE('$5', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n5 ON n1.rn = n5.rn
+      JOIN XMLTABLE(('"' || REPLACE('$6', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(5) PATH '.') n6 ON n1.rn = n6.rn
+      WHERE (n1.val, n2.val) NOT IN (SELECT s_id, sf_type FROM special_facility)
+
+  - name: populate_call_forwarding
+    type: exec_batch
+    count: subscribers
+    size: 100
+    args:
+      - seq(1, 1)
+      - gen('number:1,4')
+      - gen('number:0,2')
+      - gen('number:1,8')
+      - template('%015d', gen('number:1,999999999'))
+    query: |-
+      INSERT INTO call_forwarding (s_id, sf_type, start_time,
+        end_time, numberx)
+      SELECT n1.val, n2.val, n3.val * 8, n3.val * 8 + n4.val, n5.val
+      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n1
+      JOIN XMLTABLE(('"' || REPLACE('$2', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n2 ON n1.rn = n2.rn
+      JOIN XMLTABLE(('"' || REPLACE('$3', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n3 ON n1.rn = n3.rn
+      JOIN XMLTABLE(('"' || REPLACE('$4', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val NUMBER PATH '.') n4 ON n1.rn = n4.rn
+      JOIN XMLTABLE(('"' || REPLACE('$5', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(15) PATH '.') n5 ON n1.rn = n5.rn
+      WHERE (n1.val, n2.val, n3.val * 8) NOT IN (SELECT s_id, sf_type, start_time FROM call_forwarding)
+
+deseed:
+
+  - name: truncate_call_forwarding
+    type: exec
+    query: TRUNCATE TABLE call_forwarding
+
+  - name: truncate_special_facility
+    type: exec
+    query: TRUNCATE TABLE special_facility
+
+  - name: truncate_access_info
+    type: exec
+    query: TRUNCATE TABLE access_info
+
+  - name: truncate_subscriber
+    type: exec
+    query: TRUNCATE TABLE subscriber
+
+down:
+
+  - name: drop_call_forwarding
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE call_forwarding CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_special_facility
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE special_facility CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_access_info
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE access_info CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+  - name: drop_subscriber
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE subscriber CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+init:
+
+  - name: fetch_subscribers
+    type: query
+    query: SELECT s_id, sub_nbr FROM subscriber
+
+run_weights:
+  get_subscriber_data: 35
+  get_new_destination: 10
+  get_access_data: 35
+  update_subscriber_data: 2
+  update_location: 14
+  insert_call_forwarding: 2
+  delete_call_forwarding: 2
+
+run:
+
+  # Point lookup by subscriber ID.
+  - name: get_subscriber_data
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+    query: |-
+      SELECT * FROM subscriber WHERE s_id = :1
+
+  # Look up call forwarding rules for a subscriber.
+  - name: get_new_destination
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+      - gen('number:1,24')
+    query: |-
+      SELECT cf.numberx
+      FROM special_facility sf
+      JOIN call_forwarding cf
+        ON cf.s_id = sf.s_id AND cf.sf_type = sf.sf_type
+      WHERE sf.s_id = :1 AND sf.sf_type = :2
+        AND sf.is_active = 1
+        AND cf.start_time <= :3 AND cf.end_time > :4
+
+  # Look up access info for a subscriber.
+  - name: get_access_data
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+    query: |-
+      SELECT data1, data2, data3, data4
+      FROM access_info
+      WHERE s_id = :1 AND ai_type = :2
+
+  # Toggle a bit field on a subscriber.
+  - name: update_subscriber_data
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:0,1')
+    query: |-
+      UPDATE subscriber SET bit_1 = :2
+      WHERE s_id = :1
+
+  # Update subscriber location.
+  - name: update_location
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').sub_nbr
+      - gen('number:0,65535')
+    query: |-
+      UPDATE subscriber SET vlr_location = :2
+      WHERE sub_nbr = :1
+
+  # Insert a new call forwarding rule.
+  - name: insert_call_forwarding
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+      - gen('number:1,24')
+      - template('%015d', gen('number:1,999999999'))
+    query: |-
+      INSERT INTO call_forwarding (s_id, sf_type, start_time,
+        end_time, numberx)
+      SELECT :1, :2, :3, :4, :5
+      FROM special_facility
+      WHERE s_id = :1 AND sf_type = :2
+        AND ROWNUM = 1
+
+  # Remove a call forwarding rule.
+  - name: delete_call_forwarding
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+    query: |-
+      DELETE FROM call_forwarding
+      WHERE s_id = :1 AND sf_type = :2
+        AND start_time = :3

@@ -1,0 +1,78 @@
+# Sysbench oltp_point_select Workload for Oracle
+# ================================================
+# Pure point-select micro-benchmark. Every operation is a single
+# primary-key lookup. Useful for measuring read latency floor and
+# connection overhead.
+
+globals:
+  records: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_sbtest1
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE sbtest1 (
+            id NUMBER NOT NULL,
+            k NUMBER DEFAULT 0 NOT NULL,
+            c CHAR(120) DEFAULT '' '' NOT NULL,
+            pad CHAR(60) DEFAULT '' '' NOT NULL,
+            PRIMARY KEY (id)
+          )
+        ';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_idx_k
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'CREATE INDEX k_1 ON sbtest1(k)';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+seed:
+
+  - name: populate_sbtest1
+    type: exec_batch
+    count: records
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - gen('number:0,10000')
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      INSERT INTO sbtest1 (id, k, c, pad)
+      VALUES (:1, :2, :3, :4)
+
+deseed:
+
+  - name: truncate_sbtest1
+    type: exec
+    query: TRUNCATE TABLE sbtest1
+
+down:
+
+  - name: drop_sbtest1
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE sbtest1 CASCADE CONSTRAINTS PURGE';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+      END;
+
+run:
+
+  - name: point_select
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT c FROM sbtest1 WHERE id = :1
