@@ -94,10 +94,12 @@ docker compose -f _examples/compose_oracle.yml down
 
 ## Todos
 
+* Replace all instances of the following with sep():
+  * CODE_POINTS_TO_STRING([31])
+* Prometheus metrics endpoint
 * Better error output
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences
 * Global sequencies (`seq_global(name, start, step)`) for all workers to share in a thread safe way
-* Prometheus metrics endpoint
 * Dry run mode
 * Output to file for testing and feeding other tools
   * CSV

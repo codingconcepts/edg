@@ -378,6 +378,57 @@ JOIN OPENJSON('["a@x.com","b@y.com",...,"z@x.com"]') j2
   ON j1.[key] = j2.[key]
 ```
 
+#### Spanner (GoogleSQL)
+
+Spanner uses GoogleSQL syntax. Batch values are unpacked with `UNNEST(SPLIT(...))`. The unit-separator-delimited string is split using `CODE_POINTS_TO_STRING([31])` (Spanner's equivalent of `chr(31)`), and `UNNEST` converts the resulting array into rows. Multiple columns are correlated using `WITH OFFSET`:
+
+```yaml
+seed:
+  - name: populate_users
+    type: exec_batch
+    count: 1000
+    size: 100
+    args:
+      - gen('email')
+    query: |-
+      INSERT INTO users (email)
+      SELECT val
+      FROM UNNEST(SPLIT('$1', CODE_POINTS_TO_STRING([31]))) AS val
+```
+
+Which resolves to the following query automatically by edg:
+
+```sql
+INSERT INTO users (email)
+SELECT val
+FROM UNNEST(SPLIT(
+  'a@x.com\x1fb@y.com\x1f...\x1fz@x.com',
+  CODE_POINTS_TO_STRING([31])
+)) AS val
+```
+
+For multiple columns, use separate `UNNEST` calls joined with `WITH OFFSET`:
+
+```yaml
+seed:
+  - name: populate_contacts
+    type: exec_batch
+    count: 1000
+    size: 100
+    args:
+      - gen('name')
+      - gen('email')
+    query: |-
+      INSERT INTO contact (name, email)
+      SELECT n, e
+      FROM UNNEST(SPLIT('$1', CODE_POINTS_TO_STRING([31]))) AS n WITH OFFSET o1
+      JOIN UNNEST(SPLIT('$2', CODE_POINTS_TO_STRING([31]))) AS e WITH OFFSET o2
+        ON o1 = o2
+```
+
+> [!NOTE]
+> Spanner does not support `TRUNCATE`. Use `DELETE FROM table WHERE TRUE` for deseed operations. Spanner also uses `INSERT OR UPDATE` for upserts instead of `ON CONFLICT`.
+
 ### Prepared Statements
 
 Setting `prepared: true` on a `run` query causes the SQL statement to be prepared once per worker and reused across iterations. This reduces server-side parse overhead for high-throughput workloads by allowing the database to cache the query plan.

@@ -339,6 +339,22 @@ edg deseed --driver pgx --config integration-test.yaml --url ${DATABASE_URL}
 edg down --driver pgx --config integration-test.yaml --url ${DATABASE_URL}
 ```
 
+## Driver-specific considerations
+
+The examples above use PostgreSQL/CockroachDB (`pgx`) syntax. When targeting other drivers, adjust the SQL accordingly. Key differences for Spanner (GoogleSQL):
+
+| Concern | pgx | Spanner |
+|---|---|---|
+| UUID column | `UUID DEFAULT gen_random_uuid()` | `STRING(36) DEFAULT (GENERATE_UUID())` |
+| Primary key | inline `PRIMARY KEY` | `PRIMARY KEY (col)` at table level |
+| Batch expansion | `unnest(string_to_array('$1', sep))` | `UNNEST(SPLIT('$1', CODE_POINTS_TO_STRING([31])))` |
+| Type cast | `$1::UUID`, `$2::FLOAT` | `CAST($1 AS STRING)`, `CAST($2 AS FLOAT64)` |
+| Random ordering | `ORDER BY random()` | `TABLESAMPLE RESERVOIR (N ROWS)` |
+| Cleanup | `TRUNCATE TABLE t CASCADE` | `DELETE FROM t WHERE TRUE` |
+| Bind params | `$1`, `$2` | `@p1`, `@p2` |
+
+For complete Spanner examples, see the [built-in workloads]({{< relref "cli-reference" >}}#workload) which include Spanner variants for every benchmark.
+
 ## Tips
 
 - **Use `--rng-seed` in CI.** Deterministic data eliminates an entire class of flaky tests caused by random values.

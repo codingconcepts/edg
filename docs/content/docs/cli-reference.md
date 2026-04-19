@@ -106,7 +106,7 @@ Supported drivers:
 | `mysql` | MySQL variant |
 | `oracle` | Oracle variant |
 | `mssql` | SQL Server variant |
-| `spanner` | Google Cloud Spanner variant |
+| `spanner` | Google Cloud Spanner variant (GoogleSQL) |
 
 ```sh
 # Create the bank schema
@@ -200,7 +200,7 @@ edg init \
 
 The generated config:
 
-- **`up`** `CREATE TABLE` statements derived from the database's own DDL (CockroachDB's `SHOW CREATE TABLE`, MySQL's `SHOW CREATE TABLE`, Oracle's `DBMS_METADATA.GET_DDL`, or reconstructed from `sys` catalog views for MSSQL).
+- **`up`** `CREATE TABLE` statements derived from the database's own DDL (CockroachDB's `SHOW CREATE TABLE`, MySQL's `SHOW CREATE TABLE`, Oracle's `DBMS_METADATA.GET_DDL`, reconstructed from `sys` catalog views for MSSQL, or reconstructed from `INFORMATION_SCHEMA` for Spanner).
 - **`seed`** One `INSERT` per table with an expression for each non-generated column. Columns with auto-increment, identity, or default functions like `gen_random_uuid()` and `now()` are skipped. Expressions are chosen by data type (e.g. `uuid_v4()` for UUID, `uniform(1, 1000)` for INT, `gen('sentence:3')` for VARCHAR). `CHECK BETWEEN` constraints are detected and used to narrow the range.
 - **`deseed`** `TRUNCATE` (pgx, oracle) or `DELETE FROM` (mysql, mssql, spanner) in reverse dependency order.
 - **`down`** `DROP TABLE` in reverse dependency order.
@@ -251,7 +251,7 @@ edg init \
 --schema SYSTEM > workload.yaml
 ```
 
-**Google Cloud Spanner**
+**Google Cloud Spanner (GoogleSQL)**
 ```sh
 edg init \
 --driver spanner \

@@ -145,15 +145,17 @@ The config is at workloads/bench.yaml.
 
 | Concern | What changes |
 |---|---|
-| Column types | `UUID` → `CHAR(36)`, `STRING` → `VARCHAR(n)`, etc. |
-| Default values | `gen_random_uuid()` → `UUID()` / `NEWID()` / args-based |
-| DDL safety | `IF NOT EXISTS` → `IF OBJECT_ID(...)` / PL/SQL exception blocks |
-| Row generation | `generate_series` → recursive CTE / `CONNECT BY` |
-| Batch expansion | `unnest(string_to_array(...))` → `JSON_TABLE` / `OPENJSON` / `XMLTABLE` |
-| Upsert | `ON CONFLICT` → `ON DUPLICATE KEY` / `MERGE INTO` |
+| Batch expansion | `unnest(string_to_array(...))` → `JSON_TABLE` / `OPENJSON` / `XMLTABLE` / `UNNEST(SPLIT(...))` (Spanner) |
+| Cleanup | `TRUNCATE CASCADE` → `DELETE FROM` / `CASCADE CONSTRAINTS PURGE` / `DELETE FROM ... WHERE TRUE` (Spanner) |
+| Column types | `UUID` → `CHAR(36)` / `STRING(36)`, `STRING` → `VARCHAR(n)`, etc. |
+| DDL safety | `IF NOT EXISTS` → `IF OBJECT_ID(...)` / PL/SQL exception blocks / `CREATE TABLE IF NOT EXISTS` (Spanner) |
+| Default values | `gen_random_uuid()` → `UUID()` / `NEWID()` / `GENERATE_UUID()` / args-based |
 | Pagination | `LIMIT/OFFSET` → `FETCH NEXT ... ROWS ONLY` |
-| Random ordering | `random()` → `RAND()` / `NEWID()` / `DBMS_RANDOM.VALUE` |
-| Cleanup | `TRUNCATE CASCADE` → `DELETE FROM` / `CASCADE CONSTRAINTS PURGE` |
+| Placeholders | `$1` → `?` (MySQL) / `:1` (Oracle) / `@p1` (MSSQL, Spanner) |
+| Primary key | inline `PRIMARY KEY` → table-level `PRIMARY KEY (col)` (Spanner) |
+| Random ordering | `random()` → `RAND()` / `NEWID()` / `DBMS_RANDOM.VALUE` / `TABLESAMPLE RESERVOIR` (Spanner) |
+| Row generation | `generate_series` → recursive CTE / `CONNECT BY` / `GENERATE_ARRAY` + `UNNEST` (Spanner) |
+| Upsert | `ON CONFLICT` → `ON DUPLICATE KEY` / `MERGE INTO` / `INSERT OR UPDATE` (Spanner) |
 
 Expression args (`gen()`, `ref_rand()`, `zipf()`, etc.) are driver-agnostic and remain unchanged.
 
