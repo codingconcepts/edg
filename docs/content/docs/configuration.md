@@ -64,9 +64,38 @@ These can be referenced directly in arg expressions, including in arithmetic:
 
 ```yaml
 args:
-  - customers / districts   # evaluates to 3000
-  - warehouses * 10         # evaluates to 10
+  - customers / districts # evaluates to 3000
+  - warehouses * 10       # evaluates to 10
 ```
+
+### Expression-valued globals
+
+Global values can be expressions, including references to other globals and environment variables. String values are compiled as expressions; if compilation fails (e.g. a plain string like `"new york"`), the value is kept as a literal.
+
+Globals are evaluated in YAML document order, so later globals can reference earlier ones:
+
+```yaml
+globals:
+  warehouses: 1
+  districts: warehouses * 10  # evaluates to 10
+  customers: districts * 3000 # evaluates to 30000
+```
+
+### Globals from environment variables
+
+Use `env()` to read a required environment variable, or `env_nil()` for an optional one. Combine `env_nil()` with `coalesce()` to provide a default:
+
+```yaml
+globals:
+  # Required (fails at startup if DB_BATCH_SIZE is not set).
+  batch_size: env('DB_BATCH_SIZE')
+
+  # Optional (falls back to 10000 if CUSTOMERS is not set).
+  customers: int(coalesce(env_nil('CUSTOMERS'), 10000))
+```
+
+> [!WARNING]
+> `env()` returns a string. Wrap with `int()` or `float()` if arithmetic is needed downstream.
 
 ## Reference
 
