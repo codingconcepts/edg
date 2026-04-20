@@ -1,0 +1,106 @@
+globals:
+  customers: 100
+
+reference:
+  regions:
+    - {name: us, cities: [new-york, chicago, dallas]}
+    - {name: eu, cities: [london, berlin, paris]}
+    - {name: ap, cities: [tokyo, sydney, mumbai]}
+
+up:
+
+  - name: create_order
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS print_order (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email STRING NOT NULL,
+        region STRING NOT NULL,
+        city STRING NOT NULL,
+        amount DECIMAL(10,2) NOT NULL
+      )
+
+seed:
+
+  - name: populate_order
+    type: exec_batch
+    count: customers
+    size: 10
+    args:
+      - gen('email')
+      - ref_same('regions').name
+      - set_rand(ref_same('regions').cities, [])
+      - uniform(1, 500)
+    query: |-
+      INSERT INTO print_order (email, region, city, amount)
+      SELECT
+        unnest(string_to_array('$1', chr(31))),
+        unnest(string_to_array('$2', chr(31))),
+        unnest(string_to_array('$3', chr(31))),
+        unnest(string_to_array('$4', chr(31))::DECIMAL[])
+
+deseed:
+
+  - name: truncate_order
+    type: exec
+    query: TRUNCATE TABLE print_order
+
+down:
+
+  - name: drop_order
+    type: exec
+    query: DROP TABLE IF EXISTS print_order
+
+run:
+
+  - name: insert_order
+    type: exec
+    args:
+      - gen('email')
+      - ref_same('regions').name
+      - set_rand(ref_same('regions').cities, [])
+      - uniform(1, 500)
+    print:
+      # Auto-aggregate (frequency for string data)
+      - ref_same('regions').name
+
+      # Auto-aggregate (min/avg/max for numeric data)
+      - arg(3)
+
+      # Frequency distribution (top 5 by count).
+      - expr: set_rand(ref_same('regions').cities, [])
+        agg: "join(map(sortBy(toPairs(freq), -#[1])[:5], #[0] + '=' + string(#[1])), ' ')"
+
+      # Average and count
+      - expr: arg(3)
+        agg: "'avg $' + string(int(avg)) + ' n=' + string(count)"
+
+      # Running total
+      - expr: arg(3)
+        agg: "'total=$' + string(int(sum))"
+
+      # Value bounds
+      - expr: arg(3)
+        agg: "string(int(min)) + ' - ' + string(int(max))"
+
+      # Unique count
+      - expr: set_rand(ref_same('regions').cities, [])
+        agg: "string(len(freq)) + ' unique'"
+    query: |-
+      INSERT INTO print_order (email, region, city, amount)
+      VALUES ($1, $2, $3, $4::DECIMAL)
+
+  - name: read_order
+    args:
+      - ref_same('regions').name
+    print:
+      # Manual frequency distribution of queried regions (same
+      # as above but more disgusting).
+      - expr: ref_same('regions').name
+        agg: "join(map(sortBy(toPairs(freq), -#[1]), #[0] + '=' + string(#[1])), ' ')"
+
+      # Total reads
+      - expr: arg(0)
+        agg: "string(count)"
+    query: |-
+      SELECT id, amount FROM print_order WHERE region = $1 LIMIT 1

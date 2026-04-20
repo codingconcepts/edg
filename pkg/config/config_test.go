@@ -39,8 +39,31 @@ down:
 	require.Len(t, req.Up, 1)
 	require.Len(t, req.Seed, 1)
 	assert.Equal(t, "populate_table", req.Seed[0].Name)
-	require.Len(t, req.Seed[0].Args, 1)
+	require.Equal(t, 1, req.Seed[0].Args.Len())
 	require.Len(t, req.Down, 1)
+}
+
+func TestRequestParsesNamedArgs(t *testing.T) {
+	input := `
+run:
+  - name: insert_order
+    type: exec
+    args:
+      email: gen('email')
+      region: ref_same('regions').name
+      city: set_rand(ref_same('regions').cities, [])
+      amount: uniform(1, 500)
+    query: INSERT INTO t VALUES ($1, $2, $3, $4)
+`
+	var req Request
+	require.NoError(t, yaml.Unmarshal([]byte(input), &req))
+
+	require.Equal(t, 4, req.Run[0].Query.Args.Len())
+	require.True(t, req.Run[0].Query.Args.IsNamed())
+	assert.Equal(t, "gen('email')", req.Run[0].Query.Args.Exprs[0])
+	assert.Equal(t, "uniform(1, 500)", req.Run[0].Query.Args.Exprs[3])
+	assert.Equal(t, 0, req.Run[0].Query.Args.Names["email"])
+	assert.Equal(t, 3, req.Run[0].Query.Args.Names["amount"])
 }
 
 func TestRequestParsesDeseedSection(t *testing.T) {
@@ -475,7 +498,7 @@ func TestValidate_GenPattern(t *testing.T) {
 			name: "valid args",
 			req: &Request{
 				Run: []*RunItem{
-					{Query: &Query{Name: "q1", Args: []string{"gen('email')", "gen('number:1,100')"}}},
+					{Query: &Query{Name: "q1", Args: PositionalArgs("gen('email')", "gen('number:1,100')")}},
 				},
 			},
 		},
@@ -483,7 +506,7 @@ func TestValidate_GenPattern(t *testing.T) {
 			name: "invalid arg",
 			req: &Request{
 				Run: []*RunItem{
-					{Query: &Query{Name: "q1", Args: []string{"gen('notafunction')"}}},
+					{Query: &Query{Name: "q1", Args: PositionalArgs("gen('notafunction')")}},
 				},
 			},
 			wantErr: "notafunction",
@@ -686,7 +709,7 @@ workers:
 	assert.Equal(t, "counter", req.Workers[1].Name)
 	assert.Equal(t, 5, req.Workers[1].Rate.Times)
 	assert.Equal(t, time.Minute, req.Workers[1].Rate.Interval)
-	require.Len(t, req.Workers[1].Args, 1)
+	require.Equal(t, 1, req.Workers[1].Args.Len())
 }
 
 func TestValidate_WorkerMissingName(t *testing.T) {

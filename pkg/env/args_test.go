@@ -16,7 +16,7 @@ func TestCompileArgs(t *testing.T) {
 		name    string
 		data    map[string][]map[string]any
 		setup   func(*Env)
-		args    []string
+		args    config.QueryArgs
 		wantErr bool
 		wantLen int
 	}{
@@ -28,12 +28,12 @@ func TestCompileArgs(t *testing.T) {
 				e.env["gen"] = gen.Gen
 				e.env["ref_rand"] = e.refRand
 			},
-			args:    []string{"const(42)", "gen('number:1,10')"},
+			args:    config.PositionalArgs("const(42)", "gen('number:1,10')"),
 			wantLen: 2,
 		},
 		{
 			name:    "invalid expression",
-			args:    []string{"invalid_func()"},
+			args:    config.PositionalArgs("invalid_func()"),
 			wantErr: true,
 		},
 		{
@@ -79,7 +79,7 @@ func TestGenerateArgs_WithConst(t *testing.T) {
 	env.env["const"] = convert.Constant
 
 	q := &config.Query{
-		Args: []string{"const(42)", "const('hello')"},
+		Args: config.PositionalArgs("const(42)", "const('hello')"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
@@ -99,7 +99,7 @@ func TestGenerateArgs_ClearsOneCacheAfter(t *testing.T) {
 	env.env["const"] = convert.Constant
 	env.oneCache["test"] = "data"
 
-	q := &config.Query{Args: []string{"const(1)"}}
+	q := &config.Query{Args: config.PositionalArgs("const(1)")}
 	require.NoError(t, q.CompileArgs(env.env))
 
 	_, _, err := env.GenerateArgs(q)
@@ -113,7 +113,7 @@ func TestGenerateArgs_ResetsUniqIndexAfter(t *testing.T) {
 	env.env["const"] = convert.Constant
 	env.uniqIndex = 5
 
-	q := &config.Query{Args: []string{"const(1)"}}
+	q := &config.Query{Args: config.PositionalArgs("const(1)")}
 	require.NoError(t, q.CompileArgs(env.env))
 
 	_, _, err := env.GenerateArgs(q)
@@ -175,11 +175,11 @@ func TestNewEnv_RejectsUnknownQueryType(t *testing.T) {
 func BenchmarkCompileArgs(b *testing.B) {
 	cases := []struct {
 		name string
-		args []string
+		args config.QueryArgs
 	}{
-		{"args_1", []string{"const(42)"}},
-		{"args_3", []string{"const(42)", "ref_rand('items')", "const(42)"}},
-		{"args_5", []string{"const(42)", "ref_rand('items')", "const(42)", "ref_rand('items')", "const(42)"}},
+		{"args_1", config.PositionalArgs("const(42)")},
+		{"args_3", config.PositionalArgs("const(42)", "ref_rand('items')", "const(42)")},
+		{"args_5", config.PositionalArgs("const(42)", "ref_rand('items')", "const(42)", "ref_rand('items')", "const(42)")},
 	}
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
@@ -199,13 +199,13 @@ func BenchmarkGenerateArgs(b *testing.B) {
 	cases := []struct {
 		name    string
 		envSize int
-		args    []string
+		args    config.QueryArgs
 		extra   func(env *Env)
 	}{
 		{
 			name:    "scalar",
 			envSize: 100,
-			args:    []string{"const(42)", "ref_rand('items')"},
+			args:    config.PositionalArgs("const(42)", "ref_rand('items')"),
 			extra: func(env *Env) {
 				env.env["const"] = convert.Constant
 				env.env["ref_rand"] = env.refRand
@@ -214,7 +214,7 @@ func BenchmarkGenerateArgs(b *testing.B) {
 		{
 			name:    "batch",
 			envSize: 0,
-			args:    []string{"batch(3)", "const(10)"},
+			args:    config.PositionalArgs("batch(3)", "const(10)"),
 			extra: func(env *Env) {
 				env.env["const"] = convert.Constant
 				env.env["batch"] = convert.Batch
@@ -245,7 +245,7 @@ func TestGenerateArgs_MixedBatchAndScalar(t *testing.T) {
 	batchData := [][]any{{1}, {2}, {3}}
 	env.env["test_batch"] = func() [][]any { return batchData }
 
-	q := &config.Query{Args: []string{"test_batch()", "const(10)", "const(3000)"}}
+	q := &config.Query{Args: config.PositionalArgs("test_batch()", "const(10)", "const(3000)")}
 	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, _, err := env.GenerateArgs(q)
@@ -269,7 +269,7 @@ func TestGenerateArgs_CartesianProduct(t *testing.T) {
 	env.env["batchA"] = func() [][]any { return batchA }
 	env.env["batchB"] = func() [][]any { return batchB }
 
-	q := &config.Query{Args: []string{"batchA()", "batchB()"}}
+	q := &config.Query{Args: config.PositionalArgs("batchA()", "batchB()")}
 	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, expanded, err := env.GenerateArgs(q)
@@ -306,7 +306,7 @@ func TestGenerateArgs_CartesianWithScalars(t *testing.T) {
 	env.env["batchA"] = func() [][]any { return batchA }
 	env.env["batchB"] = func() [][]any { return batchB }
 
-	q := &config.Query{Args: []string{"const(99)", "batchA()", "batchB()", "const(42)"}}
+	q := &config.Query{Args: config.PositionalArgs("const(99)", "batchA()", "batchB()", "const(42)")}
 	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, _, err := env.GenerateArgs(q)
@@ -343,7 +343,7 @@ func TestGenerateArgs_BatchType(t *testing.T) {
 		Type:  config.QueryTypeExecBatch,
 		Count: 10,
 		Size:  4,
-		Args:  []string{"gen('noun')", "ref_same('categories').name", "ref_same('categories').markup"},
+		Args:  config.PositionalArgs("gen('noun')", "ref_same('categories').name", "ref_same('categories').markup"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
@@ -397,7 +397,7 @@ func TestGenerateArgs_BatchType_GlobalRefs(t *testing.T) {
 		Type:  config.QueryTypeExecBatch,
 		Count: "products",
 		Size:  "batch_size",
-		Args:  []string{"const(42)"},
+		Args:  config.PositionalArgs("const(42)"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
@@ -424,7 +424,7 @@ func TestGenerateArgs_BatchType_SizeDefaultsToCount(t *testing.T) {
 	q := &config.Query{
 		Type:  config.QueryTypeExecBatch,
 		Count: 5,
-		Args:  []string{"const('x')"},
+		Args:  config.PositionalArgs("const('x')"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 

@@ -51,7 +51,9 @@ type Env struct {
 
 	seqCounter int64
 
-	computedArgs []any
+	computedArgs     []any
+	computedArgNames map[string]int
+	lastPrintValues  []string
 
 	txLocals map[string]any
 
@@ -77,7 +79,7 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 	}
 
 	env.env = map[string]any{
-		"arg":               env.arg,             // Reference a previously evaluated arg by index.
+		"arg":               env.arg,             // Reference a previously evaluated arg by index or name.
 		"array":             gen.GenArray,        // CockroachDB/PostgreSQL array literal.
 		"avg":               env.aggAvg,          // Average a numeric field across all rows in a dataset.
 		"batch":             convert.Batch,       // Generate sequential batch indices [0, n) for batched execution.
@@ -226,7 +228,7 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 	for _, queries := range allQueries {
 		for _, query := range queries {
 			if query.Row != "" {
-				query.Args = slices.Clone(r.Rows[query.Row])
+				query.Args = config.QueryArgs{Exprs: slices.Clone(r.Rows[query.Row])}
 			}
 		}
 	}
@@ -268,6 +270,9 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 			if err := query.CompileArgs(env.env); err != nil {
 				return nil, fmt.Errorf("failed to compile %s query %d: %w", group.name, i, err)
 			}
+			if err := query.CompilePrint(env.env); err != nil {
+				return nil, fmt.Errorf("failed to compile %s query %d print: %w", group.name, i, err)
+			}
 		}
 	}
 
@@ -290,6 +295,7 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 func (e *Env) GenerateArgs(q *config.Query) ([][]any, bool, error) {
 	defer e.clearOneCache()
 	defer e.resetUniqIndex()
+	defer e.evalPrint(q)
 
 	if q.Type == config.QueryTypeQueryBatch || q.Type == config.QueryTypeExecBatch {
 		r, err := e.generateBatchArgs(q)
@@ -301,6 +307,7 @@ func (e *Env) GenerateArgs(q *config.Query) ([][]any, bool, error) {
 	}
 
 	e.computedArgs = e.computedArgs[:0]
+	e.computedArgNames = q.Args.Names
 	var completeArgs []any
 	for _, cq := range q.CompiledArgs {
 		compiledArg, err := expr.Run(cq, e.env)
@@ -415,6 +422,8 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 			}
 		}
 	}
+
+	e.computedArgNames = q.Args.Names
 
 	for b := range batches {
 		n := size
@@ -585,7 +594,14 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 			}
 		}
 
-		e.sendResult(config.QueryResult{Name: q.Name, Section: section, Latency: time.Since(queryStart), Count: len(argSets)})
+		var printAggs []string
+		if len(q.Print) > 0 {
+			printAggs = make([]string, len(q.Print))
+			for i, pe := range q.Print {
+				printAggs[i] = pe.Agg
+			}
+		}
+		e.sendResult(config.QueryResult{Name: q.Name, Section: section, Latency: time.Since(queryStart), Count: len(argSets), PrintAggs: printAggs, PrintValues: e.lastPrintValues})
 
 		if section == config.ConfigSectionRun && q.Wait > 0 {
 			select {
@@ -596,6 +612,26 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 		}
 	}
 	return nil
+}
+
+func (e *Env) evalPrint(q *config.Query) {
+	if len(q.CompiledPrint) == 0 {
+		e.lastPrintValues = nil
+		return
+	}
+	values := make([]string, len(q.CompiledPrint))
+	for i, p := range q.CompiledPrint {
+		if p == nil {
+			continue
+		}
+		result, err := expr.Run(p, e.env)
+		if err != nil {
+			values[i] = fmt.Sprintf("<error: %v>", err)
+			continue
+		}
+		values[i] = fmt.Sprintf("%v", result)
+	}
+	e.lastPrintValues = values
 }
 
 func (e *Env) sendResult(r config.QueryResult) {
@@ -864,11 +900,25 @@ func (e *Env) Eval(expression string) (any, error) {
 	return expr.Run(program, envCopy)
 }
 
-func (e *Env) arg(index int) (any, error) {
-	if index < 0 || index >= len(e.computedArgs) {
-		return nil, fmt.Errorf("arg(%d): index out of range (%d args computed so far)", index, len(e.computedArgs))
+func (e *Env) arg(key any) (any, error) {
+	switch k := key.(type) {
+	case int:
+		if k < 0 || k >= len(e.computedArgs) {
+			return nil, fmt.Errorf("arg(%d): index out of range (%d args computed so far)", k, len(e.computedArgs))
+		}
+		return e.computedArgs[k], nil
+	case string:
+		idx, ok := e.computedArgNames[k]
+		if !ok {
+			return nil, fmt.Errorf("arg(%q): unknown arg name", k)
+		}
+		if idx >= len(e.computedArgs) {
+			return nil, fmt.Errorf("arg(%q): not yet computed (index %d, %d args computed so far)", k, idx, len(e.computedArgs))
+		}
+		return e.computedArgs[idx], nil
+	default:
+		return nil, fmt.Errorf("arg(): expected int or string, got %T", key)
 	}
-	return e.computedArgs[index], nil
 }
 
 func (e *Env) local(name string) (any, error) {

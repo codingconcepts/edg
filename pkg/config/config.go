@@ -131,7 +131,9 @@ type QueryResult struct {
 	Err           error
 	Count         int
 	IsTransaction bool
-	Rollback      bool
+	Rollback    bool
+	PrintAggs   []string
+	PrintValues []string
 }
 
 type Query struct {
@@ -143,14 +145,55 @@ type Query struct {
 	Size         any           `json:"size" yaml:"size"`
 	Query        string        `json:"query" yaml:"query"`
 	Row          string        `json:"row" yaml:"row"`
-	Args         []string      `json:"args" yaml:"args"`
+	Args         QueryArgs     `json:"args" yaml:"args"`
 	BatchFormat  string        `json:"batch_format" yaml:"batch_format"`
-	RollbackIf   string        `json:"rollback_if" yaml:"rollback_if"`
-	CompiledArgs []*vm.Program `json:"-" yaml:"-"`
+	RollbackIf    string        `json:"rollback_if" yaml:"rollback_if"`
+	Print         []PrintExpr   `json:"print" yaml:"print"`
+	CompiledArgs  []*vm.Program `json:"-" yaml:"-"`
+	CompiledPrint []*vm.Program `json:"-" yaml:"-"`
 
 	CompiledCount      *vm.Program `json:"-" yaml:"-"`
 	CompiledSize       *vm.Program `json:"-" yaml:"-"`
 	CompiledRollbackIf *vm.Program `json:"-" yaml:"-"`
+}
+
+// QueryArgs holds arg expressions in either positional (list) or named (map)
+// form. Named args preserve YAML declaration order for $1/$2/... binding.
+type QueryArgs struct {
+	Exprs []string       // ordered expressions
+	Names map[string]int // name → index; nil for positional args
+}
+
+func (qa QueryArgs) Len() int      { return len(qa.Exprs) }
+func (qa QueryArgs) IsNamed() bool { return qa.Names != nil }
+
+func PositionalArgs(exprs ...string) QueryArgs {
+	return QueryArgs{Exprs: exprs}
+}
+
+func (qa *QueryArgs) UnmarshalYAML(node *yaml.Node) error {
+	switch node.Kind {
+	case yaml.SequenceNode:
+		var list []string
+		if err := node.Decode(&list); err != nil {
+			return err
+		}
+		qa.Exprs = list
+		return nil
+
+	case yaml.MappingNode:
+		qa.Names = make(map[string]int, len(node.Content)/2)
+		for i := 0; i < len(node.Content); i += 2 {
+			name := node.Content[i].Value
+			value := node.Content[i+1].Value
+			qa.Names[name] = len(qa.Exprs)
+			qa.Exprs = append(qa.Exprs, value)
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("args must be a list or map, got %v", node.Kind)
+	}
 }
 
 // IsRollbackIf returns true when this query element is a rollback_if
@@ -170,6 +213,41 @@ func (q *Query) CompileRollbackIf(envMap map[string]any) error {
 		return fmt.Errorf("failed to compile rollback_if (%s): %w", q.RollbackIf, err)
 	}
 	q.CompiledRollbackIf = p
+	return nil
+}
+
+func (q *Query) CompilePrint(envMap map[string]any) error {
+	if len(q.Print) == 0 {
+		return nil
+	}
+	compiled := make([]*vm.Program, len(q.Print))
+	for i, pe := range q.Print {
+		program, err := expr.Compile(pe.Expr, expr.Env(envMap))
+		if err != nil {
+			return fmt.Errorf("failed to compile print %d (%s): %w", i, pe.Expr, err)
+		}
+		compiled[i] = program
+	}
+	q.CompiledPrint = compiled
+	return nil
+}
+
+type PrintExpr struct {
+	Expr string `json:"expr" yaml:"expr"`
+	Agg  string `json:"agg" yaml:"agg"`
+}
+
+func (pe *PrintExpr) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		pe.Expr = node.Value
+		return nil
+	}
+	type raw PrintExpr
+	var r raw
+	if err := node.Decode(&r); err != nil {
+		return err
+	}
+	*pe = PrintExpr(r)
 	return nil
 }
 
@@ -263,9 +341,9 @@ func (q *Query) IsBatch() bool {
 }
 
 func (q *Query) CompileArgs(envMap map[string]any) error {
-	compiledArgs := make([]*vm.Program, len(q.Args))
+	compiledArgs := make([]*vm.Program, q.Args.Len())
 
-	for i, arg := range q.Args {
+	for i, arg := range q.Args.Exprs {
 		program, err := expr.Compile(arg, expr.Env(envMap))
 		if err != nil {
 			return fmt.Errorf("failed to compile arg %d (%s): %w", i, arg, err)
@@ -339,7 +417,7 @@ func (r *Request) Validate() error {
 			if q.Row == "" {
 				continue
 			}
-			if len(q.Args) > 0 {
+			if q.Args.Len() > 0 {
 				return fmt.Errorf("%s query %d (%s): row and args are mutually exclusive", group.name, i, q.Name)
 			}
 			if _, ok := r.Rows[q.Row]; !ok {
@@ -388,7 +466,7 @@ func (r *Request) Validate() error {
 		}
 		for j, q := range item.Transaction.Queries {
 			if q.IsRollbackIf() {
-				if q.Query != "" || q.Name != "" || q.Type != "" || len(q.Args) > 0 {
+				if q.Query != "" || q.Name != "" || q.Type != "" || q.Args.Len() > 0 {
 					return fmt.Errorf("run transaction %d (%s): rollback_if element %d must not have name, type, args, or query", i, item.Name(), j)
 				}
 				continue
@@ -453,8 +531,13 @@ func (r *Request) Validate() error {
 	}
 	for _, group := range groups {
 		for _, q := range group.queries {
-			for _, arg := range q.Args {
+			for _, arg := range q.Args.Exprs {
 				if err := validateExpr(arg); err != nil {
+					return err
+				}
+			}
+			for _, pe := range q.Print {
+				if err := validateExpr(pe.Expr); err != nil {
 					return err
 				}
 			}

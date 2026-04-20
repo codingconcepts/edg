@@ -94,7 +94,6 @@ docker compose -f _examples/compose_oracle.yml down
 
 ## Todos
 
-* Allow user to configure what's printed (e.g. a database value from ref, or an expression that references a variable)
 * Consider a nicer logic switching mechanism (e.g. switch)
 * Better error output
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences

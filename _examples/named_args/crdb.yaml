@@ -1,0 +1,74 @@
+globals:
+  customers: 100
+
+reference:
+  regions:
+    - {name: us, cities: [new-york, chicago, dallas]}
+    - {name: eu, cities: [london, berlin, paris]}
+    - {name: ap, cities: [tokyo, sydney, mumbai]}
+
+up:
+
+  - name: create_order
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS named_args_order (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email STRING NOT NULL,
+        region STRING NOT NULL,
+        city STRING NOT NULL,
+        amount DECIMAL(10,2) NOT NULL
+      )
+
+seed:
+
+  - name: populate_order
+    type: exec_batch
+    count: customers
+    size: 10
+    args:
+      email: gen('email')
+      region: ref_same('regions').name
+      city: set_rand(ref_same('regions').cities, [])
+      amount: uniform(1, 500)
+    query: |-
+      INSERT INTO named_args_order (email, region, city, amount)
+      SELECT
+        unnest(string_to_array('$1', chr(31))),
+        unnest(string_to_array('$2', chr(31))),
+        unnest(string_to_array('$3', chr(31))),
+        unnest(string_to_array('$4', chr(31))::DECIMAL[])
+
+deseed:
+
+  - name: truncate_order
+    type: exec
+    query: TRUNCATE TABLE named_args_order
+
+down:
+
+  - name: drop_order
+    type: exec
+    query: DROP TABLE IF EXISTS named_args_order
+
+run:
+
+  - name: insert_order
+    type: exec
+    args:
+      email: gen('email')
+      region: ref_same('regions').name
+      city: set_rand(ref_same('regions').cities, [])
+      amount: uniform(1, 500)
+    print:
+      - ref_same('regions').name
+      - arg('amount')
+    query: |-
+      INSERT INTO named_args_order (email, region, city, amount)
+      VALUES ($1, $2, $3, $4::DECIMAL)
+
+  - name: read_order
+    args:
+      region: ref_same('regions').name
+    query: |-
+      SELECT id, amount FROM named_args_order WHERE region = $1 LIMIT 1

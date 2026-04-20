@@ -100,6 +100,7 @@ You help users compose, debug, and understand edg expressions. edg uses [expr-la
 | Function | Description |
 |---|---|
 | `arg(index)` | Reference earlier arg by zero-based index |
+| `arg('name')` | Reference earlier arg by name (named args only) |
 | `cond(pred, trueVal, falseVal)` | Ternary conditional |
 | `nullable(expr, probability)` | NULL with given probability |
 | `coalesce(v1, v2, ...)` | First non-nil value |
@@ -133,18 +134,32 @@ args:
 
 ### Computed total from earlier args
 ```yaml
+# Positional
 args:
   - uniform_f(1.00, 99.99, 2)   # price
   - gen('number:1,10')           # quantity
   - arg(0) * float(arg(1))      # total = price * qty
+
+# Named (equivalent)
+args:
+  price: uniform_f(1.00, 99.99, 2)
+  quantity: gen('number:1,10')
+  total: arg('price') * float(arg('quantity'))
 ```
 
 ### Full name from parts
 ```yaml
+# Positional
 args:
   - gen('firstname')
   - gen('lastname')
   - arg(0) + ' ' + arg(1)       # "Alice Smith"
+
+# Named (equivalent)
+args:
+  first: gen('firstname')
+  last: gen('lastname')
+  full: arg('first') + ' ' + arg('last')
 ```
 
 ### Weighted category selection
@@ -169,7 +184,8 @@ args:
 
 - Use `edg repl` to test any expression interactively without a database
 - Expressions are compiled at startup; syntax errors will be caught immediately
-- `arg(index)` is zero-based and only works within the same query's args list
+- `arg(index)` is zero-based and only works within the same query's args list; `arg('name')` works with named args (map-style `args:`)
+- Named and positional arg forms are mutually exclusive per query
 - `ref_same` resets between queries; `ref_perm` never resets
 - Set distributions accept expr-lang array literals: `['a', 'b', 'c']`
 - Weights in `set_rand` are relative, not percentages (`[40, 30, 20, 10]` and `[4, 3, 2, 1]` behave identically)

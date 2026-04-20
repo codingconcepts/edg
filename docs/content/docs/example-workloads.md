@@ -24,11 +24,13 @@ Complete workload configs you can run directly or use as starting points for you
 | [Includes](https://github.com/codingconcepts/edg/tree/main/_examples/includes/) | Splitting and reusing config fragments with the `!include` directive |
 | [IoT](https://github.com/codingconcepts/edg/tree/main/_examples/iot/) | IoT devices, sensors, and time-series readings |
 | [Normal](https://github.com/codingconcepts/edg/tree/main/_examples/normal/) | Product reviews with normal distribution ratings |
+| [Named Args](https://github.com/codingconcepts/edg/tree/main/_examples/named_args/) | Map-style args with `arg('name')` instead of `arg(0)` |
 | [Nullable](https://github.com/codingconcepts/edg/tree/main/_examples/nullable/) | Demonstrates `nullable(expr, probability)` for injecting NULLs with controlled frequency |
 | [Observability](https://github.com/codingconcepts/edg/tree/main/_examples/observability/) | Prometheus metrics and Grafana dashboard with queries, writes, and rollback-prone transactions |
 | [Pipeline](https://github.com/codingconcepts/edg/tree/main/_examples/pipeline/) | Multi-table sequential reads and writes |
 | [Populate](https://github.com/codingconcepts/edg/tree/main/_examples/populate/) | Billion-row data population benchmark |
 | [Prepared](https://github.com/codingconcepts/edg/tree/main/_examples/prepared/) | Prepared statements for reduced parse overhead in high-throughput workloads |
+| [Print](https://github.com/codingconcepts/edg/tree/main/_examples/print/) | Live aggregated stats with `print` expressions (frequency, min/avg/max, custom agg) |
 | [Reference Data](https://github.com/codingconcepts/edg/tree/main/_examples/reference_data/) | Static reference datasets without database queries |
 | [SaaS](https://github.com/codingconcepts/edg/tree/main/_examples/saas/) | Multi-tenant SaaS with tenants, users, projects, and tasks |
 | [SEATS](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/seats/) | Airline reservation system benchmark with flight booking contention |

@@ -221,6 +221,46 @@ seed:
 - **`init`** runs once per worker before the workload starts, typically to fetch reference data for use in `run` queries.
 - **`run`** contains the workload queries executed in a loop. Queries can be standalone or grouped into [transactions](#transactions).
 
+## Args
+
+The `args` field provides values for query placeholders (`$1`, `$2`, etc.). Each expression is evaluated at runtime using the full expression environment (globals, reference data, `ref_*` functions, generators, and more).
+
+Args can be written in two forms: positional (list) or named (map). Both bind to `$1`, `$2`, `$3`, etc. in declaration order. The difference is how you reference previously computed args within expressions.
+
+### Positional args
+
+The default form is a list. Reference earlier args by zero-based index with `arg(0)`, `arg(1)`, etc.:
+
+```yaml
+args:
+  - gen('email')
+  - ref_same('regions').name
+  - set_rand(ref_same('regions').cities, [])
+  - uniform(1, 500)
+  - arg(0) + " (" + arg(1) + ")" # depends on args 0 and 1
+```
+
+### Named args
+
+The map form gives each arg a name. Reference earlier args by name with `arg('name')`:
+
+```yaml
+args:
+  email: gen('email')
+  region: ref_same('regions').name
+  city: set_rand(ref_same('regions').cities, [])
+  amount: uniform(1, 500)
+  label_named: arg('email') + " (" + arg('region') + ")"
+  label_pos: arg(0) + " (" + arg(1) + ")" # Produces the same as label_named.
+```
+
+Named args bind to placeholders in declaration order (`email` -> `$1`, `region` -> `$2`, etc.), so query SQL is identical to the positional form. Index-based access still works (`arg(0)` and `arg('email')` return the same value).
+
+> [!NOTE]
+> Named and positional forms are mutually exclusive per query. Use one or the other.
+
+See [`_examples/named_args/`](https://github.com/codingconcepts/edg/tree/main/_examples/named_args) for a complete working example.
+
 ## Query Types
 
 | Type | Description |
@@ -618,6 +658,89 @@ If any query inside a transaction fails, the transaction is rolled back. During 
 ### Wait
 
 Queries can specify a `wait` duration (e.g. `wait: 18s`) to introduce a keying/think-time delay after execution. This only applies to queries in the `run` section and is ignored in other sections.
+
+### Print
+
+The `print` field accepts a list of expressions that are evaluated each iteration and aggregated across all workers for display in the progress and summary output.
+
+#### Simple form
+
+A plain string entry auto-detects the value type. String values show frequency distributions (top 10 by count) and numeric values show min/avg/max.
+
+```yaml
+run:
+  - name: insert_order
+    type: exec
+    args:
+      - gen('email')
+      - ref_same('regions').name
+      - set_rand(ref_same('regions').cities, [])
+      - uniform(1, 500)
+    print:
+      - ref_same('regions').name
+      - arg(3)
+    query: |-
+      INSERT INTO print_order (email, region, city, amount)
+      VALUES ($1, $2, $3, $4::DECIMAL)
+```
+
+With [named args](#named-args), the same example becomes more readable:
+
+```yaml
+run:
+  - name: insert_order
+    type: exec
+    args:
+      email: gen('email')
+      region: ref_same('regions').name
+      city: set_rand(ref_same('regions').cities, [])
+      amount: uniform(1, 500)
+    print:
+      - ref_same('regions').name
+      - arg('amount')
+    query: |-
+      INSERT INTO print_order (email, region, city, amount)
+      VALUES ($1, $2, $3, $4::DECIMAL)
+```
+
+Print expressions have access to the same context as query args: `ref_same`, `ref_rand`, `arg()`, `global()`, `local()`, and all built-in functions. Expressions using `ref_same` see the same row selected for the query args in that iteration.
+
+#### Custom aggregation
+
+Use the map form with `expr` and `agg` fields for full control over how values are aggregated and displayed. The `agg` field is an [expr](https://expr-lang.org/docs/language-definition) expression evaluated against the accumulated state:
+
+| Variable | Type | Description |
+|---|---|---|
+| `count` | int | Total observations |
+| `freq` | map[string]int | Value frequency distribution |
+| `min` | float | Minimum numeric value |
+| `max` | float | Maximum numeric value |
+| `avg` | float | Mean of numeric values |
+| `sum` | float | Sum of numeric values |
+
+These variables can be combined in any [expr-lang](https://expr-lang.org) expression to produce custom summary output:
+
+```yaml
+    print:
+      - ref_same('regions').name
+
+      - expr: set_rand(ref_same('regions').cities, [])
+        agg: "join(map(sortBy(toPairs(freq), -#[1])[:5], #[0] + '=' + string(#[1])), ' ')"
+
+      - expr: arg(3)
+        agg: "'$' + string(int(min)) + ' - $' + string(int(max)) + ' (avg $' + string(int(avg)) + ', n=' + string(count) + ')'"
+```
+
+#### Output
+
+```
+PRINT         VALUES
+insert_order  ref_same('regions').name                   us=340 eu=330 ap=330
+insert_order  set_rand(ref_same('regions').cities, [])   chicago=120 tokyo=115 london=110 dallas=108 paris=105
+insert_order  arg(3)                                     $1 - $499 (avg $250, n=1000)
+```
+
+See [`_examples/print/`](https://github.com/codingconcepts/edg/tree/main/_examples/print) for a complete working example.
 
 ### Placeholders
 

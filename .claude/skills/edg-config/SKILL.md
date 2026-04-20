@@ -68,9 +68,39 @@ A complete edg YAML config with all applicable sections:
 
 ### Dependent columns
 - `arg(index)` to reference a previously evaluated arg by zero-based index
+- `arg('name')` to reference by name when using named args (map-style `args:`)
 - `cond(predicate, trueVal, falseVal)` for conditional values
 - `nullable(expr, probability)` for nullable columns
 - `bool()` + `arg()` + `cond()` for mutually exclusive columns
+
+### Named args
+- Args can be a map instead of a list, giving each arg a name:
+  ```yaml
+  args:
+    email: gen('email')
+    region: ref_same('regions').name
+    amount: uniform(1, 500)
+    label: arg('email') + " (" + arg('region') + ")"
+  ```
+- Named args bind to `$1`, `$2`, etc. in declaration order
+- Index-based `arg(0)` still works with named args
+- Named and positional forms are mutually exclusive per query
+
+### Print (live aggregated stats)
+- The `print` field evaluates expressions each iteration and displays aggregated values:
+  ```yaml
+  print:
+    # Simple form (auto-aggregated: frequency for strings, min/avg/max for numbers)
+    - ref_same('regions').name
+    - arg('amount')
+
+    # Custom aggregation with expr + agg
+    - expr: arg('amount')
+      agg: "'avg $' + string(int(avg)) + ' n=' + string(count)"
+  ```
+- Print expressions have access to the same context as args: `ref_same`, `ref_rand`, `arg()`, `global()`, `local()`
+- Custom `agg` expressions can use: `count`, `freq`, `min`, `max`, `avg`, `sum`
+- Only applies to `run` section queries
 
 ### Batch operations
 - For seed operations with large row counts, use `exec_batch` with `count` (total rows) and `size` (rows per batch)

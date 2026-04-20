@@ -2,12 +2,17 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"slices"
+	"sort"
+	"strconv"
+	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/codingconcepts/edg/pkg/config"
+	"github.com/expr-lang/expr"
 )
 
 type queryStats struct {
@@ -18,6 +23,17 @@ type queryStats struct {
 	totalLatency  time.Duration
 	latencies     []time.Duration
 	isTransaction bool
+	printAggExprs []string
+	printAggs     []*printAgg
+}
+
+type printAgg struct {
+	freq     map[string]int64
+	sum      float64
+	min      float64
+	max      float64
+	count    int64
+	numCount int64
 }
 
 func printResults(results <-chan config.QueryResult, interval time.Duration, start time.Time, numWorkers int, totalDuration time.Duration) map[string]*queryStats {
@@ -45,6 +61,37 @@ func printResults(results <-chan config.QueryResult, interval time.Duration, sta
 				continue
 			}
 
+			if len(r.PrintValues) > 0 {
+				if s.printAggs == nil {
+					s.printAggExprs = r.PrintAggs
+					s.printAggs = make([]*printAgg, len(r.PrintValues))
+					for i := range s.printAggs {
+						s.printAggs[i] = &printAgg{
+							freq: map[string]int64{},
+							min:  math.MaxFloat64,
+							max:  -math.MaxFloat64,
+						}
+					}
+				}
+				for i, v := range r.PrintValues {
+					if i >= len(s.printAggs) {
+						continue
+					}
+					agg := s.printAggs[i]
+					agg.freq[v]++
+					agg.count++
+					if f, err := strconv.ParseFloat(v, 64); err == nil {
+						agg.sum += f
+						agg.numCount++
+						if f < agg.min {
+							agg.min = f
+						}
+						if f > agg.max {
+							agg.max = f
+						}
+					}
+				}
+			}
 			s.count += int64(r.Count)
 			s.totalLatency += r.Latency
 			s.latencies = append(s.latencies, r.Latency)
@@ -118,7 +165,99 @@ func printProgress(stats map[string]*queryStats, start time.Time, totalDuration 
 				tps)
 		}
 	}
+	printPrintValues(w, stats, queryNames, txNames)
 	w.Flush()
+}
+
+func printPrintValues(w *tabwriter.Writer, stats map[string]*queryStats, queryNames, txNames []string) {
+	var printNames []string
+	for _, name := range queryNames {
+		if len(stats[name].printAggs) > 0 {
+			printNames = append(printNames, name)
+		}
+	}
+	for _, name := range txNames {
+		if len(stats[name].printAggs) > 0 {
+			printNames = append(printNames, name)
+		}
+	}
+	if len(printNames) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\nPRINT\tVALUES\n")
+	for _, name := range printNames {
+		s := stats[name]
+		for i, agg := range s.printAggs {
+			aggExpr := ""
+			if i < len(s.printAggExprs) {
+				aggExpr = s.printAggExprs[i]
+			}
+
+			if aggExpr != "" {
+				fmt.Fprintf(w, "%s\t%s\n", name, evalAggExpr(aggExpr, agg))
+			} else {
+				switch {
+				case agg.count == 0:
+					fmt.Fprintf(w, "%s\t(no data)\n", name)
+				case agg.numCount == agg.count:
+					avg := agg.sum / float64(agg.count)
+					fmt.Fprintf(w, "%s\tmin=%.2f avg=%.2f max=%.2f n=%d\n", name, avg, agg.min, agg.max, agg.count)
+				default:
+					fmt.Fprintf(w, "%s\t%s\n", name, formatFreq(agg.freq))
+				}
+			}
+		}
+	}
+}
+
+func evalAggExpr(expression string, agg *printAgg) string {
+	var avg, minVal, maxVal float64
+	if agg.numCount > 0 {
+		avg = agg.sum / float64(agg.numCount)
+		minVal = agg.min
+		maxVal = agg.max
+	}
+
+	aggEnv := map[string]any{
+		"min":   minVal,
+		"max":   maxVal,
+		"avg":   avg,
+		"sum":   agg.sum,
+		"count": agg.count,
+		"freq":  agg.freq,
+	}
+
+	program, err := expr.Compile(expression, expr.Env(aggEnv))
+	if err != nil {
+		return fmt.Sprintf("<compile error: %v>", err)
+	}
+	result, err := expr.Run(program, aggEnv)
+	if err != nil {
+		return fmt.Sprintf("<eval error: %v>", err)
+	}
+	return fmt.Sprintf("%v", result)
+}
+
+func formatFreq(freq map[string]int64) string {
+	type entry struct {
+		val   string
+		count int64
+	}
+	entries := make([]entry, 0, len(freq))
+	for v, c := range freq {
+		entries = append(entries, entry{v, c})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].count > entries[j].count
+	})
+	if len(entries) > 10 {
+		entries = entries[:10]
+	}
+	parts := make([]string, len(entries))
+	for i, e := range entries {
+		parts[i] = fmt.Sprintf("%s=%d", e.val, e.count)
+	}
+	return strings.Join(parts, " ")
 }
 
 func printSummary(stats map[string]*queryStats, start time.Time, numWorkers int) {
@@ -185,6 +324,7 @@ func printSummary(stats map[string]*queryStats, start time.Time, numWorkers int)
 	fmt.Fprintf(w, "\nTransactions:\t%d\n", totalCount)
 	fmt.Fprintf(w, "Errors:\t%d\n", totalErrors)
 	fmt.Fprintf(w, "tpm:\t%.1f\n", tpm)
+	printPrintValues(w, stats, queryNames, txNames)
 	w.Flush()
 }
 

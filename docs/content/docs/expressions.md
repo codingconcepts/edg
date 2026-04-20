@@ -18,7 +18,7 @@ These are edg's built-in functions, available in any expression context (`args:`
 
 | Function | Returns | Description |
 |---|---|---|
-| `arg(index)` | `any` | Returns the value of a previously evaluated arg by its zero-based index. Enables dependent columns where later args reference earlier ones.<br><br>`arg(0)` -> `"Alice"` |
+| `arg(index)` | `any` | Returns the value of a previously evaluated arg by its zero-based index or name. Enables dependent columns where later args reference earlier ones.<br><br>`arg(0)` -> `"Alice"`<br>`arg('email')` -> `"alice@example.com"` (with [named args]({{< relref "configuration#named-args" >}})) |
 | `array(minN, maxN, pattern)` | `string` | PostgreSQL/CockroachDB array literal with a random number of elements.<br><br>`array(2, 4, 'email')` -> `{a@b.com,c@d.com,d@e.com}` |
 | `avg(name, field)` | `float64` | Average of a numeric field across all rows in a named dataset.<br><br>`avg('fetch_products', 'price')` -> `19.39` |
 | `batch(n)` | `[][]any` | Returns sequential integers `[0, n)` as batch arg sets,<br><br>`batch(3)` -> `[[0], [1], [2]]` |
@@ -97,7 +97,7 @@ Several functions maintain state. Understanding when that state resets is import
 
 | Function | Scope | Resets |
 |---|---|---|
-| `arg(index)` | Per-query | Returns the value of arg at `index` from the current query execution. Cleared before the next query. In batch queries, resets per row. |
+| `arg(index)` / `arg('name')` | Per-query | Returns the value of arg at `index` (or by name when using [named args]({{< relref "configuration#named-args" >}})). Cleared before the next query. In batch queries, resets per row. |
 | `nurand(A, x, y)` | Per-worker | The TPC-C constant C is generated once per worker per A value and stays fixed for the worker's lifetime. |
 | `ref_diff(name)` | Per-query | Returns a unique row on each call within a query (no repeats). Index resets before the next query. |
 | `ref_perm(name)` | Per-worker | Picks a row on first call and returns that same row for the entire lifetime of the worker. Never resets. |
@@ -380,6 +380,7 @@ These expressions are used in the `args:` list of a `run` query. Each entry in `
 |---|---|
 | `arg(0) * float(arg(1))` | Compute a total from previously generated price and quantity |
 | `arg(0) + " " + arg(1)` | Concatenate previously generated firstname and lastname |
+| `arg('price') * float(arg('qty'))` | Same as above using [named args]({{< relref "configuration#named-args" >}}) |
 | `coalesce(ref_rand('optional_data').value, 'default')` | First non-nil fallback value |
 | `cond(arg(0), gen('email'), nil)` | Email if coin flip is true, NULL if false |
 | `cond(gen('number:1,100') > 95, 'premium', 'standard')` | Conditional value based on a random roll |

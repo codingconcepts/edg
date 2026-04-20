@@ -65,7 +65,7 @@ func TestExpr(t *testing.T) {
 	env.env["warehouses"] = 5
 
 	q := &config.Query{
-		Args: []string{"expr(warehouses * 10)", "expr(warehouses + 1)"},
+		Args: config.PositionalArgs("expr(warehouses * 10)", "expr(warehouses + 1)"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
@@ -83,7 +83,7 @@ func TestBareArithmetic(t *testing.T) {
 	env.env["districts"] = 10
 
 	q := &config.Query{
-		Args: []string{"orders / districts"},
+		Args: config.PositionalArgs("orders / districts"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
@@ -102,7 +102,7 @@ func TestSeedArgsCompiled(t *testing.T) {
 
 	seedQuery := &config.Query{
 		Name: "populate_items",
-		Args: []string{"items"},
+		Args: config.PositionalArgs("items"),
 	}
 	require.NoError(t, seedQuery.CompileArgs(env.env))
 
@@ -125,7 +125,7 @@ func TestExpressions(t *testing.T) {
 			"cust_per_district": "customers / districts",
 		},
 		Run: []*config.RunItem{
-			{Query: &config.Query{Args: []string{"cust_per_district()"}}},
+			{Query: &config.Query{Args: config.PositionalArgs("cust_per_district()")}},
 		},
 	}
 
@@ -149,7 +149,7 @@ func TestExpressions_WithArgs(t *testing.T) {
 			"divide": "customers / args[0]",
 		},
 		Run: []*config.RunItem{
-			{Query: &config.Query{Args: []string{"divide(10)"}}},
+			{Query: &config.Query{Args: config.PositionalArgs("divide(10)")}},
 		},
 	}
 
@@ -181,7 +181,7 @@ func TestGenerateArgs_Batch(t *testing.T) {
 	env.env["const"] = convert.Constant
 	env.env["items"] = 30
 
-	q := &config.Query{Args: []string{"batch(items / 10)", "const(10)"}}
+	q := &config.Query{Args: config.PositionalArgs("batch(items / 10)", "const(10)")}
 	require.NoError(t, q.CompileArgs(env.env))
 
 	argSets, _, err := env.GenerateArgs(q)
@@ -486,7 +486,7 @@ func TestNewEnv_ExpressionGlobals_UsedInArgs(t *testing.T) {
 		},
 		GlobalsOrder: []string{"warehouses", "districts"},
 		Run: []*config.RunItem{
-			{Query: &config.Query{Args: []string{"districts"}}},
+			{Query: &config.Query{Args: config.PositionalArgs("districts")}},
 		},
 	}
 
@@ -612,7 +612,7 @@ func TestReference_RefRand(t *testing.T) {
 			},
 		},
 		Run: []*config.RunItem{
-			{Query: &config.Query{Args: []string{"ref_rand('colors').name"}}},
+			{Query: &config.Query{Args: config.PositionalArgs("ref_rand('colors').name")}},
 		},
 	}
 
@@ -676,7 +676,7 @@ func TestRunSection_SeedUsesBindParams(t *testing.T) {
 		Name:  "seed_items",
 		Type:  config.QueryTypeExec,
 		Query: "INSERT INTO items SELECT generate_series(1, $1)",
-		Args:  []string{"items"},
+		Args:  config.PositionalArgs("items"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
@@ -706,7 +706,7 @@ func TestRunSection_RunSectionPassesArgs(t *testing.T) {
 		Name:  "insert_order",
 		Type:  config.QueryTypeExec,
 		Query: "INSERT INTO orders VALUES ($1)",
-		Args:  []string{"const(42)"},
+		Args:  config.PositionalArgs("const(42)"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
@@ -774,11 +774,11 @@ func TestRunSection_QueryStoresResults(t *testing.T) {
 func TestArg_DependentColumn(t *testing.T) {
 	req := &config.Request{
 		Run: []*config.RunItem{
-			{Query: &config.Query{Args: []string{
+			{Query: &config.Query{Args: config.PositionalArgs(
 				"gen('firstname')",
 				"gen('lastname')",
 				`arg(0) + " " + arg(1)`,
-			}}},
+			)}},
 		},
 	}
 
@@ -798,7 +798,7 @@ func TestArg_DependentColumn(t *testing.T) {
 func TestArg_OutOfRange(t *testing.T) {
 	req := &config.Request{
 		Run: []*config.RunItem{
-			{Query: &config.Query{Args: []string{"arg(0)"}}},
+			{Query: &config.Query{Args: config.PositionalArgs("arg(0)")}},
 		},
 	}
 
@@ -809,6 +809,50 @@ func TestArg_OutOfRange(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestArg_Named(t *testing.T) {
+	req := &config.Request{
+		Run: []*config.RunItem{
+			{Query: &config.Query{Args: config.QueryArgs{
+				Exprs: []string{
+					"gen('firstname')",
+					"gen('lastname')",
+					`arg('first') + " " + arg('last')`,
+				},
+				Names: map[string]int{"first": 0, "last": 1, "full": 2},
+			}}},
+		},
+	}
+
+	env, err := NewEnv(nil, "", req)
+	require.NoError(t, err)
+
+	argSets, _, err := env.GenerateArgs(req.Run[0].Query)
+	require.NoError(t, err)
+
+	first := argSets[0][0].(string)
+	last := argSets[0][1].(string)
+	full := argSets[0][2].(string)
+	assert.Equal(t, first+" "+last, full)
+}
+
+func TestArg_NamedUnknown(t *testing.T) {
+	req := &config.Request{
+		Run: []*config.RunItem{
+			{Query: &config.Query{Args: config.QueryArgs{
+				Exprs: []string{`arg('missing')`},
+				Names: map[string]int{},
+			}}},
+		},
+	}
+
+	env, err := NewEnv(nil, "", req)
+	require.NoError(t, err)
+
+	_, _, err = env.GenerateArgs(req.Run[0].Query)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `arg("missing")`)
+}
+
 func TestArg_Batch(t *testing.T) {
 	req := &config.Request{
 		Seed: []*config.Query{
@@ -816,11 +860,11 @@ func TestArg_Batch(t *testing.T) {
 				Name:  "seed",
 				Type:  config.QueryTypeExecBatch,
 				Count: 3,
-				Args: []string{
+				Args: config.PositionalArgs(
 					"gen('firstname')",
 					"gen('lastname')",
 					`arg(0) + " " + arg(1)`,
-				},
+				),
 				Query: "INSERT INTO t VALUES ($1, $2, $3)",
 			},
 		},
@@ -917,7 +961,7 @@ func TestRow_MutuallyExclusiveWithArgs(t *testing.T) {
 			"customer": {"gen('email')"},
 		},
 		Run: []*config.RunItem{
-			{Query: &config.Query{Name: "bad", Row: "customer", Args: []string{"gen('name')"}}},
+			{Query: &config.Query{Name: "bad", Row: "customer", Args: config.PositionalArgs("gen('name')")}},
 		},
 	}
 
@@ -949,7 +993,7 @@ func TestRunSection_PreparedExec(t *testing.T) {
 		Type:     config.QueryTypeExec,
 		Prepared: true,
 		Query:    "INSERT INTO t VALUES ($1)",
-		Args:     []string{"const(42)"},
+		Args:     config.PositionalArgs("const(42)"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
@@ -981,7 +1025,7 @@ func TestRunSection_PreparedQuery(t *testing.T) {
 		Type:     config.QueryTypeQuery,
 		Prepared: true,
 		Query:    "SELECT id, name FROM t WHERE id = $1",
-		Args:     []string{"const(1)"},
+		Args:     config.PositionalArgs("const(1)"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
@@ -1018,14 +1062,14 @@ func TestRunSection_PreparedCachesStmt(t *testing.T) {
 		Type:     config.QueryTypeExec,
 		Prepared: true,
 		Query:    "INSERT INTO t VALUES ($1)",
-		Args:     []string{"const(1)"},
+		Args:     config.PositionalArgs("const(1)"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
 	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
 
 	// Change arg for second call, re-compile.
-	q.Args = []string{"const(2)"}
+	q.Args = config.PositionalArgs("const(2)")
 	require.NoError(t, q.CompileArgs(env.env))
 
 	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
@@ -1056,7 +1100,7 @@ func TestRunSection_PreparedIgnoredForBatch(t *testing.T) {
 		Prepared: true,
 		Count:    1,
 		Query:    "INSERT INTO t VALUES ($1)",
-		Args:     []string{"const(42)"},
+		Args:     config.PositionalArgs("const(42)"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
@@ -1138,7 +1182,7 @@ func TestRunSection_PreparedTranslatesPlaceholders(t *testing.T) {
 		Type:     config.QueryTypeExec,
 		Prepared: true,
 		Query:    "INSERT INTO t VALUES ($1)",
-		Args:     []string{"const(42)"},
+		Args:     config.PositionalArgs("const(42)"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
@@ -1423,7 +1467,7 @@ func TestRunTransaction_WithLocals(t *testing.T) {
 		Name:  "insert",
 		Type:  config.QueryTypeExec,
 		Query: "INSERT INTO t VALUES ($1)",
-		Args:  []string{"local('amount')"},
+		Args:  config.PositionalArgs("local('amount')"),
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
