@@ -619,6 +619,98 @@ up:
 	assert.Nil(t, req.GlobalsOrder)
 }
 
+func TestRateUnmarshalYAML(t *testing.T) {
+	cases := []struct {
+		name         string
+		input        string
+		wantTimes    int
+		wantInterval time.Duration
+		wantTicker   time.Duration
+		expErr       string
+	}{
+		{"once per 10s", "rate: 1/10s", 1, 10 * time.Second, 10 * time.Second, ""},
+		{"3 per 10s", "rate: 3/10s", 3, 10 * time.Second, 10 * time.Second / 3, ""},
+		{"once per minute", "rate: 1/1m", 1, time.Minute, time.Minute, ""},
+		{"5 per 90s", "rate: 5/1m30s", 5, 90 * time.Second, 18 * time.Second, ""},
+		{"bad format", "rate: nope", 0, 0, 0, "invalid rate format"},
+		{"bad times", "rate: x/10s", 0, 0, 0, "parsing times"},
+		{"bad interval", "rate: 1/xyz", 0, 0, 0, "parsing interval"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var out struct {
+				Rate Rate `yaml:"rate"`
+			}
+			err := yaml.Unmarshal([]byte(c.input), &out)
+			if c.expErr != "" {
+				require.ErrorContains(t, err, c.expErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, c.wantTimes, out.Rate.Times)
+			assert.Equal(t, c.wantInterval, out.Rate.Interval)
+			assert.Equal(t, c.wantTicker, out.Rate.TickerInterval())
+		})
+	}
+}
+
+func TestRateString(t *testing.T) {
+	r := Rate{Times: 3, Interval: 10 * time.Second}
+	assert.Equal(t, "3/10s", r.String())
+}
+
+func TestRequestParsesWorkers(t *testing.T) {
+	input := `
+workers:
+  - name: reaper
+    rate: 1/10s
+    type: exec
+    query: UPDATE runs SET status = 'pending' WHERE lease_expires_at < now()
+  - name: counter
+    rate: 5/1m
+    type: query
+    args:
+      - const(1)
+    query: SELECT count(*) FROM events WHERE id > $1
+`
+	var req Request
+	require.NoError(t, yaml.Unmarshal([]byte(input), &req))
+
+	require.Len(t, req.Workers, 2)
+	assert.Equal(t, "reaper", req.Workers[0].Name)
+	assert.Equal(t, 1, req.Workers[0].Rate.Times)
+	assert.Equal(t, 10*time.Second, req.Workers[0].Rate.Interval)
+	assert.Equal(t, QueryTypeExec, req.Workers[0].Type)
+
+	assert.Equal(t, "counter", req.Workers[1].Name)
+	assert.Equal(t, 5, req.Workers[1].Rate.Times)
+	assert.Equal(t, time.Minute, req.Workers[1].Rate.Interval)
+	require.Len(t, req.Workers[1].Args, 1)
+}
+
+func TestValidate_WorkerMissingName(t *testing.T) {
+	req := &Request{
+		Workers: []*Worker{
+			{Query: Query{Type: QueryTypeExec, Query: "SELECT 1"}, Rate: Rate{Times: 1, Interval: time.Second, tickerInterval: time.Second}},
+		},
+	}
+	err := req.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing a name")
+}
+
+func TestValidate_WorkerBadRate(t *testing.T) {
+	req := &Request{
+		Workers: []*Worker{
+			{Query: Query{Name: "bad", Type: QueryTypeExec, Query: "SELECT 1"}, Rate: Rate{Times: 0, Interval: time.Second}},
+		},
+	}
+	err := req.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rate must have positive")
+}
+
 func TestLoadConfig_MultipleIncludes(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "shared/globals.yaml", `

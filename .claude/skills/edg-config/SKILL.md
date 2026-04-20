@@ -29,6 +29,7 @@ A complete edg YAML config with all applicable sections:
 - `init` for fetching reference data needed by `run` queries (use `type: query` to populate named datasets)
 - `run` for the transactional workload (the queries that will be benchmarked)
 - `run_weights` for weighted query selection (optional, only if multiple run queries)
+- `workers` for background queries that run on a fixed schedule alongside the main workload (optional)
 - `deseed` for data cleanup (TRUNCATE statements)
 - `down` for schema teardown (DROP TABLE statements)
 
@@ -110,6 +111,32 @@ A complete edg YAML config with all applicable sections:
 - `prepared: true` cannot be used inside a transaction
 - Transactions appear in a separate TRANSACTION stats section (with COMMITS, ROLLBACKS, ERRORS columns)
 - Use `run_weights` to weight transactions against standalone queries (reference by transaction name)
+
+### Workers
+- Use the `workers` section for background maintenance queries that run on a fixed schedule alongside the main workload
+- Each worker is a regular query with an added `rate` field
+- Rate format is `times/interval` (e.g. `1/10s` = once every 10 seconds, `3/1m` = 3 times per minute)
+- Executions are evenly spaced: `3/1m` fires every 20 seconds
+- Workers support all query fields: `name`, `type`, `args`, `prepared`, `row`, etc.
+- Each worker runs in its own goroutine with its own environment
+- Worker results appear in stats, Prometheus metrics, and expectations
+- In staged mode, workers run for the entire duration across all stages
+- Example use cases: lease reapers, stats refreshers, cache warmers, periodic cleanup
+  ```yaml
+  workers:
+    - name: reap_expired_leases
+      rate: 1/5s
+      type: exec
+      query: |-
+        UPDATE runs
+        SET status = 'pending', worker_id = NULL
+        WHERE status = 'claimed' AND lease_expires_at < now()
+
+    - name: refresh_counts
+      rate: 3/1m
+      type: query
+      query: SELECT count(*) AS total FROM events
+  ```
 
 ### Formatting
 - Use `|-` for multi-line SQL strings

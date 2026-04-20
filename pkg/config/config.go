@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/codingconcepts/edg/pkg/gen"
@@ -29,6 +31,39 @@ func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
+type Rate struct {
+	Times          int
+	Interval       time.Duration
+	tickerInterval time.Duration
+}
+
+func (r *Rate) UnmarshalYAML(node *yaml.Node) error {
+	parts := strings.Split(node.Value, "/")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid rate format %q: expected times/interval (e.g. 1/10s)", node.Value)
+	}
+
+	var err error
+	if r.Times, err = strconv.Atoi(parts[0]); err != nil {
+		return fmt.Errorf("parsing times: %w", err)
+	}
+
+	if r.Interval, err = time.ParseDuration(parts[1]); err != nil {
+		return fmt.Errorf("parsing interval: %w", err)
+	}
+
+	r.tickerInterval = r.Interval / time.Duration(r.Times)
+	return nil
+}
+
+func (r Rate) TickerInterval() time.Duration {
+	return r.tickerInterval
+}
+
+func (r Rate) String() string {
+	return fmt.Sprintf("%d/%s", r.Times, r.Interval)
+}
+
 type Stage struct {
 	Name     string   `json:"name" yaml:"name"`
 	Workers  int      `json:"workers" yaml:"workers"`
@@ -49,6 +84,7 @@ type Request struct {
 	Init         []*Query                    `json:"init" yaml:"init"`
 	RunWeights   map[string]int              `json:"run_weights" yaml:"run_weights"`
 	Run          []*RunItem                  `json:"run" yaml:"run"`
+	Workers      []*Worker                   `json:"workers" yaml:"workers"`
 	Expectations []string                    `json:"expectations" yaml:"expectations"`
 }
 
@@ -58,6 +94,14 @@ func (r *Request) RunAllQueries() []*Query {
 	var queries []*Query
 	for _, item := range r.Run {
 		queries = append(queries, item.AllQueries()...)
+	}
+	return queries
+}
+
+func (r *Request) WorkerQueries() []*Query {
+	queries := make([]*Query, len(r.Workers))
+	for i, w := range r.Workers {
+		queries[i] = &w.Query
 	}
 	return queries
 }
@@ -77,6 +121,7 @@ const (
 	ConfigSectionDown   ConfigSection = "down"
 	ConfigSectionInit   ConfigSection = "init"
 	ConfigSectionRun    ConfigSection = "run"
+	ConfigSectionWorker ConfigSection = "worker"
 )
 
 type QueryResult struct {
@@ -126,6 +171,11 @@ func (q *Query) CompileRollbackIf(envMap map[string]any) error {
 	}
 	q.CompiledRollbackIf = p
 	return nil
+}
+
+type Worker struct {
+	Query `yaml:",inline" json:",inline"`
+	Rate  Rate `json:"rate" yaml:"rate"`
 }
 
 // Transaction groups multiple queries to run inside an explicit
@@ -270,6 +320,7 @@ func (r *Request) Validate() error {
 
 	// Validate row references: row name must exist, and row + args are mutually exclusive.
 	runQueries := r.RunAllQueries()
+	workerQueries := r.WorkerQueries()
 	groups := []struct {
 		name    string
 		queries []*Query
@@ -280,6 +331,7 @@ func (r *Request) Validate() error {
 		{"down", r.Down},
 		{"init", r.Init},
 		{"run", runQueries},
+		{"workers", workerQueries},
 	}
 
 	for _, group := range groups {
@@ -356,6 +408,15 @@ func (r *Request) Validate() error {
 					return fmt.Errorf("run transaction %d (%s): local %q shadows query name", i, item.Name(), name)
 				}
 			}
+		}
+	}
+
+	for i, w := range r.Workers {
+		if w.Name == "" {
+			return fmt.Errorf("worker %d is missing a name", i)
+		}
+		if w.Rate.Times <= 0 || w.Rate.Interval <= 0 {
+			return fmt.Errorf("worker %d (%s): rate must have positive times and interval", i, w.Name)
 		}
 	}
 

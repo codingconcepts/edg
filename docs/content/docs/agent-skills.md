@@ -46,7 +46,7 @@ Write-heavy workload simulating add-to-cart with Zipfian product selection
 
 **What it produces:**
 
-- A full YAML config with `globals`, `up`, `seed`, `init`, `run`, `run_weights`, `deseed`, and `down` sections
+- A full YAML config with `globals`, `up`, `seed`, `init`, `run`, `run_weights`, `workers`, `deseed`, and `down` sections
 - Appropriate expressions for data generation (`gen()`, `uuid_v7()`, distributions)
 - Reference data setup via `init` queries for use in `run` with `ref_rand()`, `ref_same()`, etc.
 - Driver-specific SQL patterns (batch expansion, DDL safety, upsert syntax)

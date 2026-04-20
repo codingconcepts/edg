@@ -19,7 +19,7 @@ docker_push: validate_version
 		.
 
 build:
-	go build .
+	go build ./cmd/edg
 	mv ./edg ~/dev/bin
 
 test:

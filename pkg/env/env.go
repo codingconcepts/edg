@@ -221,7 +221,8 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 
 	// Expand row references into args before compilation.
 	runQueries := r.RunAllQueries()
-	allQueries := [][]*config.Query{r.Up, r.Seed, r.Deseed, r.Down, r.Init, runQueries}
+	workerQueries := r.WorkerQueries()
+	allQueries := [][]*config.Query{r.Up, r.Seed, r.Deseed, r.Down, r.Init, runQueries, workerQueries}
 	for _, queries := range allQueries {
 		for _, query := range queries {
 			if query.Row != "" {
@@ -250,6 +251,7 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		{"down", r.Down},
 		{"init", r.Init},
 		{"run", runQueries},
+		{"workers", workerQueries},
 	} {
 		for i, query := range group.queries {
 			if query.IsRollbackIf() {
@@ -492,7 +494,7 @@ func (e *Env) RunQueryPrepared(ctx context.Context, stmt *sql.Stmt, q *config.Qu
 // placeholder compatibility and avoids pgx-stdlib DECIMAL type issues.
 // All other queries use native driver bind params.
 func (e *Env) runSection(ctx context.Context, queries []*config.Query, section config.ConfigSection, ex Executor) error {
-	verbose := section != config.ConfigSectionInit && section != config.ConfigSectionRun
+	verbose := section != config.ConfigSectionInit && section != config.ConfigSectionRun && section != config.ConfigSectionWorker
 
 	for _, q := range queries {
 		if verbose {
@@ -709,6 +711,25 @@ func (e *Env) RunIteration(ctx context.Context) error {
 		return e.runRunItems(ctx, e.request.Run)
 	}
 	return e.runRunItems(ctx, []*config.RunItem{item})
+}
+
+func (e *Env) RunWorker(ctx context.Context, w *config.Worker) {
+	ticker := time.NewTicker(w.Rate.TickerInterval())
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := e.runSection(ctx, []*config.Query{&w.Query}, config.ConfigSectionWorker, e.db); err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				slog.Error("worker error", "worker", w.Name, "error", err)
+			}
+		}
+	}
 }
 
 // runRunItems dispatches each run item as either a standalone query

@@ -42,5 +42,6 @@ Complete workload configs you can run directly or use as starting points for you
 | [TPC-C](https://github.com/codingconcepts/edg/tree/main/_examples/tpcc/) | Full TPC-C benchmark with all 5 transaction profiles |
 | [Transaction](https://github.com/codingconcepts/edg/tree/main/_examples/transaction/) | Multi-statement transactions with read-then-write patterns inside BEGIN/COMMIT |
 | [Vector](https://github.com/codingconcepts/edg/tree/main/_examples/vector/) | pgvector-compatible embeddings with clustered vectors for similarity search |
+| [Workers](https://github.com/codingconcepts/edg/tree/main/_examples/workers/) | Background worker queries on a fixed schedule alongside the main run loop (job queue with lease expiry) |
 | [Workload](https://github.com/codingconcepts/edg/tree/main/_examples/workload/) | Built-in workloads (bank, ch, kv, movr, seats, sysbench-insert, sysbench-point-select, sysbench-read-write, sysbench-update-index, tatp, tpcc, tpch, ttlbench, ttllogger, ycsb) without a config file |
 | [YCSB](https://github.com/codingconcepts/edg/tree/main/_examples/ycsb/) | Yahoo! Cloud Serving Benchmark with a single usertable and configurable workload profiles |

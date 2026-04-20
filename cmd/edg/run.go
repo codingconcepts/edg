@@ -48,9 +48,13 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *confi
 	go func() {
 		defer close(results)
 
+		bgCtx, bgCancel := context.WithCancel(ctx)
+		defer bgCancel()
+		bgWg := startBackgroundWorkers(bgCtx, db, req, initEnv, results)
+
 		for _, stage := range req.Stages {
 			if ctx.Err() != nil {
-				return
+				break
 			}
 
 			dur := time.Duration(stage.Duration)
@@ -67,6 +71,9 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *confi
 			wg.Wait()
 			stageCancel()
 		}
+
+		bgCancel()
+		bgWg.Wait()
 	}()
 
 	totalWorkers := 0
@@ -107,9 +114,11 @@ func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *c
 	}()
 
 	wg := startWorkers(ctx, workers, db, req, initEnv, results)
+	bgWg := startBackgroundWorkers(ctx, db, req, initEnv, results)
 
 	go func() {
 		wg.Wait()
+		bgWg.Wait()
 		close(results)
 	}()
 
@@ -143,6 +152,27 @@ func startWorkers(ctx context.Context, numWorkers int, db *sql.DB, req *config.R
 					continue
 				}
 			}
+		})
+	}
+	return &wg
+}
+
+func startBackgroundWorkers(ctx context.Context, db *sql.DB, req *config.Request, initEnv *env.Env, results chan<- config.QueryResult) *sync.WaitGroup {
+	var wg sync.WaitGroup
+	for _, w := range req.Workers {
+		slog.Info("background worker", "name", w.Name, "rate", w.Rate)
+
+		wg.Go(func() {
+			workerEnv, err := env.NewEnv(db, flagDriver, req)
+			if err != nil {
+				slog.Error("worker env error", "worker", w.Name, "error", err)
+				return
+			}
+			defer workerEnv.Close()
+
+			workerEnv.InitFrom(initEnv)
+			workerEnv.Results = results
+			workerEnv.RunWorker(ctx, w)
 		})
 	}
 	return &wg
