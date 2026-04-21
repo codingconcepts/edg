@@ -1,0 +1,8 @@
+<script>
+  (function() {
+    var saved = localStorage.getItem('book-theme');
+    if (saved) {
+      document.documentElement.setAttribute('data-theme', saved);
+    }
+  })();
+</script>

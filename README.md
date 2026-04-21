@@ -94,8 +94,6 @@ docker compose -f _examples/compose_oracle.yml down
 
 ## Todos
 
-* Sort configuration.md sections
-* Support light mode for the docs site
 * Consider a nicer logic switching mechanism (e.g. switch)
 * Better error output
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences

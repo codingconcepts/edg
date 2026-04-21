@@ -4,7 +4,7 @@ title = "edg"
 theme = "hugo-book"
 
 [params]
-  BookTheme = "dark"
+  BookTheme = "auto"
   BookSearch = true
   BookToC = true
   BookRepo = "https://github.com/codingconcepts/edg"
@@ -12,3 +12,6 @@ theme = "hugo-book"
 
 [markup.goldmark.renderer]
   unsafe = true
+
+[markup.highlight]
+  noClasses = false
