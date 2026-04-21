@@ -11,6 +11,7 @@ import (
 
 	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/codingconcepts/edg/pkg/env"
+	"github.com/codingconcepts/edg/pkg/seq"
 	"github.com/spf13/cobra"
 )
 
@@ -128,6 +129,7 @@ func SeedCmd(deps Deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			e.SetSeqManager(seq.NewManager(req.Seq))
 			return e.Seed(cmd.Context())
 		},
 	}
@@ -233,6 +235,7 @@ func AllCmd(deps Deps) *cobra.Command {
 				return err
 			}
 			defer e.Close()
+			e.SetSeqManager(seq.NewManager(req.Seq))
 
 			defer func() {
 				if len(req.Deseed) > 0 {

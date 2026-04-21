@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codingconcepts/edg/pkg/seq"
 	"github.com/codingconcepts/edg/pkg/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -732,6 +733,171 @@ func TestValidate_WorkerBadRate(t *testing.T) {
 	err := req.Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "rate must have positive")
+}
+
+func TestValidate_SeqDuplicateName(t *testing.T) {
+	req := &Request{
+		Seq: []seq.Config{
+			{Name: "a", Start: 1, Step: 1},
+			{Name: "a", Start: 1, Step: 1},
+		},
+	}
+	err := req.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate seq name")
+}
+
+func TestValidate_SeqMissingName(t *testing.T) {
+	req := &Request{
+		Seq: []seq.Config{
+			{Start: 1, Step: 1},
+		},
+	}
+	err := req.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing a name")
+}
+
+func TestValidate_SeqReference(t *testing.T) {
+	cases := []struct {
+		name    string
+		req     *Request
+		wantErr string
+	}{
+		{
+			name: "valid seq_global reference",
+			req: &Request{
+				Seq: []seq.Config{{Name: "order_id", Start: 1, Step: 1}},
+				Seed: []*Query{
+					{Name: "q1", Args: PositionalArgs(`seq_global("order_id")`)},
+				},
+			},
+		},
+		{
+			name: "valid seq_rand reference",
+			req: &Request{
+				Seq: []seq.Config{{Name: "order_id", Start: 1, Step: 1}},
+				Seed: []*Query{
+					{Name: "q1", Args: PositionalArgs(`seq_rand("order_id")`)},
+				},
+			},
+		},
+		{
+			name: "valid seq_zipf reference",
+			req: &Request{
+				Seq: []seq.Config{{Name: "order_id", Start: 1, Step: 1}},
+				Run: []*RunItem{
+					{Query: &Query{Name: "q1", Args: PositionalArgs(`seq_zipf("order_id", 2.0, 1.0)`)}},
+				},
+			},
+		},
+		{
+			name: "valid seq_norm reference",
+			req: &Request{
+				Seq: []seq.Config{{Name: "order_id", Start: 1, Step: 1}},
+				Run: []*RunItem{
+					{Query: &Query{Name: "q1", Args: PositionalArgs(`seq_norm("order_id", 500, 100)`)}},
+				},
+			},
+		},
+		{
+			name: "valid seq_exp reference",
+			req: &Request{
+				Seq: []seq.Config{{Name: "order_id", Start: 1, Step: 1}},
+				Run: []*RunItem{
+					{Query: &Query{Name: "q1", Args: PositionalArgs(`seq_exp("order_id", 0.5)`)}},
+				},
+			},
+		},
+		{
+			name: "valid seq_lognorm reference",
+			req: &Request{
+				Seq: []seq.Config{{Name: "order_id", Start: 1, Step: 1}},
+				Run: []*RunItem{
+					{Query: &Query{Name: "q1", Args: PositionalArgs(`seq_lognorm("order_id", 1, 0.5)`)}},
+				},
+			},
+		},
+		{
+			name: "unknown seq_global reference",
+			req: &Request{
+				Seed: []*Query{
+					{Name: "q1", Args: PositionalArgs(`seq_global("nope")`)},
+				},
+			},
+			wantErr: `unknown sequence "nope"`,
+		},
+		{
+			name: "unknown seq_rand reference",
+			req: &Request{
+				Run: []*RunItem{
+					{Query: &Query{Name: "q1", Args: PositionalArgs(`seq_rand("missing")`)}},
+				},
+			},
+			wantErr: `unknown sequence "missing"`,
+		},
+		{
+			name: "unknown seq_zipf reference",
+			req: &Request{
+				Run: []*RunItem{
+					{Query: &Query{Name: "q1", Args: PositionalArgs(`seq_zipf('bad', 2.0, 1.0)`)}},
+				},
+			},
+			wantErr: `unknown sequence "bad"`,
+		},
+		{
+			name: "single-quoted seq reference",
+			req: &Request{
+				Seq: []seq.Config{{Name: "order_id", Start: 1, Step: 1}},
+				Seed: []*Query{
+					{Name: "q1", Args: PositionalArgs(`seq_global('order_id')`)},
+				},
+			},
+		},
+		{
+			name: "seq reference in print",
+			req: &Request{
+				Seq: []seq.Config{{Name: "order_id", Start: 1, Step: 1}},
+				Run: []*RunItem{
+					{Query: &Query{Name: "q1", Print: []PrintExpr{{Expr: `seq_rand("order_id")`}}}},
+				},
+			},
+		},
+		{
+			name: "seq reference in expression",
+			req: &Request{
+				Seq:         []seq.Config{{Name: "order_id", Start: 1, Step: 1}},
+				Expressions: map[string]string{"next_order": `seq_global("order_id")`},
+			},
+		},
+		{
+			name: "seq reference in transaction local",
+			req: &Request{
+				Seq: []seq.Config{{Name: "order_id", Start: 1, Step: 1}},
+				Run: []*RunItem{
+					{Transaction: &Transaction{
+						Name:   "tx",
+						Locals: map[string]string{"oid": `seq_global("order_id")`},
+						Queries: []*Query{
+							{Name: "q1", Type: QueryTypeExec, Query: "SELECT 1"},
+						},
+					}},
+				},
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.req.Validate()
+			if c.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), c.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestLoadConfig_MultipleIncludes(t *testing.T) {

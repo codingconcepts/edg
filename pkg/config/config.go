@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/codingconcepts/edg/pkg/gen"
+	"github.com/codingconcepts/edg/pkg/seq"
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
 	"gopkg.in/yaml.v3"
@@ -17,6 +18,7 @@ import (
 var (
 	genCallRe = regexp.MustCompile(`gen\(\s*['"]([^'"]+)['"]\s*\)`)
 	envCallRe = regexp.MustCompile(`env\(\s*(?:'([^']+)'|"([^"]+)")\s*\)`)
+	seqCallRe = regexp.MustCompile(`seq_(?:global|rand|zipf|norm|exp|lognorm)\(\s*(?:'([^']+)'|"([^"]+)")`)
 )
 
 // Duration wraps time.Duration for YAML unmarshaling from strings like "1s".
@@ -76,6 +78,7 @@ type Request struct {
 	Expressions  map[string]string           `json:"expressions" yaml:"expressions"`
 	Rows         map[string][]string         `json:"rows" yaml:"rows"`
 	Reference    map[string][]map[string]any `json:"reference" yaml:"reference"`
+	Seq          []seq.Config                `json:"seq" yaml:"seq"`
 	Stages       []Stage                     `json:"stages" yaml:"stages"`
 	Up           []*Query                    `json:"up" yaml:"up"`
 	Seed         []*Query                    `json:"seed" yaml:"seed"`
@@ -396,6 +399,20 @@ func (r *Request) Validate() error {
 		}
 	}
 
+	// Validate seq definitions.
+	{
+		seen := make(map[string]bool, len(r.Seq))
+		for i, s := range r.Seq {
+			if s.Name == "" {
+				return fmt.Errorf("seq %d is missing a name", i)
+			}
+			if seen[s.Name] {
+				return fmt.Errorf("duplicate seq name %q", s.Name)
+			}
+			seen[s.Name] = true
+		}
+	}
+
 	// Validate row references: row name must exist, and row + args are mutually exclusive.
 	runQueries := r.RunAllQueries()
 	workerQueries := r.WorkerQueries()
@@ -498,7 +515,12 @@ func (r *Request) Validate() error {
 		}
 	}
 
-	// Walk the config and validate gen(...) and env(...) expressions inline.
+	seqNames := make(map[string]bool, len(r.Seq))
+	for _, s := range r.Seq {
+		seqNames[s.Name] = true
+	}
+
+	// Walk the config and validate gen(...), env(...), and seq_*(...) expressions inline.
 	validateExpr := func(e string) error {
 		for _, m := range genCallRe.FindAllStringSubmatch(e, -1) {
 			if err := gen.ValidatePattern(m[1]); err != nil {
@@ -512,6 +534,15 @@ func (r *Request) Validate() error {
 			}
 			if _, ok := os.LookupEnv(name); !ok {
 				return fmt.Errorf("missing environment variable: %q", name)
+			}
+		}
+		for _, m := range seqCallRe.FindAllStringSubmatch(e, -1) {
+			name := m[1]
+			if name == "" {
+				name = m[2]
+			}
+			if !seqNames[name] {
+				return fmt.Errorf("expression %q: unknown sequence %q (not defined in seq section)", e, name)
 			}
 		}
 		return nil

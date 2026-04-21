@@ -9,6 +9,7 @@ import (
 
 	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/codingconcepts/edg/pkg/env"
+	"github.com/codingconcepts/edg/pkg/seq"
 )
 
 func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config.Request, duration time.Duration, workers int, printInterval time.Duration) error {
@@ -33,11 +34,14 @@ func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config
 }
 
 func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *config.Request, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
+	seqMgr := seq.NewManager(req.Seq)
+
 	initEnv, err := env.NewEnv(db, flagDriver, req)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer initEnv.Close()
+	initEnv.SetSeqManager(seqMgr)
 	if err := initEnv.Init(ctx); err != nil {
 		return nil, 0, err
 	}
@@ -50,7 +54,7 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *confi
 
 		bgCtx, bgCancel := context.WithCancel(ctx)
 		defer bgCancel()
-		bgWg := startBackgroundWorkers(bgCtx, db, req, initEnv, results)
+		bgWg := startBackgroundWorkers(bgCtx, db, req, initEnv, results, seqMgr)
 
 		for _, stage := range req.Stages {
 			if ctx.Err() != nil {
@@ -67,7 +71,7 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *confi
 			metricWorkers.Set(float64(workers))
 
 			stageCtx, stageCancel := context.WithTimeout(ctx, dur)
-			wg := startWorkers(stageCtx, workers, db, req, initEnv, results)
+			wg := startWorkers(stageCtx, workers, db, req, initEnv, results, seqMgr)
 			wg.Wait()
 			stageCancel()
 		}
@@ -93,11 +97,14 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *confi
 }
 
 func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config.Request, duration time.Duration, workers int, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
+	seqMgr := seq.NewManager(req.Seq)
+
 	initEnv, err := env.NewEnv(db, flagDriver, req)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer initEnv.Close()
+	initEnv.SetSeqManager(seqMgr)
 	if err := initEnv.Init(ctx); err != nil {
 		return nil, 0, err
 	}
@@ -113,8 +120,8 @@ func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *c
 		}
 	}()
 
-	wg := startWorkers(ctx, workers, db, req, initEnv, results)
-	bgWg := startBackgroundWorkers(ctx, db, req, initEnv, results)
+	wg := startWorkers(ctx, workers, db, req, initEnv, results, seqMgr)
+	bgWg := startBackgroundWorkers(ctx, db, req, initEnv, results, seqMgr)
 
 	go func() {
 		wg.Wait()
@@ -129,7 +136,7 @@ func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *c
 	return stats, time.Since(start), nil
 }
 
-func startWorkers(ctx context.Context, numWorkers int, db *sql.DB, req *config.Request, initEnv *env.Env, results chan<- config.QueryResult) *sync.WaitGroup {
+func startWorkers(ctx context.Context, numWorkers int, db *sql.DB, req *config.Request, initEnv *env.Env, results chan<- config.QueryResult, seqMgr *seq.Manager) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
 	for i := range numWorkers {
@@ -141,6 +148,7 @@ func startWorkers(ctx context.Context, numWorkers int, db *sql.DB, req *config.R
 			}
 			defer workerEnv.Close()
 			workerEnv.InitFrom(initEnv)
+			workerEnv.SetSeqManager(seqMgr)
 			workerEnv.Results = results
 
 			for ctx.Err() == nil {
@@ -157,7 +165,7 @@ func startWorkers(ctx context.Context, numWorkers int, db *sql.DB, req *config.R
 	return &wg
 }
 
-func startBackgroundWorkers(ctx context.Context, db *sql.DB, req *config.Request, initEnv *env.Env, results chan<- config.QueryResult) *sync.WaitGroup {
+func startBackgroundWorkers(ctx context.Context, db *sql.DB, req *config.Request, initEnv *env.Env, results chan<- config.QueryResult, seqMgr *seq.Manager) *sync.WaitGroup {
 	var wg sync.WaitGroup
 	for _, w := range req.Workers {
 		slog.Info("background worker", "name", w.Name, "rate", w.Rate)
@@ -171,6 +179,7 @@ func startBackgroundWorkers(ctx context.Context, db *sql.DB, req *config.Request
 			defer workerEnv.Close()
 
 			workerEnv.InitFrom(initEnv)
+			workerEnv.SetSeqManager(seqMgr)
 			workerEnv.Results = results
 			workerEnv.RunWorker(ctx, w)
 		})

@@ -24,6 +24,7 @@ A complete edg YAML config with all applicable sections:
 - `globals` for shared constants (row counts, batch sizes, worker counts)
 - `expressions` for reusable computed values (optional, only if needed)
 - `reference` for static lookup data (optional, only if needed)
+- `seq` for named auto-incrementing sequences shared across all workers (optional, only if integer PKs needed)
 - `up` for schema creation (CREATE TABLE statements)
 - `seed` for data population (bulk INSERTs, use `exec_batch` with `count`/`size` for large volumes)
 - `init` for fetching reference data needed by `run` queries (use `type: query` to populate named datasets)
@@ -57,6 +58,24 @@ A complete edg YAML config with all applicable sections:
 - `date(format, min, max)` for formatted dates
 - `bool()` for random booleans
 - `seq(start, step)` for auto-incrementing sequences (per worker)
+- `seq_global("name")` for globally unique sequences shared across all workers (requires `seq:` config section)
+- `seq_rand("name")` for uniform random picks from already-generated sequence values
+- `seq_zipf("name", s, v)` / `seq_norm("name", mean, stddev)` / `seq_exp("name", rate)` / `seq_lognorm("name", mu, sigma)` for distribution-based picks from sequence values
+
+### Global sequences
+- When the user needs globally unique integer IDs across concurrent workers, use `seq:` config section with `seq_global("name")`:
+  ```yaml
+  seq:
+    - name: order_id
+      start: 1
+      step: 1
+  ```
+- `seq_global("name")` in args returns the next value from the named sequence
+- Unlike `seq(start, step)` which is per-worker, `seq_global` is shared across all workers
+- Sequence counter continues across seed and run phases
+- To reference existing sequence values, use `seq_rand("name")` (uniform) or distribution variants:
+  `seq_zipf("name", s, v)`, `seq_norm("name", mean, stddev)`, `seq_exp("name", rate)`, `seq_lognorm("name", mu, sigma)`
+- These compute valid values from `start + index * step` — no values stored in memory, works with any step
 
 ### Reference data
 - Use `init` section with `type: query` to fetch data from seeded tables into named datasets

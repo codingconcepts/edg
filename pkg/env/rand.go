@@ -7,6 +7,7 @@ import (
 
 	"github.com/codingconcepts/edg/pkg/convert"
 	"github.com/codingconcepts/edg/pkg/random"
+	"github.com/codingconcepts/edg/pkg/seq"
 )
 
 // getNurandC returns the run-time constant C for a given A value,
@@ -179,6 +180,105 @@ func (e *Env) seq(rawStart, rawStep any) (int64, error) {
 	}
 	counter := atomic.AddInt64(&e.seqCounter, 1) - 1
 	return int64(s) + counter*int64(st), nil
+}
+
+func (e *Env) seqGlobal(name any) (int64, error) {
+	n, ok := name.(string)
+	if !ok {
+		return 0, fmt.Errorf("seq_global: name must be string, got %T", name)
+	}
+	if e.seqManager == nil {
+		return 0, fmt.Errorf("seq_global(%q): no sequences configured", n)
+	}
+	return e.seqManager.Next(n)
+}
+
+func (e *Env) seqRand(name any) (int64, error) {
+	n, ok := name.(string)
+	if !ok {
+		return 0, fmt.Errorf("seq_rand: name must be string, got %T", name)
+	}
+	if e.seqManager == nil {
+		return 0, fmt.Errorf("seq_rand(%q): no sequences configured", n)
+	}
+	return e.seqManager.Rand(n)
+}
+
+func (e *Env) seqZipf(name, rawS, rawV any) (int64, error) {
+	n, ok := name.(string)
+	if !ok {
+		return 0, fmt.Errorf("seq_zipf: name must be string, got %T", name)
+	}
+	if e.seqManager == nil {
+		return 0, fmt.Errorf("seq_zipf(%q): no sequences configured", n)
+	}
+	s, err := convert.ToFloat(rawS)
+	if err != nil {
+		return 0, fmt.Errorf("seq_zipf s: %w", err)
+	}
+	v, err := convert.ToFloat(rawV)
+	if err != nil {
+		return 0, fmt.Errorf("seq_zipf v: %w", err)
+	}
+	return e.seqManager.Zipf(n, s, v)
+}
+
+func (e *Env) seqNorm(name, rawMean, rawStddev any) (int64, error) {
+	n, ok := name.(string)
+	if !ok {
+		return 0, fmt.Errorf("seq_norm: name must be string, got %T", name)
+	}
+	if e.seqManager == nil {
+		return 0, fmt.Errorf("seq_norm(%q): no sequences configured", n)
+	}
+	mean, err := convert.ToFloat(rawMean)
+	if err != nil {
+		return 0, fmt.Errorf("seq_norm mean: %w", err)
+	}
+	stddev, err := convert.ToFloat(rawStddev)
+	if err != nil {
+		return 0, fmt.Errorf("seq_norm stddev: %w", err)
+	}
+	return e.seqManager.Norm(n, mean, stddev)
+}
+
+func (e *Env) seqExp(name, rawRate any) (int64, error) {
+	n, ok := name.(string)
+	if !ok {
+		return 0, fmt.Errorf("seq_exp: name must be string, got %T", name)
+	}
+	if e.seqManager == nil {
+		return 0, fmt.Errorf("seq_exp(%q): no sequences configured", n)
+	}
+	rate, err := convert.ToFloat(rawRate)
+	if err != nil {
+		return 0, fmt.Errorf("seq_exp rate: %w", err)
+	}
+	return e.seqManager.Exp(n, rate)
+}
+
+func (e *Env) seqLognorm(name, rawMu, rawSigma any) (int64, error) {
+	n, ok := name.(string)
+	if !ok {
+		return 0, fmt.Errorf("seq_lognorm: name must be string, got %T", name)
+	}
+	if e.seqManager == nil {
+		return 0, fmt.Errorf("seq_lognorm(%q): no sequences configured", n)
+	}
+	mu, err := convert.ToFloat(rawMu)
+	if err != nil {
+		return 0, fmt.Errorf("seq_lognorm mu: %w", err)
+	}
+	sigma, err := convert.ToFloat(rawSigma)
+	if err != nil {
+		return 0, fmt.Errorf("seq_lognorm sigma: %w", err)
+	}
+	return e.seqManager.Lognorm(n, mu, sigma)
+}
+
+// SetSeqManager sets the shared sequence manager for cross-worker sequences.
+func (e *Env) SetSeqManager(m *seq.Manager) {
+	e.seqManager = m
 }
 
 // weightedSampleN picks N unique random rows from a named dataset

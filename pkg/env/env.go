@@ -17,6 +17,7 @@ import (
 	"github.com/codingconcepts/edg/pkg/convert"
 	"github.com/codingconcepts/edg/pkg/gen"
 	"github.com/codingconcepts/edg/pkg/random"
+	"github.com/codingconcepts/edg/pkg/seq"
 
 	"github.com/expr-lang/expr"
 )
@@ -50,6 +51,7 @@ type Env struct {
 	vectorCentroids      map[string][][]float64
 
 	seqCounter int64
+	seqManager *seq.Manager
 
 	computedArgs     []any
 	computedArgNames map[string]int
@@ -127,6 +129,12 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		"ref_same":          env.refSame,         // Use the same random row across multiple arguments.
 		"regex":             gen.GenRegex,        // Generate a string matching a regex pattern.
 		"seq":               env.seq,             // Auto-incrementing sequence (start + counter * step).
+		"seq_global":        env.seqGlobal,       // Shared auto-incrementing sequence across all workers.
+		"seq_rand":          env.seqRand,         // Uniform random value from an already-generated global sequence.
+		"seq_zipf":          env.seqZipf,         // Zipfian-distributed value from a global sequence.
+		"seq_norm":          env.seqNorm,         // Normal-distributed value from a global sequence.
+		"seq_exp":           env.seqExp,          // Exponential-distributed value from a global sequence.
+		"seq_lognorm":       env.seqLognorm,      // Log-normal-distributed value from a global sequence.
 		"set_exp":           setExp,              // Pick from a set using exponential distribution.
 		"set_lognorm":       setLognormal,        // Pick from a set using log-normal distribution.
 		"set_norm":          setNormal,           // Pick from a set using normal distribution.

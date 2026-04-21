@@ -23,6 +23,12 @@ You help users compose, debug, and understand edg expressions. edg uses [expr-la
 | `uuid_v7()` | Sortable UUID (preferred for PKs) |
 | `uuid_v4()` | Random UUID |
 | `seq(start, step)` | Auto-incrementing counter per worker |
+| `seq_global(name)` | Shared auto-incrementing counter across all workers (requires `seq:` config section) |
+| `seq_rand(name)` | Uniform random from generated sequence values |
+| `seq_zipf(name, s, v)` | Zipfian-distributed pick from sequence (hot early values) |
+| `seq_norm(name, mean, stddev)` | Normal-distributed pick from sequence |
+| `seq_exp(name, rate)` | Exponential-distributed pick from sequence |
+| `seq_lognorm(name, mu, sigma)` | Log-normal-distributed pick from sequence |
 
 ### Random Data (gofakeit)
 | Function | Description |

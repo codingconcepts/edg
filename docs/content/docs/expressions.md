@@ -65,6 +65,12 @@ These are edg's built-in functions, available in any expression context (`args:`
 | `ref_same(name)` | `map` | Returns a random row, but the same row is reused across all `ref_same` calls within a single query execution. Cleared between iterations.<br><br>`ref_same('products').name` -> `Widget` |
 | `regex(pattern)` | `string` | Generates a random string matching the given regular expression.<br><br>`regex('[A-Z]{3}-[0-9]{4}')` -> `ABK-7291` |
 | `seq(start, step)` | `int` | Auto-incrementing sequence per worker. Returns `start + counter * step`.<br><br>`seq(1, 1)` -> `1` |
+| `seq_global(name)` | `int` | Shared auto-incrementing sequence across all workers. Returns the next value from a named sequence defined in the [`seq`]({{< relref "configuration#seq" >}}) config section. Thread-safe via atomic counters.<br><br>`seq_global("order_id")` -> `1` |
+| `seq_rand(name)` | `int` | Uniform random value from the already-generated values of a global sequence. Computes valid values from the sequence's start, step, and current counter — no values stored in memory.<br><br>`seq_rand("order_id")` -> `42` |
+| `seq_zipf(name, s, v)` | `int` | Zipfian-distributed value from a global sequence. Lower indices (earlier values) are selected more frequently. `s` (> 1) and `v` (>= 1) control the distribution shape.<br><br>`seq_zipf("order_id", 2.0, 1.0)` -> `3` |
+| `seq_norm(name, mean, stddev)` | `int` | Normally-distributed value from a global sequence. `mean` and `stddev` are index positions (0-based).<br><br>`seq_norm("order_id", 500, 100)` -> `487` |
+| `seq_exp(name, rate)` | `int` | Exponentially-distributed value from a global sequence. Lower indices are selected more frequently.<br><br>`seq_exp("order_id", 0.5)` -> `7` |
+| `seq_lognorm(name, mu, sigma)` | `int` | Log-normally-distributed value from a global sequence.<br><br>`seq_lognorm("order_id", 2, 0.5)` -> `8` |
 | `__sep__` | `string` | Driver-aware batch field separator. A query-text token that is replaced with the SQL function producing the ASCII unit separator character (char 31) used to delimit values within batch-expanded placeholders. Resolves to `chr(31)` for pgx, `CHAR(31)` for MySQL and MSSQL, `codepoints-to-string(31)` for Oracle, `CODE_POINTS_TO_STRING([31])` for Spanner. Can be used in any argument position within SQL. **Always use `__sep__` instead of a literal comma. Generated values may contain commas, which would silently corrupt your data.**<br><br>`string_to_array('$1', __sep__)` |
 | `set_exp(values, rate)` | `any` | Picks an item from a set using exponential distribution.<br><br>`set_exp(['low', 'med', 'high'], 0.5)` -> `low` |
 | `set_lognorm(values, mu, sigma)` | `any` | Picks an item from a set using log-normal distribution.<br><br>`set_lognorm(['free', 'basic', 'pro'], 0.5, 0.5)` -> `free` |
@@ -104,6 +110,8 @@ Several functions maintain state. Understanding when that state resets is import
 | `ref_rand(name)` | None | Fresh random row on every call |
 | `ref_same(name)` | Per-query | Picks a row on first call within a query; all subsequent `ref_same` calls for the same dataset within that query return the same row. **Cleared before the next query.** |
 | `seq(start, step)` | Per-worker | Counter starts at 0 for each worker and increments on every call. Two workers both calling `seq(1, 1)` will produce the same sequence independently -- values are **not globally unique**. |
+| `seq_global(name)` | Global | Single counter shared across all workers via atomic increment. Values are **globally unique**. Configured in the [`seq`]({{< relref "configuration#seq" >}}) config section. |
+| `seq_rand` / `seq_zipf` / `seq_norm` / `seq_exp` / `seq_lognorm` | Global | Pick from already-generated sequence values using the named distribution. The valid value set grows as `seq_global` advances the counter. No values are stored in memory — valid values are computed from `start + index * step`. |
 | `vector` / `vector_zipf` / `vector_norm` | Per-worker | Cluster centroids are generated on first call (keyed by dims+clusters) and reused for the worker's lifetime. Each call picks a centroid (uniform, Zipfian, or normal) and adds noise. |
 
 ## User-Defined Expressions

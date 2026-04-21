@@ -1,0 +1,81 @@
+globals:
+  orders: 1000
+  samples: 10000
+  batch_size: 100
+
+seq:
+  - name: order_id
+    start: 1
+    step: 1
+
+up:
+
+  - name: create_orders
+    query: |-
+      CREATE TABLE IF NOT EXISTS orders (
+        id INT PRIMARY KEY,
+        customer STRING NOT NULL
+      )
+
+  - name: create_samples
+    query: |-
+      CREATE TABLE IF NOT EXISTS samples (
+        id INT PRIMARY KEY DEFAULT unique_rowid(),
+        uniform_val INT NOT NULL,
+        zipf_val INT NOT NULL,
+        norm_val INT NOT NULL,
+        exp_val INT NOT NULL,
+        lognorm_val INT NOT NULL
+      )
+
+seed:
+
+  - name: seed_orders
+    type: exec_batch
+    count: orders
+    size: batch_size
+    args:
+      - seq_global("order_id")
+      - gen('firstname') + ' ' + gen('lastname')
+    query: |-
+      INSERT INTO orders (id, customer)
+      SELECT
+        unnest(string_to_array('$1', chr(31))::INT[]),
+        unnest(string_to_array('$2', chr(31)))
+
+  - name: seed_samples
+    type: exec_batch
+    count: samples
+    size: batch_size
+    args:
+      - seq_rand("order_id")
+      - seq_zipf("order_id", 1.1, 1.0)
+      - seq_norm("order_id", 500, 150)
+      - seq_exp("order_id", 0.01)
+      - seq_lognorm("order_id", 5.5, 0.5)
+    query: |-
+      INSERT INTO samples (uniform_val, zipf_val, norm_val, exp_val, lognorm_val)
+      SELECT
+        unnest(string_to_array('$1', chr(31))::INT[]),
+        unnest(string_to_array('$2', chr(31))::INT[]),
+        unnest(string_to_array('$3', chr(31))::INT[]),
+        unnest(string_to_array('$4', chr(31))::INT[]),
+        unnest(string_to_array('$5', chr(31))::INT[])
+
+deseed:
+
+  - name: delete_samples
+    type: exec
+    query: DELETE FROM samples WHERE true
+
+  - name: delete_orders
+    type: exec
+    query: DELETE FROM orders WHERE true
+
+down:
+
+  - name: drop_samples
+    query: DROP TABLE IF EXISTS samples
+
+  - name: drop_orders
+    query: DROP TABLE IF EXISTS orders

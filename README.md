@@ -94,10 +94,11 @@ docker compose -f _examples/compose_oracle.yml down
 
 ## Todos
 
+* Sort configuration.md sections
+* Support light mode for the docs site
 * Consider a nicer logic switching mechanism (e.g. switch)
 * Better error output
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences
-* Global sequencies (`seq_global(name, start, step)`) for all workers to share in a thread safe way
 * Dry run mode
 * Output to file for testing and feeding other tools
   * CSV
