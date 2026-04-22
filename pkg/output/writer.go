@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/codingconcepts/edg/pkg/config"
+	"github.com/codingconcepts/edg/pkg/convert"
 )
 
 type Format string
@@ -15,6 +16,7 @@ const (
 	FormatJSON    Format = "json"
 	FormatCSV     Format = "csv"
 	FormatParquet Format = "parquet"
+	FormatStdout  Format = "stdout"
 )
 
 func ParseFormat(s string) (Format, error) {
@@ -27,8 +29,10 @@ func ParseFormat(s string) (Format, error) {
 		return FormatCSV, nil
 	case "parquet":
 		return FormatParquet, nil
+	case "stdout":
+		return FormatStdout, nil
 	default:
-		return "", fmt.Errorf("unknown output format %q (valid: sql, json, csv, parquet)", s)
+		return "", fmt.Errorf("unknown output format %q (valid: sql, json, csv, parquet, stdout)", s)
 	}
 }
 
@@ -55,6 +59,8 @@ func New(format Format, driver, dir string) (Writer, error) {
 		return newCSVWriter(dir), nil
 	case FormatParquet:
 		return newParquetWriter(dir), nil
+	case FormatStdout:
+		return newStdoutWriter(driver), nil
 	default:
 		return nil, fmt.Errorf("unknown output format %q", format)
 	}
@@ -89,13 +95,13 @@ func ExtractColumns(q *config.Query) []string {
 	return cols
 }
 
-var insertTableRe = regexp.MustCompile(`(?i)INSERT\s+INTO\s+(\S+)`)
-
-func extractTable(querySQL string) string {
-	if m := insertTableRe.FindStringSubmatch(querySQL); len(m) == 2 {
-		name := m[1]
-		name = strings.TrimSuffix(name, "(")
-		return name
+func resolveArgs(query, driver string, args []any) string {
+	for i := len(args) - 1; i >= 0; i-- {
+		placeholder := fmt.Sprintf("$%d", i+1)
+		formatted := convert.SQLFormatValue(args[i], driver)
+		quoted := "'" + placeholder + "'"
+		query = strings.ReplaceAll(query, quoted, formatted)
+		query = strings.ReplaceAll(query, placeholder, formatted)
 	}
-	return ""
+	return query
 }

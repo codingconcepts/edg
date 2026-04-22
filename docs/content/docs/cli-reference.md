@@ -38,9 +38,15 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 | `--duration` | `-d` | `1m` | Benchmark duration (run and all commands) |
 | `--workers` | `-w` | `1` | Number of concurrent workers (run and all commands) |
 | `--license` | | | License key for enterprise drivers, or set `EDG_LICENSE` env var (see [Licensing](/docs/licensing/)) |
+| `--retries` | | `0` | Number of transaction retry attempts on error (run and all commands) |
+| `--errors` | | `false` | Print worker errors to stderr (run and all commands) |
 | `--print-interval` | | `1s` | Progress reporting interval (run and all commands) |
 
 ## Example
+
+### Database
+
+Run each lifecycle command individually against a database, or use `all` to run the entire sequence in one invocation.
 
 ```sh
 edg up \
@@ -97,7 +103,7 @@ edg stage \
 
 | Flag | Short | Default | Description |
 |---|---|---|---|
-| `--format` | `-f` | `sql` | Output format: `sql`, `json`, `csv`, or `parquet` |
+| `--format` | `-f` | `sql` | Output format: `sql`, `json`, `csv`, `parquet`, or `stdout` |
 | `--output-dir` | `-o` | `.` | Directory for output files (created if it doesn't exist) |
 
 Global flags `--config`, `--driver`, and `--rng-seed` also apply. The `--driver` flag controls SQL value formatting (quote style, hex literals, etc.) even though no database connection is made. Use `--rng-seed` to produce deterministic, reproducible output across runs.
@@ -135,7 +141,7 @@ CREATE TABLE IF NOT EXISTS purchase_order (
 );
 ```
 
-**`seed.sql`** - batch queries are expanded into individual `INSERT` statements with values inline:
+**`seed.sql`** - query placeholders (`$1`, `$2`, etc.) are resolved with generated values inline:
 
 ```sql
 INSERT INTO customer (id, name, email) VALUES (1, 'Jessica Hills', 'jonathonmarquardt@wilkinson.biz');
@@ -271,6 +277,27 @@ duckdb -c "SELECT * FROM './out/seed_populate_customer.parquet' LIMIT 5"
 python3 -c "import pandas; print(pandas.read_parquet('./out/seed_populate_customer.parquet').head())"
 ```
 
+##### stdout
+
+Streams SQL statements directly to standard output as they are generated, with no files written. Log output is suppressed so only SQL reaches stdout, making it safe for piping.
+
+```sh
+edg stage --config config.yaml --format stdout
+```
+
+Output is identical to the SQL format but printed to the console instead of written to files. DDL statements (up/down) and DML statements (seed/deseed) are written as-is; data-generating queries have their placeholders resolved with generated values inline.
+
+```sh
+# Pipe directly into a database
+edg stage --config config.yaml --format stdout | psql mydb
+
+# Preview the first few statements
+edg stage --config config.yaml --format stdout | head -20
+```
+
+> [!NOTE]
+> The `--output-dir` flag is ignored when using stdout format.
+
 #### Column naming
 
 Column names in the output are determined by the following priority:
@@ -319,13 +346,14 @@ Queries using `exec_batch` or `query_batch` are expanded into individual rows. T
 
 #### Example
 
-A complete working example is available in [`_examples/output/`](https://github.com/codingconcepts/edg/tree/main/_examples/output), including a config file and pre-generated output in all four formats. To regenerate:
+A complete working example is available in [`_examples/output/`](https://github.com/codingconcepts/edg/tree/main/_examples/output), including a config file and pre-generated output in all formats. To regenerate:
 
 ```sh
 edg stage --config _examples/output/config.yaml -f sql -o _examples/output/sql
 edg stage --config _examples/output/config.yaml -f json -o _examples/output/json
 edg stage --config _examples/output/config.yaml -f csv -o _examples/output/csv
 edg stage --config _examples/output/config.yaml -f parquet -o _examples/output/parquet
+edg stage --config _examples/output/config.yaml -f stdout
 ```
 
 ### Workload

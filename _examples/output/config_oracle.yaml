@@ -1,0 +1,88 @@
+globals:
+  customers: 10
+  batch_size: 5
+
+seq:
+  - name: customer_id
+    start: 1
+    step: 1
+  - name: order_id
+    start: 1
+    step: 1
+
+up:
+
+  - name: create_customer
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'CREATE TABLE customer (
+          id NUMBER(10) PRIMARY KEY,
+          name VARCHAR2(255) NOT NULL,
+          email VARCHAR2(255) NOT NULL
+        )';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_order
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE 'CREATE TABLE purchase_order (
+          id NUMBER(10) PRIMARY KEY,
+          customer_id NUMBER(10) NOT NULL,
+          amount NUMBER(10,2) NOT NULL,
+          status VARCHAR2(255) NOT NULL
+        )';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+seed:
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    args:
+      id: seq_global("customer_id")
+      name: gen('name')
+      email: gen('email')
+    query: |-
+      INSERT INTO customer (id, name, email)
+      SELECT t1.column_value, t2.column_value, t3.column_value
+      FROM XMLTABLE(('"' || REPLACE('$1', chr(31), '","') || '"')) t1,
+           XMLTABLE(('"' || REPLACE('$2', chr(31), '","') || '"')) t2,
+           XMLTABLE(('"' || REPLACE('$3', chr(31), '","') || '"')) t3
+      WHERE ROWNUM <= (SELECT COUNT(*) FROM XMLTABLE(('"' || REPLACE('$1', chr(31), '","') || '"')))
+
+  - name: populate_order
+    type: exec_batch
+    count: customers * 3
+    args:
+      id: seq_global("order_id")
+      customer_id: seq_rand("customer_id")
+      amount: uniform_f(9.99, 499.99, 2)
+      status: set_rand(['pending', 'shipped', 'delivered'], [])
+    query: |-
+      INSERT INTO purchase_order (id, customer_id, amount, status)
+      SELECT t1.column_value, t2.column_value, t3.column_value, t4.column_value
+      FROM XMLTABLE(('"' || REPLACE('$1', chr(31), '","') || '"')) t1,
+           XMLTABLE(('"' || REPLACE('$2', chr(31), '","') || '"')) t2,
+           XMLTABLE(('"' || REPLACE('$3', chr(31), '","') || '"')) t3,
+           XMLTABLE(('"' || REPLACE('$4', chr(31), '","') || '"')) t4
+      WHERE ROWNUM <= (SELECT COUNT(*) FROM XMLTABLE(('"' || REPLACE('$1', chr(31), '","') || '"')))
+
+deseed:
+
+  - name: delete_orders
+    query: TRUNCATE TABLE purchase_order
+
+  - name: delete_customers
+    query: TRUNCATE TABLE customer
+
+down:
+
+  - name: drop_order
+    query: DROP TABLE purchase_order CASCADE CONSTRAINTS PURGE
+
+  - name: drop_customer
+    query: DROP TABLE customer CASCADE CONSTRAINTS PURGE

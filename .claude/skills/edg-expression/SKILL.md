@@ -111,6 +111,8 @@ You help users compose, debug, and understand edg expressions. edg uses [expr-la
 | `nullable(expr, probability)` | NULL with given probability |
 | `coalesce(v1, v2, ...)` | First non-nil value |
 | `const(value)` | Literal constant |
+| `fail(message)` | Stop current worker gracefully with error |
+| `fatal(message)` | Terminate entire process immediately |
 
 ### Batch
 | Function | Description |
@@ -121,7 +123,8 @@ You help users compose, debug, and understand edg expressions. edg uses [expr-la
 ### Other
 | Function | Description |
 |---|---|
-| `bytes(n)` | Hex-encoded random bytes |
+| `blob(n)` | Random n bytes as raw binary (cross-database) |
+| `bytes(n)` | Hex-encoded random bytes (pgx only) |
 | `bit(n)` | Fixed-length bit string |
 | `varbit(n)` | Variable-length bit string |
 | `inet(cidr)` | Random IP in CIDR block |
@@ -185,6 +188,18 @@ args:
 args:
   - ref_perm('fetch_warehouses').w_id  # same warehouse for entire worker lifetime
 ```
+
+### Error handling with fail/fatal
+```yaml
+args:
+  # Stop worker if map lookup misses
+  - {'us': 'us-east-1', 'eu': 'eu-west-1'}[env('REGION')] ?? fail('unknown REGION')
+
+  # Kill entire process on critical misconfiguration
+  - fatal('missing required config')
+```
+
+`fail()` stops only the current worker; `fatal()` terminates the entire process.
 
 ## Debugging Tips
 

@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 
 	"github.com/codingconcepts/edg/pkg/config"
@@ -31,8 +33,12 @@ func stageCmd() *cobra.Command {
 				return err
 			}
 
-			if err := os.MkdirAll(flagOutputDir, 0755); err != nil {
-				return fmt.Errorf("creating output directory: %w", err)
+			if f == output.FormatStdout {
+				slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+			} else {
+				if err := os.MkdirAll(flagOutputDir, 0755); err != nil {
+					return fmt.Errorf("creating output directory: %w", err)
+				}
 			}
 
 			w, err := output.New(f, flagDriver, flagOutputDir)
@@ -66,7 +72,7 @@ func stageCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&flagFormat, "format", "f", "sql", "output format (sql, json, csv, parquet)")
+	cmd.Flags().StringVarP(&flagFormat, "format", "f", "sql", "output format (sql, json, csv, parquet, stdout)")
 	cmd.Flags().StringVarP(&flagOutputDir, "output-dir", "o", ".", "directory for output files")
 
 	return cmd

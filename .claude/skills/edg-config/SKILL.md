@@ -31,10 +31,23 @@ A complete edg YAML config with all applicable sections:
 - `run` for the transactional workload (the queries that will be benchmarked)
 - `run_weights` for weighted query selection (optional, only if multiple run queries)
 - `workers` for background queries that run on a fixed schedule alongside the main workload (optional)
+- `expectations` for CI/CD assertions on benchmark results (optional)
 - `deseed` for data cleanup (TRUNCATE statements)
 - `down` for schema teardown (DROP TABLE statements)
 
 ## Rules
+
+### Expectations
+- Use `expectations` to assert benchmark results (exit code 1 on failure):
+  ```yaml
+  expectations:
+    - error_rate < 1
+    - tpm > 5000
+    - query_name.p99 < 100
+  ```
+- Available metrics: `tpm`, `error_rate`, `query_name.p50`, `query_name.p95`, `query_name.p99`, `query_name.avg`, `query_name.qps`, `query_name.errors`
+- Queries can suppress errors from expectations with `suppress_errors: true`
+- Queries can use `retries: N` for automatic retry on transient errors
 
 ### Query types
 - Use `type: exec` for INSERT, UPDATE, DELETE, TRUNCATE, DROP, CREATE
@@ -443,17 +456,18 @@ edg stage --config <path> --format <format> --output-dir <dir>
 
 | Flag | Short | Default | Description |
 |---|---|---|---|
-| `--format` | `-f` | `sql` | Output format: `sql`, `json`, `csv`, or `parquet` |
+| `--format` | `-f` | `sql` | Output format: `sql`, `json`, `csv`, `parquet`, or `stdout` |
 | `--output-dir` | `-o` | `.` | Directory for output files (created if it doesn't exist) |
 
 ### Output formats
 
 | Format | File naming | Description |
 |---|---|---|
-| `sql` | `{section}.sql` | Executable SQL statements (DDL + one `INSERT` per generated row) |
+| `sql` | `{section}.sql` | Executable SQL statements (DDL + one resolved statement per generated row) |
 | `json` | `{section}.json` | Objects keyed by query name (data-generating queries only) |
 | `csv` | `{section}_{query}.csv` | CSV with headers per data-generating query |
 | `parquet` | `{section}_{query}.parquet` | Apache Parquet per data-generating query (all columns as optional byte arrays) |
+| `stdout` | *(none)* | Streams resolved SQL to stdout (no files written, log output suppressed) |
 
 ### Key behaviours
 

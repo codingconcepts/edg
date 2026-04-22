@@ -1,18 +1,18 @@
 # Stage
 
-The `edg stage` command generates data to files instead of executing against a database. It processes all config sections (up, seed, deseed, down) and writes the results in your chosen format. No database connection is required.
+The `go run ./cmd/edg stage` command generates data to files instead of executing against a database. It processes all config sections (up, seed, deseed, down) and writes the results in your chosen format. No database connection is required.
 
 ## Usage
 
 ```sh
-edg stage --config <config.yaml> [--format <format>] [--output-dir <dir>]
+go run ./cmd/edg stage --config <config.yaml> [--format <format>] [--output-dir <dir>]
 ```
 
 ## Flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `-f, --format` | `sql` | Output format: `sql`, `json`, `csv`, or `parquet` |
+| `-f, --format` | `sql` | Output format: `sql`, `json`, `csv`, `parquet`, or `stdout` |
 | `-o, --output-dir` | `.` | Directory for output files (created if it doesn't exist) |
 | `--config` | | Workload YAML config file (required) |
 | `--driver` | `pgx` | Controls SQL value formatting (quote style, hex literals) |
@@ -25,7 +25,7 @@ edg stage --config <config.yaml> [--format <format>] [--output-dir <dir>]
 One file per config section. DDL statements (up/down) and DML statements (seed/deseed) are written as-is. Data-generating queries are expanded into individual `INSERT` statements with values inline.
 
 ```sh
-edg stage --config _examples/output/config.yaml --format sql -o _examples/output/sql
+go run ./cmd/edg stage --config _examples/output/config.yaml --format sql -o _examples/output/sql
 ```
 
 **Files produced:**
@@ -85,7 +85,7 @@ DROP TABLE IF EXISTS customer;
 One file per config section, containing an object keyed by query name. Each key maps to an array of row objects. Only data-generating queries (those with args) are included; DDL/DML without args is skipped.
 
 ```sh
-edg stage --config _examples/output/config.yaml --format json -o _examples/output/json
+go run ./cmd/edg stage --config _examples/output/config.yaml --format json -o _examples/output/json
 ```
 
 **Files produced:**
@@ -137,7 +137,7 @@ edg stage --config _examples/output/config.yaml --format json -o _examples/outpu
 One file per data-generating query, named `{section}_{query}.csv`. Each file includes a header row followed by data rows. DDL/DML queries without args are skipped.
 
 ```sh
-edg stage --config _examples/output/config.yaml --format csv -o _examples/output/csv
+go run ./cmd/edg stage --config _examples/output/config.yaml --format csv -o _examples/output/csv
 ```
 
 **Files produced:**
@@ -174,7 +174,7 @@ id,customer_id,amount,status
 One file per data-generating query, named `{section}_{query}.parquet`. All columns are stored as optional byte arrays (strings). DDL/DML queries without args are skipped.
 
 ```sh
-edg stage --config _examples/output/config.yaml --format parquet -o _examples/output/parquet
+go run ./cmd/edg stage --config _examples/output/config.yaml --format parquet -o _examples/output/parquet
 ```
 
 **Files produced:**
@@ -189,6 +189,27 @@ Parquet files can be inspected with tools like `parquet-tools`, DuckDB, or panda
 ```sh
 duckdb -c "SELECT * FROM '_examples/output/parquet/seed_populate_customer.parquet' LIMIT 5"
 ```
+
+### stdout
+
+Streams SQL statements directly to standard output as they are generated, with no files written. Useful for piping into a database client or other tools.
+
+```sh
+go run ./cmd/edg stage --config _examples/output/config.yaml --format stdout
+```
+
+Output is identical to the SQL format but printed to the console instead of written to files. DDL statements (up/down) and DML statements (seed/deseed) are written as-is; data-generating queries are expanded into individual `INSERT` statements.
+
+```sh
+# Pipe directly into a database
+go run ./cmd/edg stage --config _examples/output/config.yaml --format stdout | psql mydb
+
+# Preview the first few statements
+go run ./cmd/edg stage --config _examples/output/config.yaml --format stdout | head -20
+```
+
+> [!NOTE]
+> The `--output-dir` flag is ignored when using stdout format.
 
 ## Column naming
 

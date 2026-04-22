@@ -1,0 +1,78 @@
+globals:
+  customers: 10
+  batch_size: 5
+
+seq:
+  - name: customer_id
+    start: 1
+    step: 1
+  - name: order_id
+    start: 1
+    step: 1
+
+up:
+
+  - name: create_customer
+    query: |-
+      CREATE TABLE IF NOT EXISTS customer (
+        id INT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL
+      )
+
+  - name: create_order
+    query: |-
+      CREATE TABLE IF NOT EXISTS purchase_order (
+        id INT PRIMARY KEY,
+        customer_id INT NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        status VARCHAR(255) NOT NULL
+      )
+
+seed:
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    args:
+      id: seq_global("customer_id")
+      name: gen('name')
+      email: gen('email')
+    query: |-
+      INSERT INTO customer (id, name, email)
+      SELECT j1.val, j2.val, j3.val
+      FROM JSON_TABLE(CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j1
+      JOIN JSON_TABLE(CONCAT('["', REPLACE('$2', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j2
+      JOIN JSON_TABLE(CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j3
+
+  - name: populate_order
+    type: exec_batch
+    count: customers * 3
+    args:
+      id: seq_global("order_id")
+      customer_id: seq_rand("customer_id")
+      amount: uniform_f(9.99, 499.99, 2)
+      status: set_rand(['pending', 'shipped', 'delivered'], [])
+    query: |-
+      INSERT INTO purchase_order (id, customer_id, amount, status)
+      SELECT j1.val, j2.val, j3.val, j4.val
+      FROM JSON_TABLE(CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j1
+      JOIN JSON_TABLE(CONCAT('["', REPLACE('$2', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j2
+      JOIN JSON_TABLE(CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j3
+      JOIN JSON_TABLE(CONCAT('["', REPLACE('$4', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j4
+
+deseed:
+
+  - name: delete_orders
+    query: DELETE FROM purchase_order
+
+  - name: delete_customers
+    query: DELETE FROM customer
+
+down:
+
+  - name: drop_order
+    query: DROP TABLE IF EXISTS purchase_order
+
+  - name: drop_customer
+    query: DROP TABLE IF EXISTS customer
