@@ -63,6 +63,7 @@ type Env struct {
 
 	stmtCache map[*config.Query]*sql.Stmt
 
+	Retries int
 	Output  output.Writer
 	Results chan<- config.QueryResult
 }
@@ -932,20 +933,50 @@ func (e *Env) runRunItems(ctx context.Context, items []*config.RunItem) error {
 // When a rollback_if condition is set, it is evaluated after each
 // query; if it returns true the transaction is rolled back without
 // being treated as an error.
+//
+// When Retries > 0 the transaction is retried on error up to that
+// many additional times before reporting a failure.
 func (e *Env) runTransaction(ctx context.Context, tx *config.Transaction) error {
+	attempts := 1 + e.Retries
 	start := time.Now()
 
+	var lastErr error
+	for attempt := range attempts {
+		if attempt > 0 {
+			backoff := time.Duration(1<<attempt) * time.Millisecond
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				break
+			}
+		}
+		lastErr = e.tryTransaction(ctx, tx)
+		if lastErr == nil {
+			e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Latency: time.Since(start), Count: 1, IsTransaction: true})
+			return nil
+		}
+		if errors.Is(lastErr, ErrConditionalRollback) {
+			e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Latency: time.Since(start), Count: 1, IsTransaction: true, Rollback: true})
+			return nil
+		}
+		if ctx.Err() != nil {
+			break
+		}
+	}
+
+	e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Err: lastErr, IsTransaction: true})
+	return lastErr
+}
+
+func (e *Env) tryTransaction(ctx context.Context, tx *config.Transaction) error {
 	dbTx, err := e.db.BeginTx(ctx, nil)
 	if err != nil {
-		err = fmt.Errorf("beginning transaction %s: %w", tx.Name, err)
-		e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Err: err, IsTransaction: true})
-		return err
+		return fmt.Errorf("beginning transaction %s: %w", tx.Name, err)
 	}
 
 	if len(tx.CompiledLocals) > 0 {
 		if err := e.evalLocals(tx); err != nil {
 			_ = dbTx.Rollback()
-			e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Err: err, IsTransaction: true})
 			return err
 		}
 		defer e.clearLocals()
@@ -953,21 +984,13 @@ func (e *Env) runTransaction(ctx context.Context, tx *config.Transaction) error 
 
 	if err := e.runTransactionQueries(ctx, tx, dbTx); err != nil {
 		_ = dbTx.Rollback()
-		if errors.Is(err, ErrConditionalRollback) {
-			e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Latency: time.Since(start), Count: 1, IsTransaction: true, Rollback: true})
-			return nil
-		}
-		e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Err: err, IsTransaction: true})
 		return err
 	}
 
 	if err := dbTx.Commit(); err != nil {
-		err = fmt.Errorf("committing transaction %s: %w", tx.Name, err)
-		e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Err: err, IsTransaction: true})
-		return err
+		return fmt.Errorf("committing transaction %s: %w", tx.Name, err)
 	}
 
-	e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Latency: time.Since(start), Count: 1, IsTransaction: true})
 	return nil
 }
 

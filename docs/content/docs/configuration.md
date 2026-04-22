@@ -1174,9 +1174,38 @@ expectations:
 
 Expressions use the same [expr](https://expr-lang.org/) engine as arg expressions and must evaluate to a boolean.
 
+### Referencing globals
+
+Expectations can reference any variable defined in the `globals` section. This avoids hardcoding values that already exist in your config:
+
+```yaml
+globals:
+  accounts: 10000
+  max_error_pct: 5
+
+expectations:
+  - error_rate < max_error_pct
+  - query: SELECT COUNT(*) AS cnt FROM account
+    expr: cnt == accounts
+```
+
+Global names must not collide with built-in metrics (`error_rate`, `success_count`, `total_errors`, `tpm`). edg will reject the config at startup if they do.
+
+### Database-backed expectations
+
+An expectation can be an object with `query` and `expr` fields. The SQL query runs after the workload finishes and its first-row columns are available in the expression alongside globals and metrics:
+
+```yaml
+expectations:
+  - query: SELECT COUNT(*) AS cnt FROM account
+    expr: cnt == accounts
+  - query: SELECT SUM(balance) AS total FROM account
+    expr: total > 0
+```
+
 ### Available Metrics
 
-Expectations have access to both global metrics and per-query metrics. All latency values are in milliseconds and all error rates are percentages (0–100).
+Expectations have access to globals, global metrics, and per-query metrics. All latency values are in milliseconds and all error rates are percentages (0–100).
 
 #### Global metrics
 

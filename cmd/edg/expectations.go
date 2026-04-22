@@ -1,20 +1,26 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
+	"maps"
 	"time"
 
+	"github.com/codingconcepts/edg/pkg/config"
+	envpkg "github.com/codingconcepts/edg/pkg/env"
 	"github.com/expr-lang/expr"
 )
 
-func checkExpectations(expectations []string, stats map[string]*queryStats, elapsed time.Duration) error {
+func checkExpectations(db *sql.DB, expectations []config.Expectation, globals map[string]any, stats map[string]*queryStats, elapsed time.Duration) error {
 	if len(expectations) == 0 {
 		return nil
 	}
 
-	// Build the expression environment from collected stats.
+	// Build the expression environment from globals and collected stats.
 	env := map[string]any{}
+	maps.Copy(env, globals)
 
 	var totalCount int64
 	var totalErrors int64
@@ -33,49 +39,80 @@ func checkExpectations(expectations []string, stats map[string]*queryStats, elap
 		qps := float64(s.count) / elapsed.Seconds()
 
 		env[name] = map[string]any{
-			"success_count": s.count,
-			"error_count":   s.errors,
-			"error_rate":    errorRate(s.errors, len(s.latencies)),
-			"avg":           avg,
-			"p50":           float64(p50) / float64(time.Millisecond),
-			"p95":           float64(p95) / float64(time.Millisecond),
-			"p99":           float64(p99) / float64(time.Millisecond),
-			"qps":           qps,
+			config.MetricSuccessCount: s.count,
+			config.MetricErrorCount:   s.errors,
+			config.MetricErrorRate:    errorRate(s.errors, len(s.latencies)),
+			config.MetricAvg:          avg,
+			config.MetricP50:          float64(p50) / float64(time.Millisecond),
+			config.MetricP95:          float64(p95) / float64(time.Millisecond),
+			config.MetricP99:          float64(p99) / float64(time.Millisecond),
+			config.MetricQPS:          qps,
 		}
 	}
 
-	env["success_count"] = totalCount
-	env["total_errors"] = totalErrors
-	env["error_rate"] = errorRate(totalErrors, totalOps)
-	env["tpm"] = float64(totalCount) / elapsed.Minutes()
+	env[config.MetricSuccessCount] = totalCount
+	env[config.MetricTotalErrors] = totalErrors
+	env[config.MetricErrorRate] = errorRate(totalErrors, totalOps)
+	env[config.MetricTPM] = float64(totalCount) / elapsed.Minutes()
 
 	var failures int
 	slog.Info("expectations")
-	for _, check := range expectations {
-		program, err := expr.Compile(check, expr.Env(env), expr.AsBool())
+	for _, e := range expectations {
+		evalEnv := env
+
+		if e.Query != "" {
+			if db == nil {
+				slog.Error("expectation failed", "check", e.Expr, "error", "query expectation requires a database connection")
+				failures++
+				continue
+			}
+			rows, err := db.QueryContext(context.Background(), e.Query)
+			if err != nil {
+				slog.Error("expectation failed", "check", e.Expr, "error", err)
+				failures++
+				continue
+			}
+			data, err := envpkg.ReadRows(rows)
+			if err != nil {
+				slog.Error("expectation failed", "check", e.Expr, "error", err)
+				failures++
+				continue
+			}
+			if len(data) > 0 {
+				evalEnv = make(map[string]any, len(env)+len(data[0]))
+				for k, v := range env {
+					evalEnv[k] = v
+				}
+				for k, v := range data[0] {
+					evalEnv[k] = v
+				}
+			}
+		}
+
+		program, err := expr.Compile(e.Expr, expr.Env(evalEnv), expr.AsBool())
 		if err != nil {
-			slog.Error("expectation failed", "check", check, "error", err)
+			slog.Error("expectation failed", "check", e.Expr, "error", err)
 			failures++
 			continue
 		}
 
-		result, err := expr.Run(program, env)
+		result, err := expr.Run(program, evalEnv)
 		if err != nil {
-			slog.Error("expectation failed", "check", check, "error", err)
+			slog.Error("expectation failed", "check", e.Expr, "error", err)
 			failures++
 			continue
 		}
 
 		passed, ok := result.(bool)
 		if !ok {
-			slog.Warn("non-bool result", "check", check, "result", result)
+			slog.Warn("non-bool result", "check", e.Expr, "result", result)
 			continue
 		}
 
 		if passed {
-			slog.Info("expectation passed", "check", check)
+			slog.Info("expectation passed", "check", e.Expr)
 		} else {
-			slog.Error("expectation failed", "check", check)
+			slog.Error("expectation failed", "check", e.Expr)
 			failures++
 		}
 	}

@@ -94,14 +94,10 @@ docker compose -f _examples/compose_oracle.yml down
 
 ## Todos
 
+* Allow expectations to read the database before asserting (e.g. assert that a table contains N rows)
 * Validate the use of seq (instead of seq_global) when multiple workers are either passed via -w or configured via stages
 * Consider a nicer logic switching mechanism (e.g. switch)
 * Better error output
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences
 * Dry run mode
-* Output to file for testing and feeding other tools
-  * CSV
-  * JSON
-  * Parquet
-  * SQL
 * Unique constraint awareness

@@ -38,6 +38,8 @@ var (
 	flagRngSeed     uint64
 	flagLicense     string
 	flagMetricsAddr string
+	flagErrors      bool
+	flagRetries     int
 
 	version string
 )
@@ -77,6 +79,8 @@ func main() {
 	root.PersistentFlags().StringVar(&flagLicense, "license", "", "license key for enterprise drivers (env: EDG_LICENSE)")
 	root.PersistentFlags().Uint64Var(&flagRngSeed, "rng-seed", 0, "PRNG seed for deterministic output")
 	root.PersistentFlags().StringVar(&flagMetricsAddr, "metrics-addr", "", "address for Prometheus metrics endpoint (e.g. :9090)")
+	root.PersistentFlags().BoolVar(&flagErrors, "errors", false, "print worker errors to stderr")
+	root.PersistentFlags().IntVar(&flagRetries, "retries", 0, "number of transaction retry attempts on error")
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("rng-seed") {

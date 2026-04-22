@@ -95,3 +95,7 @@ expectations:
   - check_balance.p99 < 50
   - credit_account.p99 < 59
   - tpm > 1000
+  - query: SELECT COUNT(*) AS cnt FROM account
+    expr: cnt > 0
+  - query: SELECT SUM(balance) AS total FROM account
+    expr: total > 0

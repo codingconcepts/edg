@@ -88,7 +88,7 @@ type Request struct {
 	RunWeights   map[string]int              `json:"run_weights" yaml:"run_weights"`
 	Run          []*RunItem                  `json:"run" yaml:"run"`
 	Workers      []*Worker                   `json:"workers" yaml:"workers"`
-	Expectations []string                    `json:"expectations" yaml:"expectations"`
+	Expectations []Expectation               `json:"expectations" yaml:"expectations"`
 }
 
 // RunAllQueries returns a flat list of all queries in the run section,
@@ -134,22 +134,22 @@ type QueryResult struct {
 	Err           error
 	Count         int
 	IsTransaction bool
-	Rollback    bool
-	PrintAggs   []string
-	PrintValues []string
+	Rollback      bool
+	PrintAggs     []string
+	PrintValues   []string
 }
 
 type Query struct {
-	Name         string        `json:"name" yaml:"name"`
-	Type         QueryType     `json:"type" yaml:"type"`
-	Prepared     bool          `json:"prepared" yaml:"prepared"`
-	Wait         Duration      `json:"wait" yaml:"wait"`
-	Count        any           `json:"count" yaml:"count"`
-	Size         any           `json:"size" yaml:"size"`
-	Query        string        `json:"query" yaml:"query"`
-	Row          string        `json:"row" yaml:"row"`
-	Args         QueryArgs     `json:"args" yaml:"args"`
-	BatchFormat  string        `json:"batch_format" yaml:"batch_format"`
+	Name          string        `json:"name" yaml:"name"`
+	Type          QueryType     `json:"type" yaml:"type"`
+	Prepared      bool          `json:"prepared" yaml:"prepared"`
+	Wait          Duration      `json:"wait" yaml:"wait"`
+	Count         any           `json:"count" yaml:"count"`
+	Size          any           `json:"size" yaml:"size"`
+	Query         string        `json:"query" yaml:"query"`
+	Row           string        `json:"row" yaml:"row"`
+	Args          QueryArgs     `json:"args" yaml:"args"`
+	BatchFormat   string        `json:"batch_format" yaml:"batch_format"`
 	RollbackIf    string        `json:"rollback_if" yaml:"rollback_if"`
 	Print         []PrintExpr   `json:"print" yaml:"print"`
 	CompiledArgs  []*vm.Program `json:"-" yaml:"-"`
@@ -251,6 +251,28 @@ func (pe *PrintExpr) UnmarshalYAML(node *yaml.Node) error {
 		return err
 	}
 	*pe = PrintExpr(r)
+	return nil
+}
+
+// Expectation is a post-run assertion. It can be a plain boolean
+// expression string ("error_rate < 1") or an object with a SQL query
+// whose first-row columns are available in the expression.
+type Expectation struct {
+	Query string `json:"query" yaml:"query"`
+	Expr  string `json:"expr" yaml:"expr"`
+}
+
+func (e *Expectation) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		e.Expr = node.Value
+		return nil
+	}
+	type raw Expectation
+	var r raw
+	if err := node.Decode(&r); err != nil {
+		return err
+	}
+	*e = Expectation(r)
 	return nil
 }
 
@@ -413,6 +435,9 @@ func (r *Request) Validate() error {
 	if err := r.validateWorkers(); err != nil {
 		return err
 	}
+	if err := r.validateExpectationGlobals(); err != nil {
+		return err
+	}
 	return r.validateExpressions(groups)
 }
 
@@ -537,6 +562,38 @@ func (r *Request) validateWorkers() error {
 		}
 		if w.Rate.Times <= 0 || w.Rate.Interval <= 0 {
 			return fmt.Errorf("worker %d (%s): rate must have positive times and interval", i, w.Name)
+		}
+	}
+	return nil
+}
+
+const (
+	MetricSuccessCount = "success_count"
+	MetricTotalErrors  = "total_errors"
+	MetricErrorRate    = "error_rate"
+	MetricErrorCount   = "error_count"
+	MetricTPM          = "tpm"
+	MetricAvg          = "avg"
+	MetricP50          = "p50"
+	MetricP95          = "p95"
+	MetricP99          = "p99"
+	MetricQPS          = "qps"
+)
+
+var ReservedExpectationMetrics = map[string]bool{
+	MetricSuccessCount: true,
+	MetricTotalErrors:  true,
+	MetricErrorRate:    true,
+	MetricTPM:          true,
+}
+
+func (r *Request) validateExpectationGlobals() error {
+	if len(r.Expectations) == 0 {
+		return nil
+	}
+	for name := range r.Globals {
+		if ReservedExpectationMetrics[name] {
+			return fmt.Errorf("global %q shadows a built-in expectation metric", name)
 		}
 	}
 	return nil

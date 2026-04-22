@@ -1,0 +1,228 @@
+# Read/write anomalies workload for CockroachDB / PostgreSQL
+#
+# Generates traffic patterns that provoke read/write anomalies under
+# weak isolation levels. Under SERIALIZABLE (CockroachDB default),
+# these are prevented by transaction aborts; increase workers to
+# amplify contention and retry pressure.
+#
+# Anomalies modelled:
+#   lost_update - read-modify-write on a shared counter
+#   stale_read  - read-then-act while concurrent writes land
+#   write_skew  - disjoint writes that together violate an invariant
+
+globals:
+  counters: 100
+  accounts: 10000
+  doctors: 200
+  initial_balance: 10000
+
+up:
+
+  - name: create_counter
+    query: |-
+      CREATE TABLE IF NOT EXISTS counter (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        value INT NOT NULL DEFAULT 0
+      )
+
+  - name: create_account
+    query: |-
+      CREATE TABLE IF NOT EXISTS account (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        balance FLOAT NOT NULL
+      )
+
+  - name: create_on_call
+    query: |-
+      CREATE TABLE IF NOT EXISTS on_call (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        doctor_name STRING NOT NULL,
+        shift_date DATE NOT NULL,
+        on_duty BOOL NOT NULL DEFAULT true
+      )
+
+seed:
+
+  - name: populate_counter
+    args:
+      - counters
+    query: |-
+      INSERT INTO counter (value)
+      SELECT 0
+      FROM generate_series(1, $1::INT)
+
+  - name: populate_account
+    args:
+      - accounts
+      - initial_balance
+    query: |-
+      INSERT INTO account (balance)
+      SELECT $2::FLOAT
+      FROM generate_series(1, $1::INT)
+
+  - name: populate_on_call
+    args:
+      - doctors
+    query: |-
+      INSERT INTO on_call (doctor_name, shift_date, on_duty)
+      SELECT
+        'doctor-' || s::TEXT,
+        current_date + (s % 10)::INT,
+        true
+      FROM generate_series(1, $1::INT) AS s
+
+deseed:
+
+  - name: truncate_on_call
+    type: exec
+    query: TRUNCATE TABLE on_call
+
+  - name: truncate_account
+    type: exec
+    query: TRUNCATE TABLE account
+
+  - name: truncate_counter
+    type: exec
+    query: TRUNCATE TABLE counter
+
+down:
+
+  - name: drop_on_call
+    type: exec
+    query: DROP TABLE IF EXISTS on_call
+
+  - name: drop_account
+    type: exec
+    query: DROP TABLE IF EXISTS account
+
+  - name: drop_counter
+    type: exec
+    query: DROP TABLE IF EXISTS counter
+
+init:
+
+  - name: fetch_counters
+    type: query
+    query: SELECT id FROM counter ORDER BY random()
+
+  - name: fetch_accounts
+    type: query
+    query: SELECT id FROM account ORDER BY random()
+
+  - name: fetch_on_call
+    type: query
+    query: SELECT id FROM on_call WHERE on_duty = true ORDER BY random()
+
+run_weights:
+  lost_update: 30
+  credit_account: 20
+  stale_read: 20
+  write_skew: 30
+
+run:
+
+  # Lost update: two concurrent transactions read the same counter,
+  # each increments by 1, but one increment is lost because both
+  # started from the same value.
+  - transaction: lost_update
+    queries:
+      - name: read_counter
+        type: query
+        args:
+          - ref_rand('fetch_counters').id
+        query: |-
+          SELECT id, value FROM counter WHERE id = $1::UUID
+
+      - name: write_counter
+        type: exec
+        args:
+          - ref_same('read_counter').id
+          - ref_same('read_counter').value
+        query: |-
+          UPDATE counter SET value = $2::INT + 1 WHERE id = $1::UUID
+
+  # Concurrent modifier: credits accounts to create contention
+  # with the stale_read transaction below.
+  - name: credit_account
+    type: exec
+    args:
+      - ref_rand('fetch_accounts').id
+      - gen('number:1,500')
+    query: |-
+      UPDATE account SET balance = balance + $2::FLOAT
+      WHERE id = $1::UUID
+
+  # Stale read: reads a balance then acts on it. Under READ COMMITTED
+  # with concurrent credit_account writes, the balance read in step 1
+  # may already be outdated by the time the debit executes.
+  - transaction: stale_read
+    queries:
+      - name: read_balance
+        type: query
+        args:
+          - ref_rand('fetch_accounts').id
+        query: |-
+          SELECT id, balance FROM account WHERE id = $1::UUID
+
+      - rollback_if: "ref_same('read_balance').balance < 100"
+
+      - name: debit_account
+        type: exec
+        args:
+          - ref_same('read_balance').id
+        query: |-
+          UPDATE account SET balance = balance - 100 WHERE id = $1::UUID
+
+  # Write skew: two doctors on the same shift each check that at
+  # least two doctors are on duty, then go off duty. If both
+  # transactions commit, zero doctors remain; violating the
+  # coverage invariant.
+  - transaction: write_skew
+    queries:
+      - name: read_doctor
+        type: query
+        args:
+          - ref_rand('fetch_on_call').id
+        query: |-
+          SELECT id, shift_date
+          FROM on_call
+          WHERE id = $1::UUID AND on_duty = true
+
+      - name: check_coverage
+        type: query
+        args:
+          - ref_same('read_doctor').id
+        query: |-
+          SELECT COUNT(*) AS cnt
+          FROM on_call
+          WHERE shift_date = (SELECT shift_date FROM on_call WHERE id = $1::UUID)
+            AND on_duty = true
+
+      - rollback_if: "ref_same('check_coverage').cnt <= 1"
+
+      - name: go_off_duty
+        type: exec
+        args:
+          - ref_same('read_doctor').id
+        query: |-
+          UPDATE on_call SET on_duty = false WHERE id = $1::UUID
+
+expectations:
+  - error_rate < 5
+  - query: SELECT COUNT(*) AS cnt FROM counter
+    expr: cnt == counters
+  - query: SELECT SUM(value)::INT AS total FROM counter
+    expr: total > 0
+  - query: SELECT COUNT(*) AS cnt FROM account
+    expr: cnt == accounts
+  - query: SELECT COUNT(*) AS cnt FROM account WHERE balance < 0
+    expr: cnt == 0
+  - query: |-
+      SELECT COUNT(*) AS uncovered
+      FROM (
+        SELECT shift_date
+        FROM on_call
+        GROUP BY shift_date
+        HAVING COUNT(*) FILTER (WHERE on_duty = true) = 0
+      )
+    expr: uncovered == 0

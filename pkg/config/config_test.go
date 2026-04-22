@@ -105,13 +105,16 @@ run:
 expectations:
   - error_rate < 1
   - check_balance.p99 < 100
+  - query: SELECT COUNT(*) AS cnt FROM account
+    expr: cnt > 0
 `
 	var req Request
 	require.NoError(t, yaml.Unmarshal([]byte(input), &req))
 
-	require.Len(t, req.Expectations, 2)
-	assert.Equal(t, "error_rate < 1", req.Expectations[0])
-	assert.Equal(t, "check_balance.p99 < 100", req.Expectations[1])
+	require.Len(t, req.Expectations, 3)
+	assert.Equal(t, Expectation{Expr: "error_rate < 1"}, req.Expectations[0])
+	assert.Equal(t, Expectation{Expr: "check_balance.p99 < 100"}, req.Expectations[1])
+	assert.Equal(t, Expectation{Query: "SELECT COUNT(*) AS cnt FROM account", Expr: "cnt > 0"}, req.Expectations[2])
 }
 
 func TestDurationUnmarshalYAML(t *testing.T) {
@@ -928,4 +931,33 @@ down: !include shared/teardown.yaml
 	assert.Equal(t, "create_table", req.Up[0].Name)
 	require.Len(t, req.Down, 1)
 	assert.Equal(t, "drop_table", req.Down[0].Name)
+}
+
+func TestValidate_ExpectationGlobalShadowsMetric(t *testing.T) {
+	for _, metric := range []string{MetricSuccessCount, MetricTotalErrors, MetricErrorRate, MetricTPM} {
+		t.Run(metric, func(t *testing.T) {
+			req := &Request{
+				Globals:      map[string]any{metric: 42},
+				Expectations: []Expectation{{Expr: "true"}},
+			}
+			err := req.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "shadows a built-in expectation metric")
+		})
+	}
+}
+
+func TestValidate_ExpectationGlobalAllowed(t *testing.T) {
+	req := &Request{
+		Globals:      map[string]any{"accounts": 100},
+		Expectations: []Expectation{{Expr: "true"}},
+	}
+	require.NoError(t, req.Validate())
+}
+
+func TestValidate_GlobalShadowSkippedWithoutExpectations(t *testing.T) {
+	req := &Request{
+		Globals: map[string]any{MetricErrorRate: 42},
+	}
+	require.NoError(t, req.Validate())
 }

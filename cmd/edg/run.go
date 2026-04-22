@@ -39,7 +39,7 @@ func run(ctx context.Context, cancel context.CancelFunc, p workload.RunParams) e
 		return err
 	}
 
-	return checkExpectations(p.Req.Expectations, stats, elapsed)
+	return checkExpectations(p.DB, p.Req.Expectations, p.Req.Globals, stats, elapsed)
 }
 
 func runStages(ctx context.Context, _ context.CancelFunc, p workload.RunParams) (map[string]*queryStats, time.Duration, error) {
@@ -162,6 +162,7 @@ func startWorkers(ctx context.Context, numWorkers int, d workerDeps) *sync.WaitG
 			defer workerEnv.Close()
 			workerEnv.InitFrom(d.InitEnv)
 			workerEnv.SetSeqManager(d.SeqMgr)
+			workerEnv.Retries = flagRetries
 			workerEnv.Results = d.Results
 
 			for ctx.Err() == nil {
@@ -169,7 +170,9 @@ func startWorkers(ctx context.Context, numWorkers int, d workerDeps) *sync.WaitG
 					if ctx.Err() != nil {
 						return
 					}
-					slog.Error("run error", "worker", i, "error", err)
+					if flagErrors {
+						slog.Error("run error", "worker", i, "error", err)
+					}
 					continue
 				}
 			}

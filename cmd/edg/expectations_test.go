@@ -4,12 +4,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCheckExpectations_NoExpectations(t *testing.T) {
-	require.NoError(t, checkExpectations(nil, nil, time.Minute))
+	require.NoError(t, checkExpectations(nil, nil, nil, nil, time.Minute))
 }
 
 func TestCheckExpectations_AllPass(t *testing.T) {
@@ -22,16 +24,16 @@ func TestCheckExpectations_AllPass(t *testing.T) {
 		},
 	}
 
-	expectations := []string{
-		"error_rate < 1",
-		"error_rate < 0.5",
-		"read_balance.error_rate < 1",
-		"read_balance.error_count < 10",
-		"read_balance.p99 < 100",
-		"read_balance.qps > 10",
+	expectations := []config.Expectation{
+		{Expr: "error_rate < 1"},
+		{Expr: "error_rate < 0.5"},
+		{Expr: "read_balance.error_rate < 1"},
+		{Expr: "read_balance.error_count < 10"},
+		{Expr: "read_balance.p99 < 100"},
+		{Expr: "read_balance.qps > 10"},
 	}
 
-	require.NoError(t, checkExpectations(expectations, stats, time.Minute))
+	require.NoError(t, checkExpectations(nil, expectations, nil, stats, time.Minute))
 }
 
 func TestCheckExpectations_SomeFail(t *testing.T) {
@@ -44,23 +46,19 @@ func TestCheckExpectations_SomeFail(t *testing.T) {
 		},
 	}
 
-	expectations := []string{
-		"error_rate < 1",        // 20/(100+20)=16.7% -> FAIL
-		"success_count > 0",     // 100 -> PASS
-		"slow_query.avg < 100",  // 1000ms -> FAIL
+	expectations := []config.Expectation{
+		{Expr: "error_rate < 1"},       // 20/(100+20)=16.7% -> FAIL
+		{Expr: "success_count > 0"},    // 100 -> PASS
+		{Expr: "slow_query.avg < 100"}, // 1000ms -> FAIL
 	}
 
-	err := checkExpectations(expectations, stats, time.Minute)
+	err := checkExpectations(nil, expectations, nil, stats, time.Minute)
 	require.Error(t, err)
 	require.EqualError(t, err, "2 expectation(s) failed")
 }
 
 func TestCheckExpectations_InvalidExpression(t *testing.T) {
-	stats := map[string]*queryStats{}
-
-	expectations := []string{"??? invalid"}
-
-	err := checkExpectations(expectations, stats, time.Minute)
+	err := checkExpectations(nil, []config.Expectation{{Expr: "??? invalid"}}, nil, nil, time.Minute)
 	require.Error(t, err)
 }
 
@@ -80,12 +78,12 @@ func TestCheckExpectations_PerQueryMetrics(t *testing.T) {
 		},
 	}
 
-	expectations := []string{
-		"fast_query.p99 < 50",
-		"slow_query.p99 > 500",
+	expectations := []config.Expectation{
+		{Expr: "fast_query.p99 < 50"},
+		{Expr: "slow_query.p99 > 500"},
 	}
 
-	require.NoError(t, checkExpectations(expectations, stats, time.Minute))
+	require.NoError(t, checkExpectations(nil, expectations, nil, stats, time.Minute))
 }
 
 func TestCheckExpectations_TotalMetrics(t *testing.T) {
@@ -104,13 +102,116 @@ func TestCheckExpectations_TotalMetrics(t *testing.T) {
 		},
 	}
 
-	expectations := []string{
-		"success_count == 1000",
-		"total_errors == 5",
-		"tpm > 0",
+	expectations := []config.Expectation{
+		{Expr: "success_count == 1000"},
+		{Expr: "total_errors == 5"},
+		{Expr: "tpm > 0"},
 	}
 
-	require.NoError(t, checkExpectations(expectations, stats, time.Minute))
+	require.NoError(t, checkExpectations(nil, expectations, nil, stats, time.Minute))
+}
+
+func TestCheckExpectations_QueryExpectation(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT COUNT").
+		WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(int64(42)))
+
+	expectations := []config.Expectation{
+		{Query: "SELECT COUNT(*) AS cnt FROM account", Expr: "cnt == 42"},
+	}
+
+	require.NoError(t, checkExpectations(db, expectations, nil, nil, time.Minute))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCheckExpectations_QueryExpectationFail(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT COUNT").
+		WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(int64(0)))
+
+	expectations := []config.Expectation{
+		{Query: "SELECT COUNT(*) AS cnt FROM account", Expr: "cnt > 0"},
+	}
+
+	err = checkExpectations(db, expectations, nil, nil, time.Minute)
+	require.Error(t, err)
+	require.EqualError(t, err, "1 expectation(s) failed")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCheckExpectations_MixedExpectations(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT COUNT").
+		WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(int64(100)))
+
+	stats := map[string]*queryStats{
+		"q1": {
+			count:        500,
+			errors:       0,
+			totalLatency: 5 * time.Second,
+			latencies:    makeDurations(500, 10*time.Millisecond),
+		},
+	}
+
+	expectations := []config.Expectation{
+		{Expr: "error_rate < 1"},
+		{Query: "SELECT COUNT(*) AS cnt FROM account", Expr: "cnt == 100"},
+	}
+
+	require.NoError(t, checkExpectations(db, expectations, nil, stats, time.Minute))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCheckExpectations_GlobalVariables(t *testing.T) {
+	globals := map[string]any{
+		"account_count": 100,
+		"max_error_pct": 5.0,
+	}
+
+	stats := map[string]*queryStats{
+		"q1": {
+			count:        100,
+			errors:       2,
+			totalLatency: 5 * time.Second,
+			latencies:    makeDurations(100, 50*time.Millisecond),
+		},
+	}
+
+	expectations := []config.Expectation{
+		{Expr: "success_count == account_count"},
+		{Expr: "error_rate < max_error_pct"},
+	}
+
+	require.NoError(t, checkExpectations(nil, expectations, globals, stats, time.Minute))
+}
+
+func TestCheckExpectations_GlobalVariablesWithQuery(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery("SELECT COUNT").
+		WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(int64(42)))
+
+	globals := map[string]any{
+		"expected_rows": int64(42),
+	}
+
+	expectations := []config.Expectation{
+		{Query: "SELECT COUNT(*) AS cnt FROM account", Expr: "cnt == expected_rows"},
+	}
+
+	require.NoError(t, checkExpectations(db, expectations, globals, nil, time.Minute))
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestErrorRate(t *testing.T) {

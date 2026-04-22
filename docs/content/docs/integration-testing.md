@@ -174,6 +174,19 @@ expectations:
   - error_rate < 0.5 && tpm > 10000
 ```
 
+**Referencing globals** - use variables from the `globals` section to avoid hardcoding values:
+
+```yaml
+globals:
+  accounts: 10000
+  max_error_pct: 5
+
+expectations:
+  - error_rate < max_error_pct
+  - query: SELECT COUNT(*) AS cnt FROM account
+    expr: cnt == accounts
+```
+
 ## Multiple test scenarios
 
 Use separate config files for different test scenarios, or use [!includes]({{< relref "configuration" >}}#includes) to share schema definitions while varying seed data and workloads:
