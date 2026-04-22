@@ -75,7 +75,7 @@ A complete edg YAML config with all applicable sections:
 - Sequence counter continues across seed and run phases
 - To reference existing sequence values, use `seq_rand("name")` (uniform) or distribution variants:
   `seq_zipf("name", s, v)`, `seq_norm("name", mean, stddev)`, `seq_exp("name", rate)`, `seq_lognorm("name", mu, sigma)`
-- These compute valid values from `start + index * step` — no values stored in memory, works with any step
+- These compute valid values from `start + index * step` (no values stored in memory, works with any step)
 
 ### Reference data
 - Use `init` section with `type: query` to fetch data from seeded tables into named datasets
@@ -431,4 +431,41 @@ After generating the config, remind the user to validate it:
 
 ```sh
 edg validate config --config <path>
+```
+
+## Staging (file output without a database)
+
+The `edg stage` command generates data to files instead of executing against a database. No `--url` or database connection is required. This is useful for previewing generated data, loading into external tools, or generating migration scripts.
+
+```sh
+edg stage --config <path> --format <format> --output-dir <dir>
+```
+
+| Flag | Short | Default | Description |
+|---|---|---|---|
+| `--format` | `-f` | `sql` | Output format: `sql`, `json`, `csv`, or `parquet` |
+| `--output-dir` | `-o` | `.` | Directory for output files (created if it doesn't exist) |
+
+### Output formats
+
+| Format | File naming | Description |
+|---|---|---|
+| `sql` | `{section}.sql` | Executable SQL statements (DDL + one `INSERT` per generated row) |
+| `json` | `{section}.json` | Objects keyed by query name (data-generating queries only) |
+| `csv` | `{section}_{query}.csv` | CSV with headers per data-generating query |
+| `parquet` | `{section}_{query}.parquet` | Apache Parquet per data-generating query (all columns as optional byte arrays) |
+
+### Key behaviours
+
+- Batch queries (`exec_batch`) are expanded into individual rows. The batch CSV-joining logic is bypassed
+- Referential integrity is preserved: generated data from earlier queries is stored in memory for `ref_rand`, `ref_each`, `seq_rand`, etc.
+- The `--driver` flag still controls SQL value formatting (quote style, hex literals)
+- The `--rng-seed` flag produces deterministic, reproducible output
+- Column names come from: named args > INSERT column list > fallback `col_1`, `col_2`, etc.
+- DDL/DML without args (CREATE, DROP, DELETE, TRUNCATE) is included in SQL output but skipped in JSON/CSV/Parquet
+
+After generating the config, suggest staging to preview data:
+
+```sh
+edg stage --config workload.yaml --format csv -o ./preview
 ```

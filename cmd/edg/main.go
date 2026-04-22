@@ -118,6 +118,7 @@ func main() {
 		workload.DownCmd(deps),
 		workload.RunCmd(deps),
 		workload.AllCmd(deps),
+		stageCmd(),
 		replCmd(),
 		validateCmd(),
 		versionCmd(),

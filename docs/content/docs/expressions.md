@@ -66,7 +66,7 @@ These are edg's built-in functions, available in any expression context (`args:`
 | `regex(pattern)` | `string` | Generates a random string matching the given regular expression.<br><br>`regex('[A-Z]{3}-[0-9]{4}')` -> `ABK-7291` |
 | `seq(start, step)` | `int` | Auto-incrementing sequence per worker. Returns `start + counter * step`.<br><br>`seq(1, 1)` -> `1` |
 | `seq_global(name)` | `int` | Shared auto-incrementing sequence across all workers. Returns the next value from a named sequence defined in the [`seq`]({{< relref "configuration#seq" >}}) config section. Thread-safe via atomic counters.<br><br>`seq_global("order_id")` -> `1` |
-| `seq_rand(name)` | `int` | Uniform random value from the already-generated values of a global sequence. Computes valid values from the sequence's start, step, and current counter — no values stored in memory.<br><br>`seq_rand("order_id")` -> `42` |
+| `seq_rand(name)` | `int` | Uniform random value from the already-generated values of a global sequence. Computes valid values from the sequence's start, step, and current counter (no values stored in memory).<br><br>`seq_rand("order_id")` -> `42` |
 | `seq_zipf(name, s, v)` | `int` | Zipfian-distributed value from a global sequence. Lower indices (earlier values) are selected more frequently. `s` (> 1) and `v` (>= 1) control the distribution shape.<br><br>`seq_zipf("order_id", 2.0, 1.0)` -> `3` |
 | `seq_norm(name, mean, stddev)` | `int` | Normally-distributed value from a global sequence. `mean` and `stddev` are index positions (0-based).<br><br>`seq_norm("order_id", 500, 100)` -> `487` |
 | `seq_exp(name, rate)` | `int` | Exponentially-distributed value from a global sequence. Lower indices are selected more frequently.<br><br>`seq_exp("order_id", 0.5)` -> `7` |
@@ -111,7 +111,7 @@ Several functions maintain state. Understanding when that state resets is import
 | `ref_same(name)` | Per-query | Picks a row on first call within a query; all subsequent `ref_same` calls for the same dataset within that query return the same row. **Cleared before the next query.** |
 | `seq(start, step)` | Per-worker | Counter starts at 0 for each worker and increments on every call. Two workers both calling `seq(1, 1)` will produce the same sequence independently -- values are **not globally unique**. |
 | `seq_global(name)` | Global | Single counter shared across all workers via atomic increment. Values are **globally unique**. Configured in the [`seq`]({{< relref "configuration#seq" >}}) config section. |
-| `seq_rand` / `seq_zipf` / `seq_norm` / `seq_exp` / `seq_lognorm` | Global | Pick from already-generated sequence values using the named distribution. The valid value set grows as `seq_global` advances the counter. No values are stored in memory — valid values are computed from `start + index * step`. |
+| `seq_rand` / `seq_zipf` / `seq_norm` / `seq_exp` / `seq_lognorm` | Global | Pick from already-generated sequence values using the named distribution. The valid value set grows as `seq_global` advances the counter. No values are stored in memory. Valid values are computed from `start + index * step`. |
 | `vector` / `vector_zipf` / `vector_norm` | Per-worker | Cluster centroids are generated on first call (keyed by dims+clusters) and reused for the worker's lifetime. Each call picks a centroid (uniform, Zipfian, or normal) and adds noise. |
 
 ## User-Defined Expressions

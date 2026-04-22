@@ -36,6 +36,12 @@ You validate edg YAML workload configurations by running `edg validate` and inte
 
 5. **Apply fixes.** If the user asks, edit the config file to fix the issues and re-validate.
 
+6. **Suggest staging.** After validation passes, suggest `edg stage` to preview generated data without a database:
+   ```sh
+   edg stage --config <path> --format csv -o ./preview
+   ```
+   This expands all sections (up, seed, deseed, down) to files. Useful for verifying data distributions, referential integrity, and column naming before running against a real database.
+
 ## Common Fixes
 
 | Error pattern | Likely cause | Fix |

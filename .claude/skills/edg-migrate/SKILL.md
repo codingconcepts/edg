@@ -115,4 +115,9 @@ Apply the following transformations based on the source and target driver. edg h
 4. Preserve all edg expression args unchanged (they are driver-agnostic)
 5. Preserve globals, expressions, reference, run_weights, and other non-SQL sections unchanged
 6. If the source uses `batch_format`, adjust for the target driver
-7. Remind the user to validate: `edg validate --driver <target> --config <path>`
+7. Remind the user to validate: `edg validate config --driver <target> --config <path>`
+8. Suggest staging to preview the migrated output without a database:
+   ```sh
+   edg stage --config <path> --format sql -o ./preview
+   ```
+   This generates data to files, letting the user inspect SQL syntax, value formatting, and data distributions for the target driver before connecting to a real database.

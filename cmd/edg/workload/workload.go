@@ -109,6 +109,7 @@ func UpCmd(deps Deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			return e.Up(cmd.Context())
 		},
 	}
@@ -130,6 +131,7 @@ func SeedCmd(deps Deps) *cobra.Command {
 				return err
 			}
 			e.SetSeqManager(seq.NewManager(req.Seq))
+
 			return e.Seed(cmd.Context())
 		},
 	}
@@ -150,6 +152,7 @@ func DeseedCmd(deps Deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			return e.Deseed(cmd.Context())
 		},
 	}
@@ -170,6 +173,7 @@ func DownCmd(deps Deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			return e.Down(cmd.Context())
 		},
 	}
