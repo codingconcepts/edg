@@ -1,6 +1,6 @@
 ---
 title: Introduction
-weight: 2
+weight: 1
 ---
 
 # Introduction
@@ -101,8 +101,8 @@ This creates the table, seeds 1,000 users, runs random lookups with 10 concurren
 
 ## What next?
 
-- [CLI Reference]({{< relref "cli-reference" >}}) -- all commands and flags
 - [Configuration]({{< relref "configuration" >}}) -- full YAML config reference
 - [Expressions]({{< relref "expressions" >}}) -- every built-in function and the expr-lang feature set
+- [CLI Reference]({{< relref "cli-reference" >}}) -- all commands and flags
 - [Example Workloads]({{< relref "example-workloads" >}}) -- TPC-C, e-commerce, IoT, and more
 - [Integration Testing]({{< relref "integration-testing" >}}) -- using edg to seed databases for integration tests

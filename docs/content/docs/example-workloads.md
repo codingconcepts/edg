@@ -1,6 +1,7 @@
 ---
 title: Example Workloads
 weight: 6
+bookToc: false
 ---
 
 # Example Workloads
