@@ -146,6 +146,10 @@ func (e *Env) refDiff(name string) map[string]any {
 // where each inner slice contains one row's column values in order.
 // Used in arg expressions to drive batched query execution.
 func (e *Env) refEach(query string) ([][]any, error) {
+	if e.db == nil {
+		return nil, fmt.Errorf("ref_each requires a database connection and cannot be used with the stage command")
+	}
+
 	rows, err := e.db.QueryContext(context.Background(), query)
 	if err != nil {
 		return nil, fmt.Errorf("ref_each: query failed: %w", err)

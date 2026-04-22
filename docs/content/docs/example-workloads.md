@@ -15,6 +15,7 @@ Complete workload configs you can run directly or use as starting points for you
 | [CH-benCHmark](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/ch_benchmark/) | Mixed OLTP+OLAP workload combining TPC-C transactions with TPC-H-style analytical queries |
 | [Batch](https://github.com/codingconcepts/edg/tree/main/_examples/batch/) | Demonstrates `query_batch` and `exec_batch` query types for batch inserts and updates |
 | [Blob](https://github.com/codingconcepts/edg/tree/main/_examples/blob/) | Binary data with `blob()` (all databases) and `bytes()` (PostgreSQL/CockroachDB) |
+| [Composite Types](https://github.com/codingconcepts/edg/tree/main/_examples/composite_types/) | PostgreSQL/CockroachDB composite types (`CREATE TYPE ... AS (...)`) as column types with `ROW(...)::type` construction and `(col).field` access |
 | [Distributions](https://github.com/codingconcepts/edg/tree/main/_examples/distributions/) | All five distribution functions (uniform, zipf, norm_f, exp_f, lognorm_f) |
 | [E-Commerce](https://github.com/codingconcepts/edg/tree/main/_examples/ecommerce/) | E-commerce with categories, products, customers, and orders |
 | [Each Cartesian](https://github.com/codingconcepts/edg/tree/main/_examples/each_cartesian/) | Cartesian product seeding with `ref_each` across multiple tables |

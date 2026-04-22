@@ -1,0 +1,193 @@
+globals:
+  products: 10
+  orders: 50
+  batch_size: 10
+
+seq:
+  - name: product_id
+    start: 1
+    step: 1
+
+up:
+
+  - name: create_amount_type
+    type: exec
+    query: |-
+      CREATE TYPE IF NOT EXISTS amount AS (
+        val DECIMAL,
+        currency STRING
+      )
+
+  - name: create_dimensions_type
+    type: exec
+    query: |-
+      CREATE TYPE IF NOT EXISTS dimensions AS (
+        length DECIMAL,
+        width DECIMAL,
+        height DECIMAL,
+        unit STRING
+      )
+
+  - name: create_product
+    query: |-
+      CREATE TABLE IF NOT EXISTS product (
+        id INT PRIMARY KEY,
+        name STRING NOT NULL,
+        price amount NOT NULL,
+        shipping_dimensions dimensions,
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+  - name: create_order
+    query: |-
+      CREATE TABLE IF NOT EXISTS "order" (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id INT NOT NULL REFERENCES product(id),
+        quantity INT NOT NULL DEFAULT 1,
+        total amount NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+seed:
+
+  - name: populate_product
+    type: exec
+    count: products
+    args:
+      - seq_global("product_id")
+      - gen('sentence:3')
+      - norm_f(100, 60, 1, 500, 2)
+      - set_rand(['USD','EUR','GBP'], [])
+      - norm_f(40, 15, 1, 100, 1)
+      - norm_f(20, 8, 1, 50, 1)
+      - norm_f(12, 5, 1, 30, 1)
+      - set_rand(['cm','in'], [])
+    query: |-
+      INSERT INTO product (id, name, price, shipping_dimensions)
+      VALUES (
+        $1::INT,
+        $2,
+        ROW($3::DECIMAL, $4::STRING)::amount,
+        ROW($5::DECIMAL, $6::DECIMAL, $7::DECIMAL, $8::STRING)::dimensions
+      )
+
+  - name: populate_order
+    type: exec
+    count: orders
+    args:
+      - seq_rand("product_id")
+      - norm_f(100, 60, 1, 500, 2)
+      - set_rand(['USD','EUR','GBP'], [])
+      - set_norm([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 2, 0.7)
+    query: |-
+      INSERT INTO "order" (product_id, quantity, total)
+      VALUES (
+        $1::INT,
+        $4::INT,
+        ROW($2::DECIMAL * $4::INT, $3::STRING)::amount
+      )
+
+deseed:
+
+  - name: truncate_order
+    type: exec
+    query: TRUNCATE TABLE "order"
+
+  - name: truncate_product
+    type: exec
+    query: TRUNCATE TABLE product CASCADE
+
+down:
+
+  - name: drop_order
+    type: exec
+    query: DROP TABLE IF EXISTS "order"
+
+  - name: drop_product
+    type: exec
+    query: DROP TABLE IF EXISTS product
+
+  - name: drop_dimensions_type
+    type: exec
+    query: DROP TYPE IF EXISTS dimensions
+
+  - name: drop_amount_type
+    type: exec
+    query: DROP TYPE IF EXISTS amount
+
+init:
+
+  - name: fetch_products
+    type: query
+    query: SELECT id, price FROM product ORDER BY random()
+
+run_weights:
+  browse_products: 40
+  place_order: 20
+  order_summary: 20
+  revenue_by_currency: 20
+
+run:
+
+  - name: browse_products
+    type: query
+    args:
+      - set_rand(['USD','EUR','GBP'], [])
+    query: |-
+      SELECT
+        id,
+        name,
+        (price).val AS price_val,
+        (price).currency AS price_currency,
+        (shipping_dimensions).length AS dim_l,
+        (shipping_dimensions).width AS dim_w,
+        (shipping_dimensions).height AS dim_h,
+        (shipping_dimensions).unit AS dim_unit
+      FROM product
+      WHERE (price).currency = $1::STRING
+      ORDER BY (price).val ASC
+      LIMIT 20
+
+  - name: place_order
+    type: exec
+    args:
+      - ref_rand('fetch_products').id
+      - ref_rand('fetch_products').price
+      - set_norm([1, 2, 3, 4, 5], 2, 0.8)
+    query: |-
+      INSERT INTO "order" (product_id, quantity, total)
+      VALUES (
+        $1::INT,
+        $3::INT,
+        ROW(
+          ($2::amount).val * $3::INT,
+          ($2::amount).currency
+        )::amount
+      )
+
+  - name: order_summary
+    type: query
+    args:
+      - ref_rand('fetch_products').id
+    query: |-
+      SELECT
+        p.name,
+        (p.price).val AS unit_price,
+        (p.price).currency,
+        SUM(o.quantity) AS total_qty,
+        SUM((o.total).val) AS total_revenue
+      FROM "order" o
+      JOIN product p ON p.id = o.product_id
+      WHERE o.product_id = $1::INT
+      GROUP BY p.name, (p.price).val, (p.price).currency
+
+  - name: revenue_by_currency
+    type: query
+    query: |-
+      SELECT
+        (total).currency,
+        COUNT(*) AS order_count,
+        SUM((total).val) AS revenue
+      FROM "order"
+      GROUP BY (total).currency
+      ORDER BY revenue DESC

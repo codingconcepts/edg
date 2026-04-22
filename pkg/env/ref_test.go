@@ -228,6 +228,15 @@ func TestRefEach_NoRows(t *testing.T) {
 	assert.Equal(t, 0, len(got))
 }
 
+func TestRefEach_NilDB(t *testing.T) {
+	env := &Env{db: nil}
+	got, err := env.refEach("SELECT id FROM items")
+
+	require.Error(t, err)
+	assert.Nil(t, got)
+	assert.Contains(t, err.Error(), "requires a database connection")
+}
+
 func BenchmarkRefRand(b *testing.B) {
 	cases := []struct {
 		name string
