@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/ed25519"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -29,7 +30,7 @@ func validateConfigCmd() *cobra.Command {
 		Short: "Validate a config file",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if configFile == "" {
-				return fmt.Errorf("--config flag required")
+				return errors.New("--config flag required")
 			}
 
 			req, err := config.LoadConfig(configFile)
@@ -57,7 +58,7 @@ func validateLicenseCmd() *cobra.Command {
 				licStr = os.Getenv("EDG_LICENSE")
 			}
 			if licStr == "" {
-				return fmt.Errorf("--license flag or EDG_LICENSE env var required")
+				return errors.New("--license flag or EDG_LICENSE env var required")
 			}
 
 			pubBytes, err := base64.StdEncoding.DecodeString(strings.TrimSpace(publicKeyB64))

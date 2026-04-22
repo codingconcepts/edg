@@ -1,7 +1,7 @@
 package schema
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 )
 
@@ -90,7 +90,7 @@ func SortTables(tables []Table) ([]Table, error) {
 
 	// Check for cyclic dependencies and fail if found.
 	if len(sortedTables) != len(tables) {
-		return nil, fmt.Errorf("cyclic dependency detected")
+		return nil, errors.New("cyclic dependency detected")
 	}
 
 	return sortedTables, nil

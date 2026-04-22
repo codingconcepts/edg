@@ -3,7 +3,6 @@ package env
 import (
 	"fmt"
 	"strings"
-	"sync/atomic"
 
 	"github.com/codingconcepts/edg/pkg/convert"
 	"github.com/codingconcepts/edg/pkg/random"
@@ -178,7 +177,7 @@ func (e *Env) seq(rawStart, rawStep any) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("seq step: %w", err)
 	}
-	counter := atomic.AddInt64(&e.seqCounter, 1) - 1
+	counter := e.seqCounter.Add(1) - 1
 	return int64(s) + counter*int64(st), nil
 }
 

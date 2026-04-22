@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 
@@ -23,7 +24,7 @@ func initCmd() *cobra.Command {
 				target = schemaName
 			}
 			if target == "" {
-				return fmt.Errorf("--schema or --database flag required")
+				return errors.New("--schema or --database flag required")
 			}
 
 			url := flagURL
@@ -31,7 +32,7 @@ func initCmd() *cobra.Command {
 				url = os.Getenv("URL")
 			}
 			if url == "" {
-				return fmt.Errorf("--url flag or URL env var required")
+				return errors.New("--url flag or URL env var required")
 			}
 
 			db, err := openDB(cmd.Context(), flagDriver, url)

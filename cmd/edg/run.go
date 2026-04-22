@@ -7,12 +7,21 @@ import (
 	"sync"
 	"time"
 
+	"github.com/codingconcepts/edg/cmd/edg/workload"
 	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/codingconcepts/edg/pkg/env"
 	"github.com/codingconcepts/edg/pkg/seq"
 )
 
-func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config.Request, duration time.Duration, workers int, printInterval time.Duration) error {
+type workerDeps struct {
+	DB      *sql.DB
+	Req     *config.Request
+	InitEnv *env.Env
+	Results chan<- config.QueryResult
+	SeqMgr  *seq.Manager
+}
+
+func run(ctx context.Context, cancel context.CancelFunc, p workload.RunParams) error {
 	if flagMetricsAddr != "" {
 		go startMetricsServer(flagMetricsAddr)
 	}
@@ -21,22 +30,22 @@ func run(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config
 	var elapsed time.Duration
 	var err error
 
-	if len(req.Stages) > 0 {
-		stats, elapsed, err = runStages(ctx, cancel, db, req, printInterval)
+	if len(p.Req.Stages) > 0 {
+		stats, elapsed, err = runStages(ctx, cancel, p)
 	} else {
-		stats, elapsed, err = runStage(ctx, cancel, db, req, duration, workers, printInterval)
+		stats, elapsed, err = runStage(ctx, cancel, p)
 	}
 	if err != nil {
 		return err
 	}
 
-	return checkExpectations(req.Expectations, stats, elapsed)
+	return checkExpectations(p.Req.Expectations, stats, elapsed)
 }
 
-func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *config.Request, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
-	seqMgr := seq.NewManager(req.Seq)
+func runStages(ctx context.Context, _ context.CancelFunc, p workload.RunParams) (map[string]*queryStats, time.Duration, error) {
+	seqMgr := seq.NewManager(p.Req.Seq)
 
-	initEnv, err := env.NewEnv(db, flagDriver, req)
+	initEnv, err := env.NewEnv(p.DB, flagDriver, p.Req)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -49,14 +58,16 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *confi
 	results := make(chan config.QueryResult, 1000)
 	start := time.Now()
 
+	deps := workerDeps{DB: p.DB, Req: p.Req, InitEnv: initEnv, Results: results, SeqMgr: seqMgr}
+
 	go func() {
 		defer close(results)
 
 		bgCtx, bgCancel := context.WithCancel(ctx)
 		defer bgCancel()
-		bgWg := startBackgroundWorkers(bgCtx, db, req, initEnv, results, seqMgr)
+		bgWg := startBackgroundWorkers(bgCtx, deps)
 
-		for _, stage := range req.Stages {
+		for _, stage := range p.Req.Stages {
 			if ctx.Err() != nil {
 				break
 			}
@@ -71,7 +82,7 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *confi
 			metricWorkers.Set(float64(workers))
 
 			stageCtx, stageCancel := context.WithTimeout(ctx, dur)
-			wg := startWorkers(stageCtx, workers, db, req, initEnv, results, seqMgr)
+			wg := startWorkers(stageCtx, workers, deps)
 			wg.Wait()
 			stageCancel()
 		}
@@ -81,25 +92,25 @@ func runStages(ctx context.Context, _ context.CancelFunc, db *sql.DB, req *confi
 	}()
 
 	totalWorkers := 0
-	for _, s := range req.Stages {
+	for _, s := range p.Req.Stages {
 		if s.Workers > totalWorkers {
 			totalWorkers = s.Workers
 		}
 	}
 	var totalDuration time.Duration
-	for _, s := range req.Stages {
+	for _, s := range p.Req.Stages {
 		totalDuration += time.Duration(s.Duration)
 	}
 
-	stats := printResults(results, printInterval, start, totalWorkers, totalDuration)
+	stats := printResults(results, p.PrintInterval, start, totalWorkers, totalDuration)
 
 	return stats, time.Since(start), nil
 }
 
-func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config.Request, duration time.Duration, workers int, printInterval time.Duration) (map[string]*queryStats, time.Duration, error) {
-	seqMgr := seq.NewManager(req.Seq)
+func runStage(ctx context.Context, cancel context.CancelFunc, p workload.RunParams) (map[string]*queryStats, time.Duration, error) {
+	seqMgr := seq.NewManager(p.Req.Seq)
 
-	initEnv, err := env.NewEnv(db, flagDriver, req)
+	initEnv, err := env.NewEnv(p.DB, flagDriver, p.Req)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -109,19 +120,21 @@ func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *c
 		return nil, 0, err
 	}
 
-	results := make(chan config.QueryResult, workers*100)
+	results := make(chan config.QueryResult, p.Workers*100)
 	start := time.Now()
 
 	go func() {
 		select {
-		case <-time.After(duration):
+		case <-time.After(p.Duration):
 			cancel()
 		case <-ctx.Done():
 		}
 	}()
 
-	wg := startWorkers(ctx, workers, db, req, initEnv, results, seqMgr)
-	bgWg := startBackgroundWorkers(ctx, db, req, initEnv, results, seqMgr)
+	deps := workerDeps{DB: p.DB, Req: p.Req, InitEnv: initEnv, Results: results, SeqMgr: seqMgr}
+
+	wg := startWorkers(ctx, p.Workers, deps)
+	bgWg := startBackgroundWorkers(ctx, deps)
 
 	go func() {
 		wg.Wait()
@@ -129,27 +142,27 @@ func runStage(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *c
 		close(results)
 	}()
 
-	metricWorkers.Set(float64(workers))
-	slog.Info("running", "workers", workers, "duration", duration)
-	stats := printResults(results, printInterval, start, workers, duration)
+	metricWorkers.Set(float64(p.Workers))
+	slog.Info("running", "workers", p.Workers, "duration", p.Duration)
+	stats := printResults(results, p.PrintInterval, start, p.Workers, p.Duration)
 
 	return stats, time.Since(start), nil
 }
 
-func startWorkers(ctx context.Context, numWorkers int, db *sql.DB, req *config.Request, initEnv *env.Env, results chan<- config.QueryResult, seqMgr *seq.Manager) *sync.WaitGroup {
+func startWorkers(ctx context.Context, numWorkers int, d workerDeps) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
 	for i := range numWorkers {
 		wg.Go(func() {
-			workerEnv, err := env.NewEnv(db, flagDriver, req)
+			workerEnv, err := env.NewEnv(d.DB, flagDriver, d.Req)
 			if err != nil {
 				slog.Error("env error", "worker", i, "error", err)
 				return
 			}
 			defer workerEnv.Close()
-			workerEnv.InitFrom(initEnv)
-			workerEnv.SetSeqManager(seqMgr)
-			workerEnv.Results = results
+			workerEnv.InitFrom(d.InitEnv)
+			workerEnv.SetSeqManager(d.SeqMgr)
+			workerEnv.Results = d.Results
 
 			for ctx.Err() == nil {
 				if err := workerEnv.RunIteration(ctx); err != nil {
@@ -165,22 +178,22 @@ func startWorkers(ctx context.Context, numWorkers int, db *sql.DB, req *config.R
 	return &wg
 }
 
-func startBackgroundWorkers(ctx context.Context, db *sql.DB, req *config.Request, initEnv *env.Env, results chan<- config.QueryResult, seqMgr *seq.Manager) *sync.WaitGroup {
+func startBackgroundWorkers(ctx context.Context, d workerDeps) *sync.WaitGroup {
 	var wg sync.WaitGroup
-	for _, w := range req.Workers {
+	for _, w := range d.Req.Workers {
 		slog.Info("background worker", "name", w.Name, "rate", w.Rate)
 
 		wg.Go(func() {
-			workerEnv, err := env.NewEnv(db, flagDriver, req)
+			workerEnv, err := env.NewEnv(d.DB, flagDriver, d.Req)
 			if err != nil {
 				slog.Error("worker env error", "worker", w.Name, "error", err)
 				return
 			}
 			defer workerEnv.Close()
 
-			workerEnv.InitFrom(initEnv)
-			workerEnv.SetSeqManager(seqMgr)
-			workerEnv.Results = results
+			workerEnv.InitFrom(d.InitEnv)
+			workerEnv.SetSeqManager(d.SeqMgr)
+			workerEnv.Results = d.Results
 			workerEnv.RunWorker(ctx, w)
 		})
 	}

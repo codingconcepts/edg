@@ -1,11 +1,11 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"os"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -247,8 +247,8 @@ func formatFreq(freq map[string]int64) string {
 	for v, c := range freq {
 		entries = append(entries, entry{v, c})
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].count > entries[j].count
+	slices.SortFunc(entries, func(a, b entry) int {
+		return cmp.Compare(b.count, a.count)
 	})
 	if len(entries) > 10 {
 		entries = entries[:10]

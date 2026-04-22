@@ -28,28 +28,28 @@ func newParquetWriter(dir string) *parquetWriter {
 	}
 }
 
-func (w *parquetWriter) Add(section, queryName, querySQL string, columns []string, args []any) error {
-	if len(args) == 0 {
+func (w *parquetWriter) Add(row WriteRow) error {
+	if len(row.Args) == 0 {
 		return nil
 	}
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	key := section + "_" + queryName
+	key := row.Section + "_" + row.Name
 	f, ok := w.files[key]
 	if !ok {
-		f = &parquetFile{columns: columns}
+		f = &parquetFile{columns: row.Columns}
 		w.files[key] = f
 	}
 
-	row := make([]any, len(columns))
-	for i := range columns {
-		if i < len(args) {
-			row[i] = args[i]
+	pqRow := make([]any, len(row.Columns))
+	for i := range row.Columns {
+		if i < len(row.Args) {
+			pqRow[i] = row.Args[i]
 		}
 	}
-	f.rows = append(f.rows, row)
+	f.rows = append(f.rows, pqRow)
 	return nil
 }
 

@@ -26,23 +26,23 @@ func newSQLWriter(driver, dir string) *sqlWriter {
 	}
 }
 
-func (w *sqlWriter) Add(section, queryName, querySQL string, columns []string, args []any) error {
+func (w *sqlWriter) Add(row WriteRow) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	var stmt string
 	switch {
-	case len(args) == 0:
-		stmt = ensureSemicolon(querySQL)
+	case len(row.Args) == 0:
+		stmt = ensureSemicolon(row.SQL)
 	default:
-		table := extractTable(querySQL)
+		table := extractTable(row.SQL)
 		if table == "" {
-			table = queryName
+			table = row.Name
 		}
-		stmt = w.buildInsert(table, columns, args)
+		stmt = w.buildInsert(table, row.Columns, row.Args)
 	}
 
-	w.sections[section] = append(w.sections[section], stmt)
+	w.sections[row.Section] = append(w.sections[row.Section], stmt)
 	return nil
 }
 

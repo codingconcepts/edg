@@ -3,6 +3,7 @@ package convert
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -22,7 +23,7 @@ func Constant(v any) any {
 // driving batched query execution without requiring a SQL query.
 func Batch(args ...any) ([][]any, error) {
 	if len(args) == 0 {
-		return nil, fmt.Errorf("batch: requires at least 1 argument")
+		return nil, errors.New("batch: requires at least 1 argument")
 	}
 	count, err := ToInt(args[0])
 	if err != nil {

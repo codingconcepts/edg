@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -43,7 +44,7 @@ func connectDB() (*sql.DB, error) {
 		url = os.Getenv("URL")
 	}
 	if url == "" {
-		return nil, fmt.Errorf("--url flag or URL env var required")
+		return nil, errors.New("--url flag or URL env var required")
 	}
 
 	if license.IsEnterprise(flagDriver) {

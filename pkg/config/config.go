@@ -374,61 +374,84 @@ func (q *Query) CompileArgs(envMap map[string]any) error {
 	return nil
 }
 
-// Validate checks the Request for structural issues that would cause
-// confusing runtime errors.
-func (r *Request) Validate() error {
-	// When run_weights is configured, every run item needs a name for selection.
-	if len(r.RunWeights) > 0 {
-		for i, item := range r.Run {
-			if item.Name() == "" {
-				return fmt.Errorf("run item %d is missing a name (required when run_weights is set)", i)
-			}
-		}
-	}
+type queryGroup struct {
+	name    string
+	queries []*Query
+}
 
-	// run_weights keys must match actual run item names.
-	if len(r.RunWeights) > 0 {
-		runNames := make(map[string]bool, len(r.Run))
-		for _, item := range r.Run {
-			runNames[item.Name()] = true
-		}
-		for name := range r.RunWeights {
-			if !runNames[name] {
-				return fmt.Errorf("run_weights references unknown query %q", name)
-			}
-		}
-	}
-
-	// Validate seq definitions.
-	{
-		seen := make(map[string]bool, len(r.Seq))
-		for i, s := range r.Seq {
-			if s.Name == "" {
-				return fmt.Errorf("seq %d is missing a name", i)
-			}
-			if seen[s.Name] {
-				return fmt.Errorf("duplicate seq name %q", s.Name)
-			}
-			seen[s.Name] = true
-		}
-	}
-
-	// Validate row references: row name must exist, and row + args are mutually exclusive.
-	runQueries := r.RunAllQueries()
-	workerQueries := r.WorkerQueries()
-	groups := []struct {
-		name    string
-		queries []*Query
-	}{
+func (r *Request) queryGroups() []queryGroup {
+	return []queryGroup{
 		{"up", r.Up},
 		{"seed", r.Seed},
 		{"deseed", r.Deseed},
 		{"down", r.Down},
 		{"init", r.Init},
-		{"run", runQueries},
-		{"workers", workerQueries},
+		{"run", r.RunAllQueries()},
+		{"workers", r.WorkerQueries()},
 	}
+}
 
+// Validate checks the Request for structural issues that would cause
+// confusing runtime errors.
+func (r *Request) Validate() error {
+	if err := r.validateRunWeights(); err != nil {
+		return err
+	}
+	if err := r.validateSeq(); err != nil {
+		return err
+	}
+	groups := r.queryGroups()
+	if err := r.validateRowRefs(groups); err != nil {
+		return err
+	}
+	if err := r.validateDuplicateNames(groups); err != nil {
+		return err
+	}
+	if err := r.validateTransactions(); err != nil {
+		return err
+	}
+	if err := r.validateWorkers(); err != nil {
+		return err
+	}
+	return r.validateExpressions(groups)
+}
+
+func (r *Request) validateRunWeights() error {
+	if len(r.RunWeights) == 0 {
+		return nil
+	}
+	for i, item := range r.Run {
+		if item.Name() == "" {
+			return fmt.Errorf("run item %d is missing a name (required when run_weights is set)", i)
+		}
+	}
+	runNames := make(map[string]bool, len(r.Run))
+	for _, item := range r.Run {
+		runNames[item.Name()] = true
+	}
+	for name := range r.RunWeights {
+		if !runNames[name] {
+			return fmt.Errorf("run_weights references unknown query %q", name)
+		}
+	}
+	return nil
+}
+
+func (r *Request) validateSeq() error {
+	seen := make(map[string]bool, len(r.Seq))
+	for i, s := range r.Seq {
+		if s.Name == "" {
+			return fmt.Errorf("seq %d is missing a name", i)
+		}
+		if seen[s.Name] {
+			return fmt.Errorf("duplicate seq name %q", s.Name)
+		}
+		seen[s.Name] = true
+	}
+	return nil
+}
+
+func (r *Request) validateRowRefs(groups []queryGroup) error {
 	for _, group := range groups {
 		for i, q := range group.queries {
 			if q.Row == "" {
@@ -442,8 +465,10 @@ func (r *Request) Validate() error {
 			}
 		}
 	}
+	return nil
+}
 
-	// Check for duplicate query names within each section.
+func (r *Request) validateDuplicateNames(groups []queryGroup) error {
 	for _, group := range groups {
 		seen := make(map[string]bool)
 		for i, q := range group.queries {
@@ -457,23 +482,21 @@ func (r *Request) Validate() error {
 		}
 	}
 
-	// Check for duplicate names at the run-item level (transaction names
-	// and standalone query names share the same namespace for run_weights).
-	{
-		seen := make(map[string]bool)
-		for i, item := range r.Run {
-			name := item.Name()
-			if name == "" {
-				continue
-			}
-			if seen[name] {
-				return fmt.Errorf("duplicate name %q in run (item %d)", name, i)
-			}
-			seen[name] = true
+	seen := make(map[string]bool)
+	for i, item := range r.Run {
+		name := item.Name()
+		if name == "" {
+			continue
 		}
+		if seen[name] {
+			return fmt.Errorf("duplicate name %q in run (item %d)", name, i)
+		}
+		seen[name] = true
 	}
+	return nil
+}
 
-	// Validate transaction constraints.
+func (r *Request) validateTransactions() error {
 	for i, item := range r.Run {
 		if !item.IsTransaction() {
 			continue
@@ -496,7 +519,6 @@ func (r *Request) Validate() error {
 			}
 		}
 
-		// Locals names must not collide with query names in the same transaction.
 		for name := range item.Transaction.Locals {
 			for _, q := range item.Transaction.Queries {
 				if q.Name == name {
@@ -505,7 +527,10 @@ func (r *Request) Validate() error {
 			}
 		}
 	}
+	return nil
+}
 
+func (r *Request) validateWorkers() error {
 	for i, w := range r.Workers {
 		if w.Name == "" {
 			return fmt.Errorf("worker %d is missing a name", i)
@@ -514,14 +539,16 @@ func (r *Request) Validate() error {
 			return fmt.Errorf("worker %d (%s): rate must have positive times and interval", i, w.Name)
 		}
 	}
+	return nil
+}
 
+func (r *Request) validateExpressions(groups []queryGroup) error {
 	seqNames := make(map[string]bool, len(r.Seq))
 	for _, s := range r.Seq {
 		seqNames[s.Name] = true
 	}
 
-	// Walk the config and validate gen(...), env(...), and seq_*(...) expressions inline.
-	validateExpr := func(e string) error {
+	check := func(e string) error {
 		for _, m := range genCallRe.FindAllStringSubmatch(e, -1) {
 			if err := gen.ValidatePattern(m[1]); err != nil {
 				return fmt.Errorf("expression %q: %w", e, err)
@@ -549,13 +576,13 @@ func (r *Request) Validate() error {
 	}
 
 	for _, v := range r.Expressions {
-		if err := validateExpr(v); err != nil {
+		if err := check(v); err != nil {
 			return err
 		}
 	}
 	for _, row := range r.Rows {
 		for _, v := range row {
-			if err := validateExpr(v); err != nil {
+			if err := check(v); err != nil {
 				return err
 			}
 		}
@@ -563,12 +590,12 @@ func (r *Request) Validate() error {
 	for _, group := range groups {
 		for _, q := range group.queries {
 			for _, arg := range q.Args.Exprs {
-				if err := validateExpr(arg); err != nil {
+				if err := check(arg); err != nil {
 					return err
 				}
 			}
 			for _, pe := range q.Print {
-				if err := validateExpr(pe.Expr); err != nil {
+				if err := check(pe.Expr); err != nil {
 					return err
 				}
 			}
@@ -577,12 +604,11 @@ func (r *Request) Validate() error {
 	for _, item := range r.Run {
 		if item.IsTransaction() {
 			for _, v := range item.Transaction.Locals {
-				if err := validateExpr(v); err != nil {
+				if err := check(v); err != nil {
 					return err
 				}
 			}
 		}
 	}
-
 	return nil
 }

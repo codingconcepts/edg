@@ -15,14 +15,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type RunParams struct {
+	DB            *sql.DB
+	Req           *config.Request
+	Duration      time.Duration
+	Workers       int
+	PrintInterval time.Duration
+}
+
 // RunFunc matches the signature of the top-level run function.
-type RunFunc func(ctx context.Context, cancel context.CancelFunc, db *sql.DB, req *config.Request, duration time.Duration, workers int, printInterval time.Duration) error
+type RunFunc func(ctx context.Context, cancel context.CancelFunc, p RunParams) error
 
 // Deps holds dependencies injected from the main package.
 type Deps struct {
-	// Connect returns a DB connection and parsed config.
-	// For normal commands this loads from --config file.
-	// For workload commands this loads from embedded YAML.
 	Connect   func() (*sql.DB, *config.Request, error)
 	ConnectDB func() (*sql.DB, error)
 	Driver    func() string
@@ -203,7 +208,7 @@ func RunCmd(deps Deps) *cobra.Command {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
 			defer cancel()
 
-			return deps.Run(ctx, cancel, db, req, duration, workers, printInterval)
+			return deps.Run(ctx, cancel, RunParams{DB: db, Req: req, Duration: duration, Workers: workers, PrintInterval: printInterval})
 		},
 	}
 
@@ -267,7 +272,7 @@ func AllCmd(deps Deps) *cobra.Command {
 
 			if len(req.Run) > 0 || len(req.Stages) > 0 {
 				runCtx, runCancel := context.WithCancel(ctx)
-				return deps.Run(runCtx, runCancel, db, req, duration, workers, printInterval)
+				return deps.Run(runCtx, runCancel, RunParams{DB: db, Req: req, Duration: duration, Workers: workers, PrintInterval: printInterval})
 			}
 
 			return nil

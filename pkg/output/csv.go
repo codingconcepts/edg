@@ -27,28 +27,28 @@ func newCSVWriter(dir string) *csvWriter {
 	}
 }
 
-func (w *csvWriter) Add(section, queryName, querySQL string, columns []string, args []any) error {
-	if len(args) == 0 {
+func (w *csvWriter) Add(row WriteRow) error {
+	if len(row.Args) == 0 {
 		return nil
 	}
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	key := section + "_" + queryName
+	key := row.Section + "_" + row.Name
 	f, ok := w.files[key]
 	if !ok {
-		f = &csvFile{columns: columns}
+		f = &csvFile{columns: row.Columns}
 		w.files[key] = f
 	}
 
-	row := make([]string, len(columns))
-	for i := range columns {
-		if i < len(args) {
-			row[i] = formatCSVValue(args[i])
+	csvRow := make([]string, len(row.Columns))
+	for i := range row.Columns {
+		if i < len(row.Args) {
+			csvRow[i] = formatCSVValue(row.Args[i])
 		}
 	}
-	f.rows = append(f.rows, row)
+	f.rows = append(f.rows, csvRow)
 	return nil
 }
 

@@ -22,25 +22,25 @@ func newJSONWriter(dir string) *jsonWriter {
 	}
 }
 
-func (w *jsonWriter) Add(section, queryName, querySQL string, columns []string, args []any) error {
-	if len(args) == 0 {
+func (w *jsonWriter) Add(row WriteRow) error {
+	if len(row.Args) == 0 {
 		return nil
 	}
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if w.data[section] == nil {
-		w.data[section] = make(map[string][]map[string]any)
+	if w.data[row.Section] == nil {
+		w.data[row.Section] = make(map[string][]map[string]any)
 	}
 
-	row := make(map[string]any, len(columns))
-	for i, col := range columns {
-		if i < len(args) {
-			row[col] = normalizeValue(args[i])
+	m := make(map[string]any, len(row.Columns))
+	for i, col := range row.Columns {
+		if i < len(row.Args) {
+			m[col] = normalizeValue(row.Args[i])
 		}
 	}
-	w.data[section][queryName] = append(w.data[section][queryName], row)
+	w.data[row.Section][row.Name] = append(w.data[row.Section][row.Name], m)
 	return nil
 }
 

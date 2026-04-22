@@ -11,6 +11,7 @@ import (
 
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/codingconcepts/edg/pkg/config"
@@ -51,7 +52,7 @@ type Env struct {
 	vectorCentroidsMutex sync.RWMutex
 	vectorCentroids      map[string][][]float64
 
-	seqCounter int64
+	seqCounter atomic.Int64
 	seqManager *seq.Manager
 
 	computedArgs     []any
@@ -161,80 +162,93 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		"zipf":              gen.ZipfRand,        // Zipfian-distributed random integer in [0, max].
 	}
 
-	// Check that globals don't shadow built-in functions.
+	if err := env.loadGlobals(r); err != nil {
+		return nil, err
+	}
+	if err := env.loadReferences(r); err != nil {
+		return nil, err
+	}
+	if err := env.registerExpressions(r); err != nil {
+		return nil, err
+	}
+	if err := env.compileQueries(r); err != nil {
+		return nil, err
+	}
+
+	return &env, nil
+}
+
+func (e *Env) loadGlobals(r *config.Request) error {
 	for name := range r.Globals {
-		if _, exists := env.env[name]; exists {
-			return nil, fmt.Errorf("global %q shadows a built-in function", name)
+		if _, exists := e.env[name]; exists {
+			return fmt.Errorf("global %q shadows a built-in function", name)
 		}
 	}
 
-	// Add each global variable to map itself for cleaner access.
-	maps.Copy(env.env, r.Globals)
+	maps.Copy(e.env, r.Globals)
 
-	// Evaluate string-valued globals as expressions so globals can
-	// use built-in functions and reference earlier globals.
-	// Processed in YAML document order for deterministic chaining.
-	// Compilation failure means the value is a plain string literal.
-	// Evaluation failure after successful compilation is a real error
-	// (e.g. missing env var) and is surfaced to the caller.
 	for _, name := range r.GlobalsOrder {
 		strVal, ok := r.Globals[name].(string)
 		if !ok {
 			continue
 		}
-		program, err := expr.Compile(strVal, expr.Env(env.env))
+		program, err := expr.Compile(strVal, expr.Env(e.env))
 		if err != nil {
-			continue // not a valid expression; keep as literal string
+			continue
 		}
-		result, err := expr.Run(program, env.env)
+		result, err := expr.Run(program, e.env)
 		if err != nil {
-			return nil, fmt.Errorf("evaluating global %q: %w", name, err)
+			return fmt.Errorf("evaluating global %q: %w", name, err)
 		}
-		env.env[name] = result
+		e.env[name] = result
 		r.Globals[name] = result
 	}
+	return nil
+}
 
-	// Load reference datasets into the environment so they're available
-	// via ref_rand, ref_same, etc. without a database query.
+func (e *Env) loadReferences(r *config.Request) error {
 	for name, rows := range r.Reference {
-		if _, exists := env.env[name]; exists {
-			return nil, fmt.Errorf("reference dataset %q shadows a built-in function or global", name)
+		if _, exists := e.env[name]; exists {
+			return fmt.Errorf("reference dataset %q shadows a built-in function or global", name)
 		}
-		env.SetEnv(name, slices.Clone(rows))
+		e.SetEnv(name, slices.Clone(rows))
 	}
+	return nil
+}
 
-	// Register user-defined expressions as callable functions.
-	// First pass: add stubs so the compiler sees all expression names.
+func (e *Env) registerExpressions(r *config.Request) error {
 	for name := range r.Expressions {
-		if _, exists := env.env[name]; exists {
-			return nil, fmt.Errorf("expression %q shadows a built-in function, global, or reference dataset", name)
+		if _, exists := e.env[name]; exists {
+			return fmt.Errorf("expression %q shadows a built-in function, global, or reference dataset", name)
 		}
-		env.env[name] = func(args ...any) (any, error) {
+		e.env[name] = func(args ...any) (any, error) {
 			return nil, fmt.Errorf("expression %q used before compilation", name)
 		}
 	}
-	// Second pass: compile bodies and replace stubs with real functions.
 	for name, body := range r.Expressions {
-		compileEnv := maps.Clone(env.env)
+		compileEnv := maps.Clone(e.env)
 		compileEnv["args"] = []any{}
 
 		program, err := expr.Compile(body, expr.Env(compileEnv))
 		if err != nil {
-			return nil, fmt.Errorf("compiling expression %q: %w", name, err)
+			return fmt.Errorf("compiling expression %q: %w", name, err)
 		}
 
 		p := program
-		env.env[name] = func(args ...any) (any, error) {
-			runEnv := maps.Clone(env.env)
+		e.env[name] = func(args ...any) (any, error) {
+			runEnv := maps.Clone(e.env)
 			runEnv["args"] = args
 			return expr.Run(p, runEnv)
 		}
 	}
+	return nil
+}
 
-	// Expand row references into args before compilation.
+func (e *Env) compileQueries(r *config.Request) error {
 	runQueries := r.RunAllQueries()
 	workerQueries := r.WorkerQueries()
 	allQueries := [][]*config.Query{r.Up, r.Seed, r.Deseed, r.Down, r.Init, runQueries, workerQueries}
+
 	for _, queries := range allQueries {
 		for _, query := range queries {
 			if query.Row != "" {
@@ -243,10 +257,7 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		}
 	}
 
-	// Replace the __sep__ token in query text with the driver-specific SQL
-	// function (chr(31) for pgx/dsql, CHAR(31) for mysql/mssql, etc.) so it
-	// can be used directly in SQL without being an expression arg.
-	sepSQL := string(env.sep())
+	sepSQL := string(e.sep())
 	for _, queries := range allQueries {
 		for _, query := range queries {
 			query.Query = strings.ReplaceAll(query.Query, "__sep__", sepSQL)
@@ -267,35 +278,33 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 	} {
 		for i, query := range group.queries {
 			if query.IsRollbackIf() {
-				if err := query.CompileRollbackIf(env.env); err != nil {
-					return nil, fmt.Errorf("failed to compile %s rollback_if %d: %w", group.name, i, err)
+				if err := query.CompileRollbackIf(e.env); err != nil {
+					return fmt.Errorf("failed to compile %s rollback_if %d: %w", group.name, i, err)
 				}
 				continue
 			}
 			switch query.Type {
 			case config.QueryTypeQuery, config.QueryTypeExec, config.QueryTypeQueryBatch, config.QueryTypeExecBatch, "":
 			default:
-				return nil, fmt.Errorf("unknown query type %q in %s query %d (%s)", query.Type, group.name, i, query.Name)
+				return fmt.Errorf("unknown query type %q in %s query %d (%s)", query.Type, group.name, i, query.Name)
 			}
-			if err := query.CompileArgs(env.env); err != nil {
-				return nil, fmt.Errorf("failed to compile %s query %d: %w", group.name, i, err)
+			if err := query.CompileArgs(e.env); err != nil {
+				return fmt.Errorf("failed to compile %s query %d: %w", group.name, i, err)
 			}
-			if err := query.CompilePrint(env.env); err != nil {
-				return nil, fmt.Errorf("failed to compile %s query %d print: %w", group.name, i, err)
+			if err := query.CompilePrint(e.env); err != nil {
+				return fmt.Errorf("failed to compile %s query %d print: %w", group.name, i, err)
 			}
 		}
 	}
 
-	// Compile transaction locals.
 	for _, item := range r.Run {
 		if item.Transaction != nil && len(item.Transaction.Locals) > 0 {
-			if err := item.Transaction.CompileLocals(env.env); err != nil {
-				return nil, fmt.Errorf("transaction %s: %w", item.Transaction.Name, err)
+			if err := item.Transaction.CompileLocals(e.env); err != nil {
+				return fmt.Errorf("transaction %s: %w", item.Transaction.Name, err)
 			}
 		}
 	}
-
-	return &env, nil
+	return nil
 }
 
 // GenerateArgs evaluates compiled arg expressions and returns one or more
@@ -695,7 +704,7 @@ func (e *Env) captureOutput(q *config.Query, section config.ConfigSection) error
 		if len(args) > 0 {
 			resolvedSQL = inlineArgs(q.Query, args, e.driver)
 		}
-		if err := e.Output.Add(string(section), q.Name, resolvedSQL, columns, args); err != nil {
+		if err := e.Output.Add(output.WriteRow{Section: string(section), Name: q.Name, SQL: resolvedSQL, Columns: columns, Args: args}); err != nil {
 			return err
 		}
 		if len(columns) > 0 && len(args) > 0 {
@@ -747,7 +756,7 @@ func (e *Env) captureOutputBatch(q *config.Query, section config.ConfigSection, 
 			e.computedArgs = append(e.computedArgs, v)
 		}
 
-		if err := e.Output.Add(string(section), q.Name, q.Query, columns, args); err != nil {
+		if err := e.Output.Add(output.WriteRow{Section: string(section), Name: q.Name, SQL: q.Query, Columns: columns, Args: args}); err != nil {
 			return err
 		}
 

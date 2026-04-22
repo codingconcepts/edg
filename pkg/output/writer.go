@@ -32,8 +32,16 @@ func ParseFormat(s string) (Format, error) {
 	}
 }
 
+type WriteRow struct {
+	Section  string
+	Name     string
+	SQL      string
+	Columns  []string
+	Args     []any
+}
+
 type Writer interface {
-	Add(section, queryName, querySQL string, columns []string, args []any) error
+	Add(row WriteRow) error
 	Flush() error
 }
 

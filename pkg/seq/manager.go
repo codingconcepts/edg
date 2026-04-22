@@ -1,6 +1,7 @@
 package seq
 
 import (
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"sync/atomic"
@@ -36,7 +37,7 @@ func (s *sequence) count() int64 {
 func (s *sequence) Rand() (int64, error) {
 	n := s.count()
 	if n == 0 {
-		return 0, fmt.Errorf("sequence has no values yet")
+		return 0, errors.New("sequence has no values yet")
 	}
 	return s.value(int64(random.Rng.IntN(int(n)))), nil
 }
@@ -44,7 +45,7 @@ func (s *sequence) Rand() (int64, error) {
 func (s *sequence) Zipf(sv, v float64) (int64, error) {
 	n := s.count()
 	if n == 0 {
-		return 0, fmt.Errorf("sequence has no values yet")
+		return 0, errors.New("sequence has no values yet")
 	}
 	src := rand.NewPCG(random.Rng.Uint64(), random.Rng.Uint64())
 	r := rand.New(src)
@@ -58,7 +59,7 @@ func (s *sequence) Zipf(sv, v float64) (int64, error) {
 func (s *sequence) Norm(mean, stddev float64) (int64, error) {
 	n := s.count()
 	if n == 0 {
-		return 0, fmt.Errorf("sequence has no values yet")
+		return 0, errors.New("sequence has no values yet")
 	}
 	idx, err := random.Norm(mean, stddev, 0, float64(n-1))
 	if err != nil {
@@ -70,7 +71,7 @@ func (s *sequence) Norm(mean, stddev float64) (int64, error) {
 func (s *sequence) Exp(rate float64) (int64, error) {
 	n := s.count()
 	if n == 0 {
-		return 0, fmt.Errorf("sequence has no values yet")
+		return 0, errors.New("sequence has no values yet")
 	}
 	idx, err := random.Exp(rate, 0, float64(n-1))
 	if err != nil {
@@ -82,7 +83,7 @@ func (s *sequence) Exp(rate float64) (int64, error) {
 func (s *sequence) Lognorm(mu, sigma float64) (int64, error) {
 	n := s.count()
 	if n == 0 {
-		return 0, fmt.Errorf("sequence has no values yet")
+		return 0, errors.New("sequence has no values yet")
 	}
 	idx, err := random.LogNorm(mu, sigma, 0, float64(n-1))
 	if err != nil {
