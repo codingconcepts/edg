@@ -516,3 +516,23 @@ func TestMisc_GetExistingKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "1", fmt.Sprint(got))
 }
+
+func TestFail(t *testing.T) {
+	env := newExprEnv(t)
+
+	_, err := env.Eval(`fail('unexpected region')`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected region")
+}
+
+func TestFail_NilCoalescing(t *testing.T) {
+	env := newExprEnv(t)
+
+	got, err := env.Eval(`{'a': 1}['a'] ?? fail('missing key')`)
+	require.NoError(t, err)
+	assert.Equal(t, 1, got)
+
+	_, err = env.Eval(`{'a': 1}['b'] ?? fail('missing key')`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing key")
+}

@@ -39,6 +39,8 @@ These are edg's built-in functions, available in any expression context (`args:`
 | `exp(rate, min, max)` | `float64` | Exponentially-distributed random number in [min, max], rounded to 0 decimal places.<br><br>`exp(0.5, 0, 100)` -> `4` |
 | `exp_f(rate, min, max, precision)` | `float64` | Exponentially-distributed random number in [min, max], rounded to `precision` decimal places.<br><br>`exp_f(0.5, 0, 100, 2)` -> `3.72` |
 | `expr(expression)` | `any` | Evaluates an arithmetic expression. Alias for `const`, the expr engine handles the arithmetic.<br><br>`expr(2 + 3)` -> `5` |
+| `fail(message)` | `error` | Returns an error that stops the current worker gracefully. Useful with `??` to catch unexpected values: `{'a': 1}['x'] ?? fail('unknown key')`.<br><br>`fail('unexpected region')` -> *(worker stops with error)* |
+| `fatal(message)` | `void` | Terminates the entire process immediately. Use when an unexpected value should halt all workers, not just the current one.<br><br>`fatal('missing required config')` -> *(process exits)* |
 | `gen(pattern)` | `string` | Generates a random value using [gofakeit](https://github.com/brianvoe/gofakeit) patterns (e.g. `gen('number:1,100')`).<br><br>`gen('number:1,10')` -> `7` |
 | `gen_batch(total, batchSize, pattern)` | `[][]any` | Generates `total` values using [gofakeit](https://github.com/brianvoe/gofakeit) `pattern`, grouped into batches of `batchSize`. Each batch arg is a string of generated values delimited by the ASCII unit separator (char 31, `\x1f`).<br><br>`gen_batch(4, 2, 'firstname')` -> `[["Alice\x1fBob"], ["Carol\x1fDave"]]` |
 | `global(name)` | `any` | Looks up a value from the `globals` section by name. Globals are also available directly as variables, so `global('warehouses')` and `warehouses` are equivalent.<br><br>`global('warehouses')` -> `10` |
@@ -315,6 +317,7 @@ These combine multiple functions and reference lookups for more complex use case
 | JSON from refs | `toJSON(fromPairs([['product', ref_rand('products').name], ['zone', ref_same('regions').zone]]))` | `{"product":"Widget","zone":"us"}` |
 | Multi-condition classification | `let p = ref_rand('products'); p.price > 10 and p.stock > 0 ? 'premium' : (p.active ? 'basic' : 'discontinued')` | `premium` |
 | Reduce mapped values | `reduce(map(ref_same('regions').cities, {len(#)}), {#acc + #}, 0)` | `19` |
+| Switch on env var | `{'fra': 'eu-central-1', 'sin': 'ap-southeast-1', 'iad': 'us-east-1'}[env('FLY_REGION')] ?? fail('unknown FLY_REGION')` | `eu-central-1` |
 
 </details>
 
@@ -392,6 +395,9 @@ These expressions are used in the `args:` list of a `run` query. Each entry in `
 | `coalesce(ref_rand('optional_data').value, 'default')` | First non-nil fallback value |
 | `cond(arg(0), gen('email'), nil)` | Email if coin flip is true, NULL if false |
 | `cond(gen('number:1,100') > 95, 'premium', 'standard')` | Conditional value based on a random roll |
+| `{'fra': 'eu-central-1', 'sin': 'ap-southeast-1'}[env('FLY_REGION')] ?? fail('bad region')` | Map lookup with error on unknown value |
+| `fail('unexpected value')` | Stop worker gracefully with an error message |
+| `fatal('missing required config')` | Terminate entire process immediately |
 | `nullable(gen('email'), 0.3)` | 30% chance of NULL, otherwise a random email |
 
 ### Constants & globals

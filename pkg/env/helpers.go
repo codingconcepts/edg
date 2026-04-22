@@ -2,6 +2,7 @@ package env
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/codingconcepts/edg/pkg/convert"
@@ -22,6 +23,15 @@ func environNil(name string) any {
 		return nil
 	}
 	return val
+}
+
+func fail(msg string) (any, error) {
+	return nil, fmt.Errorf("fail: %s", msg)
+}
+
+func fatal(msg string) any {
+	log.Fatalf("fatal: %s", msg)
+	return nil
 }
 
 func (e *Env) global(name string) any {

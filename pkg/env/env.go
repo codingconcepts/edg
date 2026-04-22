@@ -106,6 +106,8 @@ func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
 		"exp_f":             gen.ExpRandF,        // Exponential-distribution random float with precision.
 		"exp":               gen.ExpRand,         // Exponential-distribution random float in [min, max].
 		"expr":              convert.Constant,    // Evaluate an arithmetic expression (e.g. expr(warehouses * 10)).
+		"fail":              fail,                // Return an error that stops the worker gracefully.
+		"fatal":             fatal,               // Terminate the process immediately.
 		"gen_batch":         gen.GenBatch,        // Generate N values in batches, returns [][]any of comma-separated strings.
 		"gen":               gen.Gen,             // Generate a random value using gofakeit.
 		"global":            env.global,          // Use a value in the global config section.
