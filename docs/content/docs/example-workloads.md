@@ -20,6 +20,7 @@ Complete workload configs you can run directly or use as starting points for you
 | [E-Commerce](https://github.com/codingconcepts/edg/tree/main/_examples/ecommerce/) | E-commerce with categories, products, customers, and orders |
 | [Each Cartesian](https://github.com/codingconcepts/edg/tree/main/_examples/each_cartesian/) | Cartesian product seeding with `ref_each` across multiple tables |
 | [Environment](https://github.com/codingconcepts/edg/tree/main/_examples/environment/) | Demonstrates fetching and using environment variables |
+| [Failing](https://github.com/codingconcepts/edg/tree/main/_examples/failing/) | Map lookup with `fail()` to validate environment variables and stop workers on unknown values |
 | [Exclusive Columns](https://github.com/codingconcepts/edg/tree/main/_examples/exclusive_columns/) | Mutually exclusive columns - either col_a or col_b, never both |
 | [Expectations](https://github.com/codingconcepts/edg/tree/main/_examples/expectations/) | Post-run assertions for CI/CD gating on error rate, latency, and throughput |
 | [Expressions](https://github.com/codingconcepts/edg/tree/main/_examples/expression/) | Demonstrates expr-lang built-in features (array, map, string, bitwise, etc.) |
