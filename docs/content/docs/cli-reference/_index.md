@@ -30,6 +30,8 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 
 ## Flags
 
+<div class="cli-flags">
+
 | Flag / Env Var | Short | Default | Description |
 |---|---|---|---|
 | `--url`<br>`EDG_URL` | | | Database connection URL |
@@ -45,6 +47,8 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 | `--metrics-addr`<br>`EDG_METRICS_ADDR` | | | Address for Prometheus metrics endpoint (e.g. `:9090`). See [Observability]({{< relref "observability" >}}) for details. |
 | `--pool-size`<br>`EDG_POOL_SIZE` | | `0` | Maximum number of open database connections. `0` uses the driver default (typically unlimited). |
 | `--warmup-duration` | | `0` | Warmup period before collecting metrics (e.g. `10s`). Workers run during warmup but results are discarded. See [Warmup](#warmup) for details. |
+
+</div>
 
 Every flag with an env var listed above can be set via the environment instead of the command line. Flags take precedence over environment variables, which take precedence over defaults.
 

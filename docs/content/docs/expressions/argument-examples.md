@@ -82,6 +82,18 @@ These expressions are used in the `args:` list of a `run` query. Each entry in `
 | `point(51.5074, -0.1278, 10.0).lon` | Random geographic point within 10km of London, longitude |
 | `point_wkt(51.5074, -0.1278, 10.0)` | Random geographic point as WKT for native geometry columns |
 
+## Hierarchical (ltree)
+
+| Expression | Description |
+|---|---|
+| `ltree('Top', 'Science', 'Astronomy')` | PostgreSQL/CockroachDB ltree path: `Top.Science.Astronomy` |
+| `ltree(arg('name'))` | Single-label root path from a previously generated name |
+| `ltree(ref_rand('parent').path, arg('name'))` | Append a new label to a parent's path for hierarchical data |
+| `ltree(gen('word'), gen('word'), gen('word'))` | Random 3-level path from generated words |
+
+> [!NOTE]
+> Invalid ltree characters (hyphens, spaces, etc.) are automatically replaced with underscores. Nil and empty parts are skipped.
+
 ## Identifiers
 
 | Expression | Description |
