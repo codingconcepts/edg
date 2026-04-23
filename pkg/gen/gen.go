@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -442,6 +443,32 @@ func GenTimez(minStr, maxStr string) (string, error) {
 		return "", err
 	}
 	return t + "+00:00", nil
+}
+
+var ltreeInvalidChars = regexp.MustCompile(`[^A-Za-z0-9_.]`)
+
+// GenLtree builds a PostgreSQL ltree path by joining the given parts
+// with dots. Nil and empty parts are skipped. Each label is sanitized
+// to contain only characters valid in ltree labels ([A-Za-z0-9_]).
+//
+//	ltree('Top', 'Science', 'Astronomy') → "Top.Science.Astronomy"
+func GenLtree(parts ...any) (string, error) {
+	var segments []string
+	for _, p := range parts {
+		if p == nil {
+			continue
+		}
+		s := fmt.Sprintf("%v", p)
+		if s == "" {
+			continue
+		}
+		segments = append(segments, s)
+	}
+	if len(segments) == 0 {
+		return "", fmt.Errorf("ltree: at least one non-empty part required")
+	}
+	path := strings.Join(segments, ".")
+	return ltreeInvalidChars.ReplaceAllString(path, "_"), nil
 }
 
 // ValidatePattern checks that a gofakeit pattern references a known

@@ -27,6 +27,7 @@ Complete workload configs you can run directly or use as starting points for you
 | [Global Sequences](https://github.com/codingconcepts/edg/tree/main/_examples/global_sequences/) | Globally unique auto-incrementing sequences shared across all workers with `seq_global` |
 | [Includes](https://github.com/codingconcepts/edg/tree/main/_examples/includes/) | Splitting and reusing config fragments with the `!include` directive |
 | [IoT](https://github.com/codingconcepts/edg/tree/main/_examples/iot/) | IoT devices, sensors, and time-series readings |
+| [LTREE](https://github.com/codingconcepts/edg/tree/main/_examples/ltree/) | Hierarchical org chart using PostgreSQL's `ltree` extension with `ltree()` path builder |
 | [Normal](https://github.com/codingconcepts/edg/tree/main/_examples/normal/) | Product reviews with normal distribution ratings |
 | [Named Args](https://github.com/codingconcepts/edg/tree/main/_examples/named_args/) | Map-style args with `arg('name')` instead of `arg(0)` |
 | [Nullable](https://github.com/codingconcepts/edg/tree/main/_examples/nullable/) | Demonstrates `nullable(expr, probability)` for injecting NULLs with controlled frequency |

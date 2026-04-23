@@ -403,6 +403,35 @@ func TestValidatePattern(t *testing.T) {
 	}
 }
 
+func TestGenLtree(t *testing.T) {
+	result, err := GenLtree("Top", "Science", "Astronomy")
+	require.NoError(t, err)
+	assert.Equal(t, "Top.Science.Astronomy", result)
+}
+
+func TestGenLtree_SinglePart(t *testing.T) {
+	result, err := GenLtree("Root")
+	require.NoError(t, err)
+	assert.Equal(t, "Root", result)
+}
+
+func TestGenLtree_SkipsNilAndEmpty(t *testing.T) {
+	result, err := GenLtree(nil, "Top", "", "Child")
+	require.NoError(t, err)
+	assert.Equal(t, "Top.Child", result)
+}
+
+func TestGenLtree_SanitizesLabels(t *testing.T) {
+	result, err := GenLtree("Top", "next-gen", "my team")
+	require.NoError(t, err)
+	assert.Equal(t, "Top.next_gen.my_team", result)
+}
+
+func TestGenLtree_AllEmpty(t *testing.T) {
+	_, err := GenLtree(nil, "")
+	require.Error(t, err)
+}
+
 func BenchmarkGenBatch(b *testing.B) {
 	cases := []struct {
 		name  string

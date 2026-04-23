@@ -252,6 +252,12 @@ func exprForColumn(col Column) string {
 	if containsAny(dt, "json") {
 		return "gen('sentence:3')"
 	}
+
+	// Ltree.
+	if dt == "ltree" {
+		return "ltree(gen('word'), gen('word'), gen('word'))"
+	}
+
 	return "gen('sentence:3')"
 }
 

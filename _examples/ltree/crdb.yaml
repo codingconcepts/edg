@@ -1,0 +1,110 @@
+globals:
+  total_vps: 5
+  total_directors: 15
+  total_managers: 50
+  total_ics: 200
+
+seq:
+  - name: emp_id
+    start: 1
+    step: 1
+
+up:
+
+  - name: create_employees
+    query: |-
+      CREATE TABLE IF NOT EXISTS employees (
+        id INT PRIMARY KEY,
+        name STRING NOT NULL,
+        title STRING NOT NULL,
+        path LTREE NOT NULL
+      )
+
+seed:
+
+  - name: ceo
+    type: exec
+    args:
+      id: seq_global('emp_id')
+      name: gen('name')
+      title: const('CEO')
+      path: ltree(arg('name'))
+    query: |-
+      INSERT INTO employees (id, name, title, path)
+      VALUES ($1, $2, $3, $4::LTREE)
+
+  - name: vps
+    type: exec_batch
+    count: total_vps
+    args:
+      id: seq_global('emp_id')
+      name: gen('name')
+      title: const('VP')
+      path: ltree(ref_rand('ceo').path, arg('name'))
+    query: |-
+      INSERT INTO employees (id, name, title, path)
+      SELECT
+        unnest(string_to_array('$1', __sep__))::INT,
+        unnest(string_to_array('$2', __sep__)),
+        unnest(string_to_array('$3', __sep__)),
+        unnest(string_to_array('$4', __sep__))::LTREE
+
+  - name: directors
+    type: exec_batch
+    count: total_directors
+    args:
+      id: seq_global('emp_id')
+      name: gen('name')
+      title: const('Director')
+      path: ltree(ref_rand('vps').path, arg('name'))
+    query: |-
+      INSERT INTO employees (id, name, title, path)
+      SELECT
+        unnest(string_to_array('$1', __sep__))::INT,
+        unnest(string_to_array('$2', __sep__)),
+        unnest(string_to_array('$3', __sep__)),
+        unnest(string_to_array('$4', __sep__))::LTREE
+
+  - name: managers
+    type: exec_batch
+    count: total_managers
+    args:
+      id: seq_global('emp_id')
+      name: gen('name')
+      title: const('Manager')
+      path: ltree(ref_rand('directors').path, arg('name'))
+    query: |-
+      INSERT INTO employees (id, name, title, path)
+      SELECT
+        unnest(string_to_array('$1', __sep__))::INT,
+        unnest(string_to_array('$2', __sep__)),
+        unnest(string_to_array('$3', __sep__)),
+        unnest(string_to_array('$4', __sep__))::LTREE
+
+  - name: ics
+    type: exec_batch
+    count: total_ics
+    args:
+      id: seq_global('emp_id')
+      name: gen('name')
+      title: const('IC')
+      path: ltree(ref_rand('managers').path, arg('name'))
+    query: |-
+      INSERT INTO employees (id, name, title, path)
+      SELECT
+        unnest(string_to_array('$1', __sep__))::INT,
+        unnest(string_to_array('$2', __sep__)),
+        unnest(string_to_array('$3', __sep__)),
+        unnest(string_to_array('$4', __sep__))::LTREE
+
+deseed:
+
+  - name: truncate_employees
+    type: exec
+    query: TRUNCATE TABLE employees CASCADE
+
+down:
+
+  - name: drop_employees
+    type: exec
+    query: DROP TABLE IF EXISTS employees

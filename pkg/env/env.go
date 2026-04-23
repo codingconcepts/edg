@@ -118,6 +118,7 @@ func NewEnv(db *sql.DB, driver string, r *config.Request, sections ...config.Con
 		"json_obj":          gen.JsonObj,         // Build a JSON object from key-value pairs.
 		"lognorm_f":         gen.LognormRandF,    // Log-normal-distribution random float with precision.
 		"lognorm":           gen.LognormRand,     // Log-normal-distribution random float in [min, max].
+		"ltree":             gen.GenLtree,        // PostgreSQL ltree path from dot-joined parts.
 		"max":               env.aggMax,          // Maximum value of a numeric field in a dataset.
 		"min":               env.aggMin,          // Minimum value of a numeric field in a dataset.
 		"norm_f":            env.normRandF,       // Normal-distribution random float with precision.
