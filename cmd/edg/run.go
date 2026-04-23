@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -45,7 +46,7 @@ func run(ctx context.Context, cancel context.CancelFunc, p workload.RunParams) e
 func runStages(ctx context.Context, _ context.CancelFunc, p workload.RunParams) (map[string]*queryStats, time.Duration, error) {
 	seqMgr := seq.NewManager(p.Req.Seq)
 
-	initEnv, err := env.NewEnv(p.DB, flagDriver, p.Req)
+	initEnv, err := env.NewEnv(p.DB, flagDriver, p.Req, config.ConfigSectionsRun...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -110,7 +111,7 @@ func runStages(ctx context.Context, _ context.CancelFunc, p workload.RunParams) 
 func runStage(ctx context.Context, cancel context.CancelFunc, p workload.RunParams) (map[string]*queryStats, time.Duration, error) {
 	seqMgr := seq.NewManager(p.Req.Seq)
 
-	initEnv, err := env.NewEnv(p.DB, flagDriver, p.Req)
+	initEnv, err := env.NewEnv(p.DB, flagDriver, p.Req, config.ConfigSectionsRun...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -154,7 +155,7 @@ func startWorkers(ctx context.Context, numWorkers int, d workerDeps) *sync.WaitG
 
 	for i := range numWorkers {
 		wg.Go(func() {
-			workerEnv, err := env.NewEnv(d.DB, flagDriver, d.Req)
+			workerEnv, err := env.NewEnv(d.DB, flagDriver, d.Req, config.ConfigSectionRun)
 			if err != nil {
 				slog.Error("env error", "worker", i, "error", err)
 				return
@@ -168,6 +169,11 @@ func startWorkers(ctx context.Context, numWorkers int, d workerDeps) *sync.WaitG
 			for ctx.Err() == nil {
 				if err := workerEnv.RunIteration(ctx); err != nil {
 					if ctx.Err() != nil {
+						return
+					}
+					var failErr *env.ErrFail
+					if errors.As(err, &failErr) {
+						slog.Error("worker stopped", "worker", i, "error", err)
 						return
 					}
 					if flagErrors {
@@ -187,7 +193,7 @@ func startBackgroundWorkers(ctx context.Context, d workerDeps) *sync.WaitGroup {
 		slog.Info("background worker", "name", w.Name, "rate", w.Rate)
 
 		wg.Go(func() {
-			workerEnv, err := env.NewEnv(d.DB, flagDriver, d.Req)
+			workerEnv, err := env.NewEnv(d.DB, flagDriver, d.Req, config.ConfigSectionWorker)
 			if err != nil {
 				slog.Error("worker env error", "worker", w.Name, "error", err)
 				return

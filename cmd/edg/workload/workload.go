@@ -110,7 +110,7 @@ func UpCmd(deps Deps) *cobra.Command {
 			}
 			defer db.Close()
 
-			e, err := env.NewEnv(db, deps.Driver(), req)
+			e, err := env.NewEnv(db, deps.Driver(), req, config.ConfigSectionUp)
 			if err != nil {
 				return err
 			}
@@ -131,7 +131,7 @@ func SeedCmd(deps Deps) *cobra.Command {
 			}
 			defer db.Close()
 
-			e, err := env.NewEnv(db, deps.Driver(), req)
+			e, err := env.NewEnv(db, deps.Driver(), req, config.ConfigSectionSeed)
 			if err != nil {
 				return err
 			}
@@ -153,7 +153,7 @@ func DeseedCmd(deps Deps) *cobra.Command {
 			}
 			defer db.Close()
 
-			e, err := env.NewEnv(db, deps.Driver(), req)
+			e, err := env.NewEnv(db, deps.Driver(), req, config.ConfigSectionDeseed)
 			if err != nil {
 				return err
 			}
@@ -174,7 +174,7 @@ func DownCmd(deps Deps) *cobra.Command {
 			}
 			defer db.Close()
 
-			e, err := env.NewEnv(db, deps.Driver(), req)
+			e, err := env.NewEnv(db, deps.Driver(), req, config.ConfigSectionDown)
 			if err != nil {
 				return err
 			}

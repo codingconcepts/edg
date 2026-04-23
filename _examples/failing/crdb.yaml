@@ -1,0 +1,32 @@
+up:
+
+  - name: create_event
+    query: |-
+      CREATE TABLE IF NOT EXISTS event (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        region STRING NOT NULL,
+        payload STRING NOT NULL
+      )
+
+run:
+
+  - name: add_event
+    type: exec
+    args:
+      - "{'fra': 'eu-central-1', 'sin': 'ap-southeast-1'}[env('FLY_REGION')] ?? fail('bad region')"
+      - gen('sentence')
+    query: |-
+      INSERT INTO event (region, payload)
+      VALUES ($1, $2)
+
+deseed:
+
+  - name: truncate_event
+    type: exec
+    query: TRUNCATE TABLE event
+
+down:
+
+  - name: drop_event
+    type: exec
+    query: DROP TABLE IF EXISTS event

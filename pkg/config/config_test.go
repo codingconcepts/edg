@@ -620,6 +620,63 @@ func TestValidate_EnvPattern(t *testing.T) {
 	}
 }
 
+func TestValidate_SectionFiltering(t *testing.T) {
+	req := &Request{
+		Up: []*Query{
+			{Name: "create_table", Query: "CREATE TABLE t (id INT)"},
+		},
+		Run: []*RunItem{
+			{Query: &Query{
+				Name: "insert",
+				Type: QueryTypeExec,
+				Args: PositionalArgs("env('FLY_REGION')"),
+			}},
+		},
+	}
+
+	cases := []struct {
+		name     string
+		env      map[string]string
+		sections []ConfigSection
+		wantErr  string
+	}{
+		{
+			name:    "all sections fails without env",
+			wantErr: "missing environment variable",
+		},
+		{
+			name:     "up only passes without env",
+			sections: []ConfigSection{ConfigSectionUp},
+		},
+		{
+			name:     "run fails without env",
+			sections: []ConfigSection{ConfigSectionRun},
+			wantErr:  "missing environment variable",
+		},
+		{
+			name:     "run passes with env set",
+			env:      map[string]string{"FLY_REGION": "fra"},
+			sections: []ConfigSection{ConfigSectionRun},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			test.CleanupEnv(t, "FLY_REGION")
+			for k, v := range c.env {
+				t.Setenv(k, v)
+			}
+
+			err := req.Validate(c.sections...)
+			if c.wantErr != "" {
+				require.ErrorContains(t, err, c.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestParseConfig_GlobalsOrder(t *testing.T) {
 	input := `
 globals:

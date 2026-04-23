@@ -68,8 +68,8 @@ type Env struct {
 	Results chan<- config.QueryResult
 }
 
-func NewEnv(db *sql.DB, driver string, r *config.Request) (*Env, error) {
-	if err := r.Validate(); err != nil {
+func NewEnv(db *sql.DB, driver string, r *config.Request, sections ...config.ConfigSection) (*Env, error) {
+	if err := r.Validate(sections...); err != nil {
 		return nil, fmt.Errorf("config validation: %w", err)
 	}
 
@@ -904,6 +904,11 @@ func (e *Env) RunWorker(ctx context.Context, w *config.Worker) {
 		case <-ticker.C:
 			if err := e.runSection(ctx, []*config.Query{&w.Query}, config.ConfigSectionWorker, e.db); err != nil {
 				if ctx.Err() != nil {
+					return
+				}
+				var failErr *ErrFail
+				if errors.As(err, &failErr) {
+					slog.Error("worker stopped", "worker", w.Name, "error", err)
 					return
 				}
 				slog.Error("worker error", "worker", w.Name, "error", err)

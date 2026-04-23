@@ -127,6 +127,12 @@ const (
 	ConfigSectionWorker ConfigSection = "worker"
 )
 
+var ConfigSectionsRun = []ConfigSection{
+	ConfigSectionInit,
+	ConfigSectionRun,
+	ConfigSectionWorker,
+}
+
 type QueryResult struct {
 	Name          string
 	Section       ConfigSection
@@ -397,48 +403,87 @@ func (q *Query) CompileArgs(envMap map[string]any) error {
 }
 
 type queryGroup struct {
+	section ConfigSection
 	name    string
 	queries []*Query
 }
 
+type sections map[ConfigSection]bool
+
+func sectionSet(ss []ConfigSection) sections {
+	m := make(sections, len(ss))
+	for _, s := range ss {
+		m[s] = true
+	}
+	return m
+}
+
+func (s sections) has(cs ConfigSection) bool {
+	return len(s) == 0 || s[cs]
+}
+
 func (r *Request) queryGroups() []queryGroup {
 	return []queryGroup{
-		{"up", r.Up},
-		{"seed", r.Seed},
-		{"deseed", r.Deseed},
-		{"down", r.Down},
-		{"init", r.Init},
-		{"run", r.RunAllQueries()},
-		{"workers", r.WorkerQueries()},
+		{ConfigSectionUp, "up", r.Up},
+		{ConfigSectionSeed, "seed", r.Seed},
+		{ConfigSectionDeseed, "deseed", r.Deseed},
+		{ConfigSectionDown, "down", r.Down},
+		{ConfigSectionInit, "init", r.Init},
+		{ConfigSectionRun, "run", r.RunAllQueries()},
+		{ConfigSectionWorker, "workers", r.WorkerQueries()},
 	}
 }
 
+func (r *Request) queryGroupsFor(active sections) []queryGroup {
+	all := r.queryGroups()
+	if len(active) == 0 {
+		return all
+	}
+
+	filtered := make([]queryGroup, 0, len(all))
+	for _, g := range all {
+		if active[g.section] {
+			filtered = append(filtered, g)
+		}
+	}
+	return filtered
+}
+
 // Validate checks the Request for structural issues that would cause
-// confusing runtime errors.
-func (r *Request) Validate() error {
-	if err := r.validateRunWeights(); err != nil {
-		return err
+// confusing runtime errors. When sections are provided, only those
+// sections are checked for env/gen/seq expression validity.
+func (r *Request) Validate(sections ...ConfigSection) error {
+	active := sectionSet(sections)
+
+	if active.has(ConfigSectionRun) {
+		if err := r.validateRunWeights(); err != nil {
+			return err
+		}
 	}
 	if err := r.validateSeq(); err != nil {
 		return err
 	}
-	groups := r.queryGroups()
+	groups := r.queryGroupsFor(active)
 	if err := r.validateRowRefs(groups); err != nil {
 		return err
 	}
 	if err := r.validateDuplicateNames(groups); err != nil {
 		return err
 	}
-	if err := r.validateTransactions(); err != nil {
-		return err
+	if active.has(ConfigSectionRun) {
+		if err := r.validateTransactions(); err != nil {
+			return err
+		}
 	}
-	if err := r.validateWorkers(); err != nil {
-		return err
+	if active.has(ConfigSectionWorker) {
+		if err := r.validateWorkers(); err != nil {
+			return err
+		}
 	}
 	if err := r.validateExpectationGlobals(); err != nil {
 		return err
 	}
-	return r.validateExpressions(groups)
+	return r.validateExpressions(groups, active)
 }
 
 func (r *Request) validateRunWeights() error {
@@ -599,7 +644,7 @@ func (r *Request) validateExpectationGlobals() error {
 	return nil
 }
 
-func (r *Request) validateExpressions(groups []queryGroup) error {
+func (r *Request) validateExpressions(groups []queryGroup, active sections) error {
 	seqNames := make(map[string]bool, len(r.Seq))
 	for _, s := range r.Seq {
 		seqNames[s.Name] = true
@@ -658,11 +703,13 @@ func (r *Request) validateExpressions(groups []queryGroup) error {
 			}
 		}
 	}
-	for _, item := range r.Run {
-		if item.IsTransaction() {
-			for _, v := range item.Transaction.Locals {
-				if err := check(v); err != nil {
-					return err
+	if active.has(ConfigSectionRun) {
+		for _, item := range r.Run {
+			if item.IsTransaction() {
+				for _, v := range item.Transaction.Locals {
+					if err := check(v); err != nil {
+						return err
+					}
 				}
 			}
 		}

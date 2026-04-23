@@ -25,8 +25,16 @@ func environNil(name string) any {
 	return val
 }
 
+type ErrFail struct {
+	Message string
+}
+
+func (e *ErrFail) Error() string {
+	return "fail: " + e.Message
+}
+
 func fail(msg string) (any, error) {
-	return nil, fmt.Errorf("fail: %s", msg)
+	return nil, &ErrFail{Message: msg}
 }
 
 func fatal(msg string) any {
