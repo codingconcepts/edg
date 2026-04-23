@@ -199,3 +199,8 @@ html[data-theme="dark"] {
     display: none;
   }
 }
+
+.markdown table td:first-child,
+.markdown table th:first-child {
+  white-space: nowrap;
+}

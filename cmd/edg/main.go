@@ -74,17 +74,27 @@ func main() {
 		},
 	}
 
-	root.PersistentFlags().StringVar(&flagURL, "url", "", "database connection URL (env: URL)")
-	root.PersistentFlags().StringVar(&configFile, "config", "", "workload YAML config file")
-	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql, mssql, dsql, spanner]")
+	root.PersistentFlags().StringVar(&flagURL, "url", "", "database connection URL (env: EDG_URL)")
+	root.PersistentFlags().StringVar(&configFile, "config", "", "workload YAML config file (env: EDG_CONFIG)")
+	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql, mssql, dsql, spanner] (env: EDG_DRIVER)")
 	root.PersistentFlags().StringVar(&flagLicense, "license", "", "license key for enterprise drivers (env: EDG_LICENSE)")
-	root.PersistentFlags().Uint64Var(&flagRngSeed, "rng-seed", 0, "PRNG seed for deterministic output")
-	root.PersistentFlags().StringVar(&flagMetricsAddr, "metrics-addr", "", "address for Prometheus metrics endpoint (e.g. :9090)")
-	root.PersistentFlags().BoolVar(&flagErrors, "errors", false, "print worker errors to stderr")
-	root.PersistentFlags().IntVar(&flagRetries, "retries", 0, "number of transaction retry attempts on error")
-	root.PersistentFlags().IntVar(&flagPoolSize, "pool-size", 0, "maximum number of open database connections (0 = driver default)")
+	root.PersistentFlags().Uint64Var(&flagRngSeed, "rng-seed", 0, "PRNG seed for deterministic output (env: EDG_RNG_SEED)")
+	root.PersistentFlags().StringVar(&flagMetricsAddr, "metrics-addr", "", "address for Prometheus metrics endpoint (e.g. :9090) (env: EDG_METRICS_ADDR)")
+	root.PersistentFlags().BoolVar(&flagErrors, "errors", false, "print worker errors to stderr (env: EDG_ERRORS)")
+	root.PersistentFlags().IntVar(&flagRetries, "retries", 0, "number of transaction retry attempts on error (env: EDG_RETRIES)")
+	root.PersistentFlags().IntVar(&flagPoolSize, "pool-size", 0, "maximum number of open database connections (0 = driver default) (env: EDG_POOL_SIZE)")
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		bindEnv(cmd, "url", "EDG_URL")
+		bindEnv(cmd, "config", "EDG_CONFIG")
+		bindEnv(cmd, "driver", "EDG_DRIVER")
+		bindEnv(cmd, "license", "EDG_LICENSE")
+		bindEnv(cmd, "rng-seed", "EDG_RNG_SEED")
+		bindEnv(cmd, "metrics-addr", "EDG_METRICS_ADDR")
+		bindEnv(cmd, "errors", "EDG_ERRORS")
+		bindEnv(cmd, "retries", "EDG_RETRIES")
+		bindEnv(cmd, "pool-size", "EDG_POOL_SIZE")
+
 		if cmd.Flags().Changed("rng-seed") {
 			random.Seed(flagRngSeed)
 		}
@@ -143,5 +153,14 @@ func main() {
 			slog.Error("fatal", "error", err)
 		}
 		os.Exit(1)
+	}
+}
+
+func bindEnv(cmd *cobra.Command, flagName, envVar string) {
+	if cmd.Flags().Changed(flagName) {
+		return
+	}
+	if v, ok := os.LookupEnv(envVar); ok {
+		cmd.Flags().Set(flagName, v)
 	}
 }

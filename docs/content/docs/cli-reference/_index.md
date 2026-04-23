@@ -30,21 +30,35 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 
 ## Flags
 
-| Flag | Short | Default | Description |
+| Flag / Env Var | Short | Default | Description |
 |---|---|---|---|
-| `--url` | | | Database connection URL (or set `URL` env var) |
-| `--config` | | | Path to the workload YAML config file (required for database commands, optional for `repl`) |
-| `--driver` | | `pgx` | database/sql driver name (`pgx`, `dsql`, `oracle`, `mysql`, `mssql`, or `spanner`) |
-| `--rng-seed` | | | PRNG seed for deterministic output (useful for regression testing) |
+| `--url`<br>`EDG_URL` | | | Database connection URL |
+| `--config`<br>`EDG_CONFIG` | | | Path to the workload YAML config file (required for database commands, optional for `repl`) |
+| `--driver`<br>`EDG_DRIVER` | | `pgx` | database/sql driver name (`pgx`, `dsql`, `oracle`, `mysql`, `mssql`, or `spanner`) |
+| `--rng-seed`<br>`EDG_RNG_SEED` | | | PRNG seed for deterministic output (useful for regression testing) |
 | `--duration` | `-d` | `1m` | Benchmark duration (run and all commands) |
 | `--workers` | `-w` | `1` | Number of concurrent workers (run and all commands) |
-| `--license` | | | License key for enterprise drivers, or set `EDG_LICENSE` env var (see [Licensing](/docs/licensing/)) |
-| `--retries` | | `0` | Number of transaction retry attempts on error (run and all commands). Uses exponential backoff (1ms, 2ms, 4ms, ...). Only applies to transactions, not standalone queries. See [Retries](#retries) for details. |
-| `--errors` | | `false` | Print worker errors to stderr (run and all commands). See [Error Output](#error-output) for details. |
+| `--license`<br>`EDG_LICENSE` | | | License key for enterprise drivers (see [Licensing](/docs/licensing/)) |
+| `--retries`<br>`EDG_RETRIES` | | `0` | Number of transaction retry attempts on error (run and all commands). Uses exponential backoff (1ms, 2ms, 4ms, ...). Only applies to transactions, not standalone queries. See [Retries](#retries) for details. |
+| `--errors`<br>`EDG_ERRORS` | | `false` | Print worker errors to stderr (run and all commands). See [Error Output](#error-output) for details. |
 | `--print-interval` | | `1s` | Progress reporting interval (run and all commands) |
-| `--metrics-addr` | | | Address for Prometheus metrics endpoint (e.g. `:9090`). See [Observability]({{< relref "observability" >}}) for details. |
-| `--pool-size` | | `0` | Maximum number of open database connections. `0` uses the driver default (typically unlimited). |
+| `--metrics-addr`<br>`EDG_METRICS_ADDR` | | | Address for Prometheus metrics endpoint (e.g. `:9090`). See [Observability]({{< relref "observability" >}}) for details. |
+| `--pool-size`<br>`EDG_POOL_SIZE` | | `0` | Maximum number of open database connections. `0` uses the driver default (typically unlimited). |
 | `--warmup-duration` | | `0` | Warmup period before collecting metrics (e.g. `10s`). Workers run during warmup but results are discarded. See [Warmup](#warmup) for details. |
+
+Every flag with an env var listed above can be set via the environment instead of the command line. Flags take precedence over environment variables, which take precedence over defaults.
+
+```sh
+export EDG_URL="postgres://root@localhost:26257?sslmode=disable"
+export EDG_DRIVER="pgx"
+export EDG_CONFIG="workload.yaml"
+
+# No need to pass --url, --driver, or --config:
+edg run -w 10 -d 5m
+
+# Flags override env vars when both are set:
+edg run -w 10 -d 5m --driver mysql --url "user:pass@tcp(localhost:3306)/db"
+```
 
 ## Example
 
@@ -111,7 +125,7 @@ DSQL uses PostgreSQL-compatible SQL, so use `$1`, `$2` placeholders in your quer
 
 ## Licensing
 
-The `pgx` and `mysql` drivers are free to use. Enterprise drivers (`oracle`, `mssql`, `dsql`, `spanner`) require a license key passed via `--license` or the `EDG_LICENSE` environment variable. The license is validated before connecting to the database. See the [Licensing](/docs/licensing/) page for full details.
+The `pgx` and `mysql` drivers are free to use. Enterprise drivers (`oracle`, `mssql`, `dsql`, `spanner`) require a license key passed via `--license` or `EDG_LICENSE`. The license is validated before connecting to the database. See the [Licensing](/docs/licensing/) page for full details.
 
 ## Validating Config
 
