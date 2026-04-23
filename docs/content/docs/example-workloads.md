@@ -31,6 +31,7 @@ Complete workload configs you can run directly or use as starting points for you
 | [Named Args](https://github.com/codingconcepts/edg/tree/main/_examples/named_args/) | Map-style args with `arg('name')` instead of `arg(0)` |
 | [Nullable](https://github.com/codingconcepts/edg/tree/main/_examples/nullable/) | Demonstrates `nullable(expr, probability)` for injecting NULLs with controlled frequency |
 | [Observability](https://github.com/codingconcepts/edg/tree/main/_examples/observability/) | Prometheus metrics and Grafana dashboard with queries, writes, and rollback-prone transactions |
+| [Org Tree](https://github.com/codingconcepts/edg/tree/main/_examples/org_tree/) | Hierarchical org chart (CEO -> VPs -> Directors -> Managers -> ICs) using seed capture for self-referential generation |
 | [Pipeline](https://github.com/codingconcepts/edg/tree/main/_examples/pipeline/) | Multi-table sequential reads and writes |
 | [Populate](https://github.com/codingconcepts/edg/tree/main/_examples/populate/) | Billion-row data population benchmark |
 | [Prepared](https://github.com/codingconcepts/edg/tree/main/_examples/prepared/) | Prepared statements for reduced parse overhead in high-throughput workloads |

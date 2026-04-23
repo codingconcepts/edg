@@ -57,6 +57,7 @@ type Env struct {
 
 	computedArgs     []any
 	computedArgNames map[string]int
+	capturedRows     []map[string]any
 	lastPrintValues  []string
 
 	txLocals map[string]any
@@ -447,6 +448,12 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 
 	e.computedArgNames = q.Args.Names
 
+	var captureColumns []string
+	if q.Name != "" {
+		captureColumns = output.ExtractColumns(q)
+		e.capturedRows = nil
+	}
+
 	for b := range batches {
 		n := size
 		if remaining := count - b*size; remaining < size {
@@ -468,6 +475,15 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 				}
 				perArg[i][row] = formatters[i](v)
 				e.computedArgs = append(e.computedArgs, v)
+			}
+			if captureColumns != nil {
+				r := make(map[string]any, len(captureColumns))
+				for ci, col := range captureColumns {
+					if ci < len(e.computedArgs) {
+						r[col] = e.computedArgs[ci]
+					}
+				}
+				e.capturedRows = append(e.capturedRows, r)
 			}
 		}
 
@@ -626,6 +642,33 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 					err = fmt.Errorf("running %s query %s: %w", section, q.Name, err)
 					e.sendResult(config.QueryResult{Name: q.Name, Section: section, Latency: time.Since(queryStart), Err: err, Count: i})
 					return err
+				}
+			}
+		}
+
+		if section == config.ConfigSectionSeed && q.Name != "" && len(q.CompiledArgs) > 0 {
+			if q.IsBatch() {
+				if len(e.capturedRows) > 0 {
+					e.SetEnv(q.Name, e.capturedRows)
+					e.capturedRows = nil
+				}
+			} else {
+				columns := output.ExtractColumns(q)
+				rows := make([]map[string]any, 0, len(argSets))
+				for _, args := range argSets {
+					if len(args) == 0 {
+						continue
+					}
+					row := make(map[string]any, len(columns))
+					for ci, col := range columns {
+						if ci < len(args) {
+							row[col] = args[ci]
+						}
+					}
+					rows = append(rows, row)
+				}
+				if len(rows) > 0 {
+					e.SetEnv(q.Name, rows)
 				}
 			}
 		}

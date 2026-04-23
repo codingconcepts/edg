@@ -94,6 +94,7 @@ docker compose -f _examples/compose_oracle.yml down
 
 ## Todos
 
+* Support LTREE
 * Log levels
 * Better error output
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences

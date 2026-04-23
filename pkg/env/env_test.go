@@ -684,6 +684,172 @@ func TestRunSection_SeedUsesBindParams(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestRunSection_SeedCapturesNamedArgs(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectExec("INSERT INTO employees").WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{"const": convert.Constant},
+		request:   &config.Request{},
+	}
+
+	q := &config.Query{
+		Name:  "ceo",
+		Type:  config.QueryTypeExec,
+		Query: "INSERT INTO employees (id, title) VALUES ($1, $2)",
+		Args: config.QueryArgs{
+			Exprs: []string{"const(1)", "const('CEO')"},
+			Names: map[string]int{"id": 0, "title": 1},
+		},
+	}
+	require.NoError(t, q.CompileArgs(env.env))
+
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionSeed, db))
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	data, ok := env.env["ceo"].([]map[string]any)
+	require.True(t, ok, "seed query did not capture dataset")
+	require.Len(t, data, 1)
+	assert.Equal(t, 1, data[0]["id"])
+	assert.Equal(t, "CEO", data[0]["title"])
+}
+
+func TestRunSection_SeedCapturesBatchArgs(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectExec("INSERT INTO employees").WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{"const": convert.Constant},
+		request:   &config.Request{},
+	}
+
+	q := &config.Query{
+		Name:  "vps",
+		Type:  config.QueryTypeExecBatch,
+		Count: 3,
+		Query: "INSERT INTO employees (id, title) VALUES ($1, $2)",
+		Args: config.QueryArgs{
+			Exprs: []string{"const(10)", "const('VP')"},
+			Names: map[string]int{"id": 0, "title": 1},
+		},
+	}
+	require.NoError(t, q.CompileArgs(env.env))
+
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionSeed, db))
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	data, ok := env.env["vps"].([]map[string]any)
+	require.True(t, ok, "seed batch query did not capture dataset")
+	require.Len(t, data, 3)
+	for i, row := range data {
+		assert.Equal(t, 10, row["id"], "row %d id", i)
+		assert.Equal(t, "VP", row["title"], "row %d title", i)
+	}
+}
+
+func TestRunSection_SeedCaptureHierarchical(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectExec("INSERT INTO employees").WillReturnResult(driver.ResultNoRows)
+	mock.ExpectExec("INSERT INTO employees").WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{"const": convert.Constant},
+		request:   &config.Request{},
+	}
+	env.env["ref_rand"] = env.refRand
+
+	ceo := &config.Query{
+		Name:  "ceo",
+		Type:  config.QueryTypeExec,
+		Query: "INSERT INTO employees (id, title) VALUES ($1, $2)",
+		Args: config.QueryArgs{
+			Exprs: []string{"const(1)", "const('CEO')"},
+			Names: map[string]int{"id": 0, "title": 1},
+		},
+	}
+	require.NoError(t, ceo.CompileArgs(env.env))
+
+	vps := &config.Query{
+		Name:  "vps",
+		Type:  config.QueryTypeExecBatch,
+		Count: 3,
+		Query: "INSERT INTO employees (id, manager_id) VALUES ($1, $2)",
+		Args: config.QueryArgs{
+			Exprs: []string{"const(10)", "ref_rand('ceo').id"},
+			Names: map[string]int{"id": 0, "manager_id": 1},
+		},
+	}
+	require.NoError(t, vps.CompileArgs(env.env))
+
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{ceo, vps}, config.ConfigSectionSeed, db))
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// CEO captured
+	ceoData, ok := env.env["ceo"].([]map[string]any)
+	require.True(t, ok, "ceo not captured")
+	require.Len(t, ceoData, 1)
+	assert.Equal(t, 1, ceoData[0]["id"])
+
+	// VPs captured and all reference the CEO
+	vpData, ok := env.env["vps"].([]map[string]any)
+	require.True(t, ok, "vps not captured")
+	require.Len(t, vpData, 3)
+	for i, row := range vpData {
+		assert.Equal(t, 1, row["manager_id"], "vp %d should reference ceo id=1", i)
+	}
+}
+
+func TestRunSection_SeedCaptureNotInRunSection(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectExec("INSERT INTO t").WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        db,
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{"const": convert.Constant},
+		request:   &config.Request{},
+	}
+
+	q := &config.Query{
+		Name:  "insert_t",
+		Type:  config.QueryTypeExec,
+		Query: "INSERT INTO t (id) VALUES ($1)",
+		Args: config.QueryArgs{
+			Exprs: []string{"const(1)"},
+			Names: map[string]int{"id": 0},
+		},
+	}
+	require.NoError(t, q.CompileArgs(env.env))
+
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	_, ok := env.env["insert_t"].([]map[string]any)
+	assert.False(t, ok, "run section should not capture datasets")
+}
+
 func TestRunSection_RunSectionPassesArgs(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)

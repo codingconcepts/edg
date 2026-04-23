@@ -1,0 +1,110 @@
+globals:
+  total_vps: 5
+  total_directors: 15
+  total_managers: 50
+  total_ics: 200
+
+seq:
+  - name: emp_id
+    start: 1
+    step: 1
+
+up:
+
+  - name: create_employees
+    query: |-
+      CREATE TABLE IF NOT EXISTS employees (
+        id INT PRIMARY KEY,
+        name STRING NOT NULL,
+        title STRING NOT NULL,
+        manager_id INT REFERENCES employees(id)
+      )
+
+seed:
+
+  - name: ceo
+    type: exec
+    args:
+      id: seq_global('emp_id')
+      name: gen('name')
+      title: const('CEO')
+      manager_id: const(nil)
+    query: |-
+      INSERT INTO employees (id, name, title, manager_id)
+      VALUES ($1, $2, $3, $4)
+
+  - name: vps
+    type: exec_batch
+    count: total_vps
+    args:
+      id: seq_global('emp_id')
+      name: gen('name')
+      title: const('VP')
+      manager_id: ref_rand('ceo').id
+    query: |-
+      INSERT INTO employees (id, name, title, manager_id)
+      SELECT
+        unnest(string_to_array('$1', __sep__))::INT,
+        unnest(string_to_array('$2', __sep__)),
+        unnest(string_to_array('$3', __sep__)),
+        unnest(string_to_array('$4', __sep__))::INT
+
+  - name: directors
+    type: exec_batch
+    count: total_directors
+    args:
+      id: seq_global('emp_id')
+      name: gen('name')
+      title: const('Director')
+      manager_id: ref_rand('vps').id
+    query: |-
+      INSERT INTO employees (id, name, title, manager_id)
+      SELECT
+        unnest(string_to_array('$1', __sep__))::INT,
+        unnest(string_to_array('$2', __sep__)),
+        unnest(string_to_array('$3', __sep__)),
+        unnest(string_to_array('$4', __sep__))::INT
+
+  - name: managers
+    type: exec_batch
+    count: total_managers
+    args:
+      id: seq_global('emp_id')
+      name: gen('name')
+      title: const('Manager')
+      manager_id: ref_rand('directors').id
+    query: |-
+      INSERT INTO employees (id, name, title, manager_id)
+      SELECT
+        unnest(string_to_array('$1', __sep__))::INT,
+        unnest(string_to_array('$2', __sep__)),
+        unnest(string_to_array('$3', __sep__)),
+        unnest(string_to_array('$4', __sep__))::INT
+
+  - name: ics
+    type: exec_batch
+    count: total_ics
+    args:
+      id: seq_global('emp_id')
+      name: gen('name')
+      title: const('IC')
+      manager_id: ref_rand('managers').id
+    query: |-
+      INSERT INTO employees (id, name, title, manager_id)
+      SELECT
+        unnest(string_to_array('$1', __sep__))::INT,
+        unnest(string_to_array('$2', __sep__)),
+        unnest(string_to_array('$3', __sep__)),
+        unnest(string_to_array('$4', __sep__))::INT
+
+deseed:
+
+  - name: truncate_employees
+    type: exec
+    query: TRUNCATE TABLE employees CASCADE
+
+down:
+
+  - name: drop_employees
+    type: exec
+    query: DROP TABLE IF EXISTS employees
