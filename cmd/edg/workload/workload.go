@@ -16,11 +16,12 @@ import (
 )
 
 type RunParams struct {
-	DB            *sql.DB
-	Req           *config.Request
-	Duration      time.Duration
-	Workers       int
-	PrintInterval time.Duration
+	DB             *sql.DB
+	Req            *config.Request
+	Duration       time.Duration
+	Workers        int
+	PrintInterval  time.Duration
+	WarmupDuration time.Duration
 }
 
 // RunFunc matches the signature of the top-level run function.
@@ -186,9 +187,10 @@ func DownCmd(deps Deps) *cobra.Command {
 
 func RunCmd(deps Deps) *cobra.Command {
 	var (
-		duration      time.Duration
-		workers       int
-		printInterval time.Duration
+		duration       time.Duration
+		workers        int
+		printInterval  time.Duration
+		warmupDuration time.Duration
 	)
 
 	cmd := &cobra.Command{
@@ -208,22 +210,24 @@ func RunCmd(deps Deps) *cobra.Command {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
 			defer cancel()
 
-			return deps.Run(ctx, cancel, RunParams{DB: db, Req: req, Duration: duration, Workers: workers, PrintInterval: printInterval})
+			return deps.Run(ctx, cancel, RunParams{DB: db, Req: req, Duration: duration, Workers: workers, PrintInterval: printInterval, WarmupDuration: warmupDuration})
 		},
 	}
 
 	cmd.Flags().DurationVarP(&duration, "duration", "d", time.Minute, "benchmark duration")
 	cmd.Flags().IntVarP(&workers, "workers", "w", 1, "number of concurrent workers")
 	cmd.Flags().DurationVar(&printInterval, "print-interval", time.Second, "progress reporting interval")
+	cmd.Flags().DurationVar(&warmupDuration, "warmup-duration", 0, "warmup period before collecting metrics (e.g. 10s)")
 
 	return cmd
 }
 
 func AllCmd(deps Deps) *cobra.Command {
 	var (
-		duration      time.Duration
-		workers       int
-		printInterval time.Duration
+		duration       time.Duration
+		workers        int
+		printInterval  time.Duration
+		warmupDuration time.Duration
 	)
 
 	cmd := &cobra.Command{
@@ -272,7 +276,7 @@ func AllCmd(deps Deps) *cobra.Command {
 
 			if len(req.Run) > 0 || len(req.Stages) > 0 {
 				runCtx, runCancel := context.WithCancel(ctx)
-				return deps.Run(runCtx, runCancel, RunParams{DB: db, Req: req, Duration: duration, Workers: workers, PrintInterval: printInterval})
+				return deps.Run(runCtx, runCancel, RunParams{DB: db, Req: req, Duration: duration, Workers: workers, PrintInterval: printInterval, WarmupDuration: warmupDuration})
 			}
 
 			return nil
@@ -282,6 +286,7 @@ func AllCmd(deps Deps) *cobra.Command {
 	cmd.Flags().DurationVarP(&duration, "duration", "d", time.Minute, "benchmark duration")
 	cmd.Flags().IntVarP(&workers, "workers", "w", 1, "number of concurrent workers")
 	cmd.Flags().DurationVar(&printInterval, "print-interval", time.Second, "progress reporting interval")
+	cmd.Flags().DurationVar(&warmupDuration, "warmup-duration", 0, "warmup period before collecting metrics (e.g. 10s)")
 
 	return cmd
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"slices"
@@ -36,18 +37,34 @@ type printAgg struct {
 	numCount int64
 }
 
-func printResults(results <-chan config.QueryResult, interval time.Duration, start time.Time, numWorkers int, totalDuration time.Duration) map[string]*queryStats {
+func printResults(results <-chan config.QueryResult, interval time.Duration, start time.Time, numWorkers int, totalDuration time.Duration, warmupDuration time.Duration) map[string]*queryStats {
 	stats := map[string]*queryStats{}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	warmingUp := warmupDuration > 0
+	var warmupDeadline <-chan time.Time
+	if warmingUp {
+		warmupDeadline = time.After(warmupDuration)
+	}
+
 	for {
 		select {
+		case <-warmupDeadline:
+			warmingUp = false
+			start = time.Now()
+			slog.Info("warmup complete, collecting metrics")
+
 		case r, ok := <-results:
 			if !ok {
 				printSummary(stats, start, numWorkers)
 				return stats
 			}
+
+			if warmingUp {
+				continue
+			}
+
 			s := stats[r.Name]
 			if s == nil {
 				s = &queryStats{}
@@ -110,7 +127,9 @@ func printResults(results <-chan config.QueryResult, interval time.Duration, sta
 				metricTxCommits.WithLabelValues(r.Name).Inc()
 			}
 		case <-ticker.C:
-			printProgress(stats, start, totalDuration)
+			if !warmingUp {
+				printProgress(stats, start, totalDuration)
+			}
 		}
 	}
 }

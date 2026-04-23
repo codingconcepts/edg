@@ -40,6 +40,7 @@ var (
 	flagMetricsAddr string
 	flagErrors      bool
 	flagRetries     int
+	flagPoolSize    int
 
 	version string
 )
@@ -81,6 +82,7 @@ func main() {
 	root.PersistentFlags().StringVar(&flagMetricsAddr, "metrics-addr", "", "address for Prometheus metrics endpoint (e.g. :9090)")
 	root.PersistentFlags().BoolVar(&flagErrors, "errors", false, "print worker errors to stderr")
 	root.PersistentFlags().IntVar(&flagRetries, "retries", 0, "number of transaction retry attempts on error")
+	root.PersistentFlags().IntVar(&flagPoolSize, "pool-size", 0, "maximum number of open database connections (0 = driver default)")
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("rng-seed") {

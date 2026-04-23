@@ -39,9 +39,12 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 | `--duration` | `-d` | `1m` | Benchmark duration (run and all commands) |
 | `--workers` | `-w` | `1` | Number of concurrent workers (run and all commands) |
 | `--license` | | | License key for enterprise drivers, or set `EDG_LICENSE` env var (see [Licensing](/docs/licensing/)) |
-| `--retries` | | `0` | Number of transaction retry attempts on error (run and all commands) |
-| `--errors` | | `false` | Print worker errors to stderr (run and all commands) |
+| `--retries` | | `0` | Number of transaction retry attempts on error (run and all commands). Uses exponential backoff (1ms, 2ms, 4ms, ...). Only applies to transactions, not standalone queries. See [Retries](#retries) for details. |
+| `--errors` | | `false` | Print worker errors to stderr (run and all commands). See [Error Output](#error-output) for details. |
 | `--print-interval` | | `1s` | Progress reporting interval (run and all commands) |
+| `--metrics-addr` | | | Address for Prometheus metrics endpoint (e.g. `:9090`). See [Observability]({{< relref "observability" >}}) for details. |
+| `--pool-size` | | `0` | Maximum number of open database connections. `0` uses the driver default (typically unlimited). |
+| `--warmup-duration` | | `0` | Warmup period before collecting metrics (e.g. `10s`). Workers run during warmup but results are discarded. See [Warmup](#warmup) for details. |
 
 ## Example
 
@@ -180,6 +183,95 @@ The `EDG_LICENSE` environment variable is also accepted:
 export EDG_LICENSE="your-license-key"
 edg validate license --driver oracle
 ```
+
+## Retries
+
+The `--retries` flag controls how many times a failed transaction is retried before the error is recorded. The default is `0` (no retries). Retries only apply to transactions (queries wrapped in a `transaction:` block), not standalone queries.
+
+When a transaction fails, edg waits with exponential backoff before retrying:
+
+| Attempt | Backoff |
+|---|---|
+| 1st retry | 2ms |
+| 2nd retry | 4ms |
+| 3rd retry | 8ms |
+| 4th retry | 16ms |
+| *n*th retry | 2^*n* ms |
+
+If all retry attempts fail, the last error is recorded in the stats and the worker continues to the next iteration. Context cancellation (e.g. `Ctrl+C` or duration expiry) stops retries immediately.
+
+```sh
+edg run \
+  --driver pgx \
+  --config workload.yaml \
+  --url ${DATABASE_URL} \
+  --retries 3 \
+  -w 10 \
+  -d 5m
+```
+
+## Error Output
+
+By default, individual query errors during the `run` phase are counted but not printed. The `--errors` flag prints each error to stderr as it occurs, which is useful for debugging:
+
+```sh
+edg run \
+  --driver pgx \
+  --config workload.yaml \
+  --url ${DATABASE_URL} \
+  --errors \
+  -w 10 \
+  -d 5m
+```
+
+```
+2025/04/23 14:32:07 ERROR run error worker=3 error="running run query debit_source: pq: insufficient funds"
+2025/04/23 14:32:07 ERROR run error worker=7 error="running run query debit_source: pq: insufficient funds"
+```
+
+Without `--errors`, the same failures still appear in the summary table's ERRORS column and count toward `error_rate` in expectations.
+
+## Connection Pool
+
+The `--pool-size` flag sets the maximum number of open database connections (`SetMaxOpenConns` and `SetMaxIdleConns`). The default `0` uses the driver's default, which is typically unlimited.
+
+Setting pool size is useful for:
+
+- **Simulating constrained environments** where the application has a fixed connection budget.
+- **Preventing connection exhaustion** when running with many workers against a database with connection limits.
+- **Isolating connection overhead** from query performance in benchmarks.
+
+```sh
+edg run \
+  --driver pgx \
+  --config workload.yaml \
+  --url ${DATABASE_URL} \
+  --pool-size 20 \
+  -w 50 \
+  -d 5m
+```
+
+In this example, 50 workers share 20 connections. Workers that can't acquire a connection will block until one becomes available.
+
+## Warmup
+
+The `--warmup-duration` flag runs workers for a specified period before collecting metrics. During warmup, query results are discarded. They don't appear in progress output, the summary, Prometheus metrics, or expectations.
+
+This produces cleaner benchmark results by allowing the database to warm its caches, JIT-compile query plans, and reach a steady state before measurement begins.
+
+```sh
+edg run \
+  --driver pgx \
+  --config workload.yaml \
+  --url ${DATABASE_URL} \
+  --warmup-duration 30s \
+  -w 10 \
+  -d 5m
+```
+
+In this example, workers run for 30 seconds of warmup (discarded), then 5 minutes of measured execution. The total wall-clock time is 5m30s.
+
+When using stages, warmup applies before the first stage begins collecting metrics.
 
 ## Run Behaviour
 

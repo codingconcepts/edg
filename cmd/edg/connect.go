@@ -69,6 +69,11 @@ func connectDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
 
+	if flagPoolSize > 0 {
+		db.SetMaxOpenConns(flagPoolSize)
+		db.SetMaxIdleConns(flagPoolSize)
+	}
+
 	if err := db.Ping(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("connecting to database: %w", err)

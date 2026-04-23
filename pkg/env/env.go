@@ -480,6 +480,9 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 			}
 		}
 		result[b] = args
+
+		rowsDone := b*size + n
+		slog.Info("generating rows", "query", q.Name, "progress", fmt.Sprintf("%d/%d", rowsDone, count))
 	}
 
 	return result, nil
