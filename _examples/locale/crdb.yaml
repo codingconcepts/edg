@@ -1,0 +1,95 @@
+globals:
+  jp_users: 50
+  de_users: 50
+
+up:
+
+  - name: create_users
+    query: |-
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        region STRING NOT NULL,
+        first_name STRING NOT NULL,
+        last_name STRING NOT NULL,
+        full_name STRING NOT NULL,
+        email STRING NOT NULL,
+        phone STRING NOT NULL,
+        city STRING NOT NULL,
+        address STRING NOT NULL,
+        masked_name STRING NOT NULL,
+        masked_email STRING NOT NULL
+      )
+
+seed:
+
+  - name: jp_users
+    type: exec_batch
+    count: jp_users
+    args:
+      id: uuid_v4()
+      region: const('JP')
+      first_name: gen_locale('first_name', 'ja_JP')
+      last_name: gen_locale('last_name', 'ja_JP')
+      full_name: gen_locale('name', 'ja_JP')
+      email: gen('email')
+      phone: gen_locale('phone', 'ja_JP')
+      city: gen_locale('city', 'ja_JP')
+      address: gen_locale('address', 'ja_JP')
+      masked_name: mask(arg('full_name'))
+      masked_email: mask(arg('email'))
+    query: |-
+      INSERT INTO users (id, region, first_name, last_name, full_name, email, phone, city, address, masked_name, masked_email)
+      SELECT
+        unnest(string_to_array('$1', __sep__))::UUID,
+        unnest(string_to_array('$2', __sep__)),
+        unnest(string_to_array('$3', __sep__)),
+        unnest(string_to_array('$4', __sep__)),
+        unnest(string_to_array('$5', __sep__)),
+        unnest(string_to_array('$6', __sep__)),
+        unnest(string_to_array('$7', __sep__)),
+        unnest(string_to_array('$8', __sep__)),
+        unnest(string_to_array('$9', __sep__)),
+        unnest(string_to_array('$10', __sep__)),
+        unnest(string_to_array('$11', __sep__))
+
+  - name: de_users
+    type: exec_batch
+    count: de_users
+    args:
+      id: uuid_v4()
+      region: const('DE')
+      first_name: gen_locale('first_name', 'de_DE')
+      last_name: gen_locale('last_name', 'de_DE')
+      full_name: gen_locale('name', 'de_DE')
+      email: gen('email')
+      phone: gen_locale('phone', 'de_DE')
+      city: gen_locale('city', 'de_DE')
+      address: gen_locale('address', 'de_DE')
+      masked_name: mask(arg('full_name'))
+      masked_email: mask(arg('email'))
+    query: |-
+      INSERT INTO users (id, region, first_name, last_name, full_name, email, phone, city, address, masked_name, masked_email)
+      SELECT
+        unnest(string_to_array('$1', __sep__))::UUID,
+        unnest(string_to_array('$2', __sep__)),
+        unnest(string_to_array('$3', __sep__)),
+        unnest(string_to_array('$4', __sep__)),
+        unnest(string_to_array('$5', __sep__)),
+        unnest(string_to_array('$6', __sep__)),
+        unnest(string_to_array('$7', __sep__)),
+        unnest(string_to_array('$8', __sep__)),
+        unnest(string_to_array('$9', __sep__)),
+        unnest(string_to_array('$10', __sep__)),
+        unnest(string_to_array('$11', __sep__))
+
+deseed:
+
+  - name: truncate_users
+    type: exec
+    query: TRUNCATE TABLE users CASCADE
+
+down:
+
+  - name: drop_users
+    type: exec
+    query: DROP TABLE IF EXISTS users

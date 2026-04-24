@@ -147,6 +147,23 @@ These expressions are used in the `args:` list of a `run` query. Each entry in `
 | `uniform_f(0.01, 999.99, 2)` | Random float between 0.01 and 999.99 with 2 decimal places |
 | `zipf(2.0, 1.0, 999)` | Zipfian distribution: hot-key pattern where value 0 is most frequent |
 
+## PII & locale
+
+| Expression | Description |
+|---|---|
+| `gen_locale('first_name', 'ja_JP')` | Japanese first name (e.g. 太郎, 花子) |
+| `gen_locale('last_name', 'de_DE')` | German last name (e.g. Müller, Schmidt) |
+| `gen_locale('name', 'ja_JP')` | Full name in locale order (東 = 佐藤太郎, 西 = Hans Müller) |
+| `gen_locale('city', 'fr_FR')` | French city name (e.g. Paris, Lyon) |
+| `gen_locale('street', 'es_ES')` | Spanish street name (e.g. Gran Vía) |
+| `gen_locale('phone', 'ko_KR')` | Korean phone number (e.g. 010-1234-5678) |
+| `gen_locale('zip', 'ja_JP')` | Japanese postal code (e.g. 123-4567) |
+| `gen_locale('address', 'de_DE')` | Full German address with street number, city, and zip |
+| `mask('john@example.com')` | Deterministic 16-char hex token (same input → same output) |
+| `mask(arg('email'), 8)` | 8-char masked token of a previously generated email |
+
+Supported locales: `en_US`, `ja_JP`, `de_DE`, `fr_FR`, `es_ES`, `pt_BR`, `zh_CN`, `ko_KR`. Aliases like `ja`, `de`, `fr` also work.
+
 ## Random values
 
 | Expression | Description |

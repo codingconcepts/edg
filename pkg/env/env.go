@@ -112,6 +112,7 @@ func NewEnv(db *sql.DB, driver string, r *config.Request, sections ...config.Con
 		"fail":                fail,                   // Return an error that stops the worker gracefully.
 		"fatal":               fatal,                  // Terminate the process immediately.
 		"gen_batch":           gen.GenBatch,           // Generate N values in batches, returns [][]any of comma-separated strings.
+		"gen_locale":          gen.GenLocale,          // Generate locale-aware PII (name, address, phone, etc.).
 		"gen":                 gen.Gen,                // Generate a random value using gofakeit.
 		"global":              env.global,             // Use a value in the global config section.
 		"local":               env.local,              // Use a transaction-scoped local variable.
@@ -121,6 +122,7 @@ func NewEnv(db *sql.DB, driver string, r *config.Request, sections ...config.Con
 		"lognorm_f":           gen.LognormRandF,       // Log-normal-distribution random float with precision.
 		"lognorm":             gen.LognormRand,        // Log-normal-distribution random float in [min, max].
 		"ltree":               gen.GenLtree,           // PostgreSQL ltree path from dot-joined parts.
+		"mask":                gen.Mask,               // Deterministic pseudonymization token for PII masking.
 		"max":                 env.aggMax,             // Maximum value of a numeric field in a dataset.
 		"min":                 env.aggMin,             // Minimum value of a numeric field in a dataset.
 		"norm_f":              env.normRandF,          // Normal-distribution random float with precision.
