@@ -38,7 +38,6 @@ Query arguments are written as expressions compiled at startup, giving you acces
 
 | Feature | pgx | mysql | mongodb | cassandra | mssql | oracle | dsql | spanner |
 |---|---|---|---|---|---|---|---|---|
-| License required | | | | | ☑️ | ☑️ | ☑️ | ☑️ |
 | up / seed / run / deseed / down | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
 | Transactions | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
 | Prepared statements | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
