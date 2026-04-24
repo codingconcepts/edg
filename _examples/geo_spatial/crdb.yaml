@@ -1,0 +1,280 @@
+globals:
+  users: 5000
+  batch_size: 1000
+
+up:
+
+  - name: create_profile
+    query: |-
+      CREATE TABLE IF NOT EXISTS profile (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        display_name STRING NOT NULL,
+        age INT NOT NULL,
+        gender STRING NOT NULL,
+        bio STRING NOT NULL DEFAULT '',
+        location GEOGRAPHY(POINT, 4326) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+  - name: create_idx_profile_location
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_profile_location
+      ON profile USING GIST (location)
+
+  - name: create_swipe
+    query: |-
+      CREATE TABLE IF NOT EXISTS swipe (
+        swiper_id UUID NOT NULL REFERENCES profile(id),
+        swiped_id UUID NOT NULL REFERENCES profile(id),
+        direction STRING NOT NULL CHECK (direction IN ('left', 'right')),
+        created_at TIMESTAMP NOT NULL DEFAULT now(),
+        PRIMARY KEY (swiper_id, swiped_id),
+        CHECK (swiper_id != swiped_id)
+      )
+
+  - name: create_match
+    query: |-
+      CREATE TABLE IF NOT EXISTS match (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_a UUID NOT NULL REFERENCES profile(id),
+        user_b UUID NOT NULL REFERENCES profile(id),
+        created_at TIMESTAMP NOT NULL DEFAULT now(),
+        UNIQUE (user_a, user_b)
+      )
+
+  - name: create_message
+    query: |-
+      CREATE TABLE IF NOT EXISTS message (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        match_id UUID NOT NULL REFERENCES match(id),
+        sender_id UUID NOT NULL REFERENCES profile(id),
+        body STRING NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      )
+
+  - name: create_idx_swipe_swiped
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_swipe_swiped
+      ON swipe (swiped_id, direction)
+
+  - name: create_idx_match_users
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_match_users
+      ON match (user_a) STORING (user_b)
+
+  - name: create_idx_match_users_b
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_match_users_b
+      ON match (user_b) STORING (user_a)
+
+  - name: create_idx_message_match
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_message_match
+      ON message (match_id, created_at DESC)
+      STORING (sender_id, body)
+
+seed:
+
+  - name: populate_profile
+    args:
+      - gen_batch(users, batch_size, 'first_name')
+    query: |-
+      INSERT INTO profile (display_name, age, gender, bio, location)
+      SELECT
+        n,
+        floor(random()::FLOAT8 * 30 + 18)::INT,
+        CASE floor(random()::FLOAT8 * 3)::INT
+          WHEN 0 THEN 'male'
+          WHEN 1 THEN 'female'
+          ELSE 'non-binary'
+        END,
+        substr(md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text), 1, 80),
+        ST_SetSRID(ST_MakePoint(
+          -74.0060 + (random()::FLOAT8 - 0.5) * 0.3,
+          40.7128 + (random()::FLOAT8 - 0.5) * 0.3
+        ), 4326)::GEOGRAPHY
+      FROM unnest(string_to_array('$1', __sep__)) AS n
+
+  - name: populate_swipe_forward
+    query: |-
+      INSERT INTO swipe (swiper_id, swiped_id, direction)
+      SELECT a.id, b.id, 'right'
+      FROM (SELECT id, row_number() OVER (ORDER BY id) AS rn FROM profile) a
+      JOIN (SELECT id, row_number() OVER (ORDER BY id) AS rn FROM profile) b
+        ON b.rn = a.rn + 1
+      ON CONFLICT DO NOTHING
+
+  - name: populate_swipe_reverse
+    query: |-
+      INSERT INTO swipe (swiper_id, swiped_id, direction)
+      SELECT swiped_id, swiper_id, 'right'
+      FROM swipe
+      ON CONFLICT DO NOTHING
+
+  - name: populate_match
+    query: |-
+      INSERT INTO match (user_a, user_b)
+      SELECT LEAST(s1.swiper_id, s1.swiped_id), GREATEST(s1.swiper_id, s1.swiped_id)
+      FROM swipe s1
+      JOIN swipe s2
+        ON s1.swiper_id = s2.swiped_id
+       AND s1.swiped_id = s2.swiper_id
+       AND s2.direction = 'right'
+      WHERE s1.direction = 'right'
+        AND s1.swiper_id < s1.swiped_id
+      ON CONFLICT DO NOTHING
+
+deseed:
+
+  - name: truncate_message
+    type: exec
+    query: TRUNCATE TABLE message
+
+  - name: truncate_match
+    type: exec
+    query: TRUNCATE TABLE match
+
+  - name: truncate_swipe
+    type: exec
+    query: TRUNCATE TABLE swipe
+
+  - name: truncate_profile
+    type: exec
+    query: TRUNCATE TABLE profile CASCADE
+
+down:
+
+  - name: drop_message
+    type: exec
+    query: DROP TABLE IF EXISTS message
+
+  - name: drop_match
+    type: exec
+    query: DROP TABLE IF EXISTS match
+
+  - name: drop_swipe
+    type: exec
+    query: DROP TABLE IF EXISTS swipe
+
+  - name: drop_profile
+    type: exec
+    query: DROP TABLE IF EXISTS profile
+
+init:
+
+  - name: fetch_profiles
+    type: query
+    query: |-
+      SELECT id, ST_Y(location::GEOMETRY) AS lat, ST_X(location::GEOMETRY) AS lon, gender
+      FROM profile
+      ORDER BY random()
+
+  - name: fetch_matches
+    type: query
+    query: |-
+      SELECT m.id, m.user_a, m.user_b
+      FROM match m
+      ORDER BY random()
+
+run_weights:
+  discover_nearby: 30
+  swipe_right: 15
+  swipe_left: 20
+  check_match: 10
+  send_message: 15
+  read_conversation: 10
+
+run:
+
+  # Find profiles within 15km using ST_DWithin on GiST index.
+  # Pattern: spatial index scan, ST_Distance for ordering
+  - name: discover_nearby
+    type: query
+    args:
+      - ref_rand('fetch_profiles').lon
+      - ref_rand('fetch_profiles').lat
+    query: |-
+      SELECT id, display_name, age, gender,
+        ST_AsText(location) AS location_wkt,
+        ST_Distance(
+          location,
+          ST_SetSRID(ST_MakePoint($1::FLOAT8, $2::FLOAT8), 4326)::GEOGRAPHY
+        ) / 1000.0 AS distance_km
+      FROM profile
+      WHERE ST_DWithin(
+        location,
+        ST_SetSRID(ST_MakePoint($1::FLOAT8, $2::FLOAT8), 4326)::GEOGRAPHY,
+        15000
+      )
+      ORDER BY distance_km ASC
+      LIMIT 20
+
+  # Swipe right on a profile.
+  # Pattern: UPSERT, ref_diff for two distinct users
+  - name: swipe_right
+    type: exec
+    args:
+      - ref_diff('fetch_profiles').id
+      - ref_diff('fetch_profiles').id
+    query: |-
+      INSERT INTO swipe (swiper_id, swiped_id, direction)
+      VALUES ($1::UUID, $2::UUID, 'right')
+      ON CONFLICT (swiper_id, swiped_id) DO NOTHING
+
+  # Swipe left on a profile.
+  # Pattern: UPSERT, ref_diff for two distinct users
+  - name: swipe_left
+    type: exec
+    args:
+      - ref_diff('fetch_profiles').id
+      - ref_diff('fetch_profiles').id
+    query: |-
+      INSERT INTO swipe (swiper_id, swiped_id, direction)
+      VALUES ($1::UUID, $2::UUID, 'left')
+      ON CONFLICT (swiper_id, swiped_id) DO NOTHING
+
+  # Check for mutual right-swipes and create a match.
+  # Pattern: conditional INSERT via subquery
+  - name: check_match
+    type: exec
+    args:
+      - ref_diff('fetch_profiles').id
+      - ref_diff('fetch_profiles').id
+    query: |-
+      INSERT INTO match (user_a, user_b)
+      SELECT LEAST($1::UUID, $2::UUID), GREATEST($1::UUID, $2::UUID)
+      WHERE EXISTS (
+        SELECT 1 FROM swipe
+        WHERE swiper_id = $1::UUID AND swiped_id = $2::UUID AND direction = 'right'
+      )
+      AND EXISTS (
+        SELECT 1 FROM swipe
+        WHERE swiper_id = $2::UUID AND swiped_id = $1::UUID AND direction = 'right'
+      )
+      ON CONFLICT (user_a, user_b) DO NOTHING
+
+  # Send a message in a matched conversation.
+  # Pattern: ref_same for consistent match row, gen for text
+  - name: send_message
+    type: exec
+    args:
+      - ref_same('fetch_matches').id
+      - ref_same('fetch_matches').user_a
+      - gen('sentence:8')
+    query: |-
+      INSERT INTO message (match_id, sender_id, body)
+      VALUES ($1::UUID, $2::UUID, $3::STRING)
+
+  # Read recent messages in a conversation.
+  # Pattern: index scan on (match_id, created_at DESC)
+  - name: read_conversation
+    type: query
+    args:
+      - ref_rand('fetch_matches').id
+    query: |-
+      SELECT m.body, m.created_at, p.display_name
+      FROM message m
+      JOIN profile p ON p.id = m.sender_id
+      WHERE m.match_id = $1::UUID
+      ORDER BY m.created_at DESC
+      LIMIT 50
