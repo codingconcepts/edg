@@ -34,7 +34,7 @@ Query arguments are written as expressions compiled at startup, giving you acces
 | MSSQL | `mssql` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
 | Google Cloud Spanner | `spanner` | `projects/PROJECT/instances/INSTANCE/databases/DATABASE` |
 
-## Feature matrix
+## Supported features
 
 | Feature | pgx | mysql | mongodb | cassandra | mssql | oracle | dsql | spanner |
 |---|---|---|---|---|---|---|---|---|
