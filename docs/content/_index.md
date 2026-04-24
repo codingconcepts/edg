@@ -25,29 +25,29 @@ Query arguments are written as expressions compiled at startup, giving you acces
 
 | Database | Driver | URL (example) |
 |---|---|---|
-| CockroachDB / PostgreSQL | `pgx` | `postgres://root@localhost:26257/db?sslmode=disable` |
-| MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
-| MongoDB | `mongodb` | `mongodb://localhost:27017/db` |
-| Cassandra | `cassandra` | `localhost:9042` |
 | Aurora DSQL | `dsql` | `clusterid.dsql.us-east-1.on.aws` |
-| Oracle | `oracle` | `oracle://system:password@localhost:1521/db` |
-| MSSQL | `mssql` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
+| Cassandra | `cassandra` | `localhost:9042` |
+| CockroachDB / PostgreSQL | `pgx` | `postgres://root@localhost:26257/db?sslmode=disable` |
 | Google Cloud Spanner | `spanner` | `projects/PROJECT/instances/INSTANCE/databases/DATABASE` |
+| MongoDB | `mongodb` | `mongodb://localhost:27017/db` |
+| MSSQL | `mssql` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
+| MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
+| Oracle | `oracle` | `oracle://system:password@localhost:1521/db` |
 
 ## Supported features
 
 | Feature | pgx | mysql | mongodb | cassandra | mssql | oracle | dsql | spanner |
 |---|---|---|---|---|---|---|---|---|
 | up / seed / run / deseed / down | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
-| Transactions | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
-| Prepared statements | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
+| sync run / down | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
+| sync verify | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
+| init (schema introspection) | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
 | Batch operations | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
-| Workers | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
-| Stages | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
 | Expectations | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
-| Sync run / down | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
-| Sync verify | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
-| Init (schema introspection) | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
+| Prepared statements | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
+| Stages | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
+| Transactions | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
+| Workers | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
 
 ## Quick start
 
