@@ -1,6 +1,6 @@
 ---
 name: edg-migrate
-description: Convert an edg YAML config from one database driver to another (e.g., pgx to mysql, mssql to oracle).
+description: Convert an edg YAML config from one database driver to another (e.g., pgx to mysql, mssql to oracle, pgx to mongodb, pgx to cassandra).
 user-invocable: true
 ---
 
@@ -21,19 +21,19 @@ Apply the following transformations based on the source and target driver. edg h
 
 ### Type Mappings
 
-| Concept | pgx | mysql | mssql | oracle |
-|---|---|---|---|---|
-| UUID | `UUID` | `CHAR(36)` | `UNIQUEIDENTIFIER` | `VARCHAR2(36)` |
-| UUID default | `DEFAULT gen_random_uuid()` | `DEFAULT (UUID())` | `DEFAULT NEWID()` | *(generate in args)* |
-| String | `STRING` or `VARCHAR(n)` | `VARCHAR(n)` | `NVARCHAR(n)` | `VARCHAR2(n)` |
-| Unlimited string | `TEXT` | `TEXT` | `NVARCHAR(MAX)` | `CLOB` |
-| Timestamp | `TIMESTAMP` | `TIMESTAMP` | `DATETIME2` | `TIMESTAMP` |
-| Timestamp default | `DEFAULT now()` | `DEFAULT CURRENT_TIMESTAMP` | `DEFAULT GETDATE()` | `DEFAULT SYSTIMESTAMP` |
-| Boolean | `BOOL` | `TINYINT(1)` | `BIT` | `NUMBER(1)` |
-| Auto-increment | *(use UUID)* | `AUTO_INCREMENT` | `IDENTITY(1,1)` | `GENERATED ALWAYS AS IDENTITY` |
-| Decimal | `DECIMAL(p,s)` | `DECIMAL(p,s)` | `DECIMAL(p,s)` | `NUMBER(p,s)` |
-| Integer | `INT` | `INT` | `INT` | `NUMBER(10)` |
-| Big integer | `BIGINT` | `BIGINT` | `BIGINT` | `NUMBER(19)` |
+| Concept | pgx | mysql | mssql | oracle | mongodb | cassandra |
+|---|---|---|---|---|---|---|
+| UUID | `UUID` | `CHAR(36)` | `UNIQUEIDENTIFIER` | `VARCHAR2(36)` | *(string field)* | `UUID` |
+| UUID default | `DEFAULT gen_random_uuid()` | `DEFAULT (UUID())` | `DEFAULT NEWID()` | *(generate in args)* | *(generate in args)* | *(generate in args)* |
+| String | `STRING` or `VARCHAR(n)` | `VARCHAR(n)` | `NVARCHAR(n)` | `VARCHAR2(n)` | *(string field)* | `TEXT` |
+| Unlimited string | `TEXT` | `TEXT` | `NVARCHAR(MAX)` | `CLOB` | *(string field)* | `TEXT` |
+| Timestamp | `TIMESTAMP` | `TIMESTAMP` | `DATETIME2` | `TIMESTAMP` | *(ISODate field)* | `TIMESTAMP` |
+| Timestamp default | `DEFAULT now()` | `DEFAULT CURRENT_TIMESTAMP` | `DEFAULT GETDATE()` | `DEFAULT SYSTIMESTAMP` | *(generate in args)* | *(generate in args)* |
+| Boolean | `BOOL` | `TINYINT(1)` | `BIT` | `NUMBER(1)` | *(boolean field)* | `BOOLEAN` |
+| Auto-increment | *(use UUID)* | `AUTO_INCREMENT` | `IDENTITY(1,1)` | `GENERATED ALWAYS AS IDENTITY` | *(not applicable)* | *(not applicable)* |
+| Decimal | `DECIMAL(p,s)` | `DECIMAL(p,s)` | `DECIMAL(p,s)` | `NUMBER(p,s)` | *(number field)* | `DECIMAL` |
+| Integer | `INT` | `INT` | `INT` | `NUMBER(10)` | *(number field)* | `INT` |
+| Big integer | `BIGINT` | `BIGINT` | `BIGINT` | `NUMBER(19)` | *(number field)* | `BIGINT` |
 
 ### DDL Safety
 
@@ -43,6 +43,8 @@ Apply the following transformations based on the source and target driver. edg h
 | mysql | `CREATE TABLE IF NOT EXISTS ...` | `DROP TABLE IF EXISTS ...` |
 | mssql | `IF OBJECT_ID('t', 'U') IS NULL CREATE TABLE t (...)` | `IF OBJECT_ID('t', 'U') IS NOT NULL DROP TABLE t` |
 | oracle | PL/SQL block with `EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;` | `DROP TABLE t CASCADE CONSTRAINTS PURGE` |
+| mongodb | `{"create": "collection"}` | `{"drop": "collection"}` |
+| cassandra | `CREATE TABLE IF NOT EXISTS ks.t (...)` | `DROP TABLE IF EXISTS ks.t` |
 
 ### Row Generation in Seed Queries
 
@@ -61,6 +63,8 @@ Apply the following transformations based on the source and target driver. edg h
 | mysql | `SELECT j.val FROM JSON_TABLE(CONCAT('["', REPLACE('$1', __sep__, '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j` |
 | mssql | Use `batch_format: json` and `SELECT value FROM OPENJSON('$1')` |
 | oracle | `SELECT column_value FROM XMLTABLE(('"' \|\| REPLACE('$1', __sep__, '","') \|\| '"'))` |
+| mongodb | Not applicable; batch uses `exec_batch` with per-document `{"insert": ...}` commands |
+| cassandra | Not applicable; batch uses `exec_batch` with CQL `INSERT` statements (unlogged batch internally) |
 
 ### Upsert / Merge
 
@@ -106,6 +110,34 @@ Apply the following transformations based on the source and target driver. edg h
 | mysql | `DELETE FROM t` | `DROP TABLE IF EXISTS t` |
 | mssql | `DELETE FROM t` | `IF OBJECT_ID('t', 'U') IS NOT NULL DROP TABLE t` |
 | oracle | `TRUNCATE TABLE t` | `DROP TABLE t CASCADE CONSTRAINTS PURGE` |
+| mongodb | `{"delete": "t", "deletes": [{"q": {}, "limit": 0}]}` | `{"drop": "t"}` |
+| cassandra | `TRUNCATE ks.t` | `DROP TABLE IF EXISTS ks.t` |
+
+### MongoDB-Specific Notes
+
+When migrating SQL configs to MongoDB:
+- Replace `CREATE TABLE` with `{"create": "collection"}`
+- Replace `INSERT INTO t (cols) VALUES (...)` with `{"insert": "t", "documents": [{"field": $1, ...}]}`
+- Replace `SELECT ... FROM t WHERE ...` with `{"find": "t", "filter": {"field": $1}}`
+- Replace `UPDATE t SET ... WHERE ...` with `{"update": "t", "updates": [{"q": {"_id": $1}, "u": {"$set": {"field": $2}}}]}`
+- Replace `DELETE FROM t` with `{"delete": "t", "deletes": [{"q": {}, "limit": 0}]}`
+- Replace `DROP TABLE` with `{"drop": "t"}`
+- MongoDB is schemaless - no column types, no constraints, no foreign keys
+- All placeholders are inlined into JSON command text
+
+### Cassandra-Specific Notes
+
+When migrating SQL configs to Cassandra:
+- Add a `CREATE KEYSPACE` query before any `CREATE TABLE` queries
+- Prefix all table names with keyspace: `ks.table`
+- Replace `VARCHAR(n)` / `STRING` with `TEXT`
+- Replace `DECIMAL(p,s)` with `DECIMAL` or `DOUBLE`
+- Replace `BOOL` with `BOOLEAN`
+- Remove `DEFAULT` clauses - generate all values in args
+- Remove foreign key constraints (`REFERENCES`)
+- Remove `CASCADE` from `TRUNCATE`
+- Add `DROP KEYSPACE IF EXISTS ks` at end of `down` section
+- No transactions - convert transaction blocks to standalone queries
 
 ## Process
 

@@ -18,6 +18,8 @@ Query arguments are written as expressions compiled at startup time, giving you 
 | MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
 | MSSQL | `mssql` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
 | Google Cloud Spanner | `spanner` | `projects/PROJECT/instances/INSTANCE/databases/DATABASE` |
+| MongoDB | `mongodb` | `mongodb://localhost:27017/db` |
+| Cassandra | `cassandra` | `cassandra://localhost:9042/keyspace` |
 
 ## Quick Start
 
@@ -94,7 +96,7 @@ docker compose -f _examples/compose_oracle.yml down
 
 ## Todos
 
-* Support LTREE
+* MongoDB and Cassandra sync verify support
 * Log levels
 * Better error output
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences

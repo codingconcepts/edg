@@ -283,6 +283,82 @@ seed:
 > [!NOTE]
 > Spanner does not support `TRUNCATE`. Use `DELETE FROM table WHERE TRUE` for deseed operations. Spanner also uses `INSERT OR UPDATE` for upserts instead of `ON CONFLICT`.
 
+#### MongoDB
+
+MongoDB queries use BSON/JSON command syntax instead of SQL. Placeholders (`$1`, `$2`, etc.) are inlined into the JSON command text. Batch operations insert multiple documents in a single command:
+
+```yaml
+seed:
+  - name: insert_customers
+    type: exec_batch
+    count: 1000
+    args:
+      - gen('uuid')
+      - gen('email')
+    query: |-
+      {"insert": "customer", "documents": [{"_id": $1, "email": $2}]}
+```
+
+Schema operations use JSON commands:
+
+```yaml
+up:
+  - name: create_customer
+    type: exec
+    query: |-
+      {"create": "customer"}
+
+down:
+  - name: drop_customer
+    type: exec
+    query: |-
+      {"drop": "customer"}
+```
+
+Read queries use the `find` command:
+
+```yaml
+init:
+  - name: fetch_customers
+    query: |-
+      {"find": "customer", "filter": {}}
+```
+
+#### Cassandra
+
+Cassandra uses CQL (Cassandra Query Language). Placeholders (`$1`, `$2`, etc.) are converted to `?` automatically. Batch operations use Cassandra's unlogged batch internally:
+
+```yaml
+seed:
+  - name: insert_customers
+    type: exec_batch
+    count: 1000
+    args:
+      - gen('uuid')
+      - gen('email')
+    query: |-
+      INSERT INTO edg.customer (id, email) VALUES ($1, $2)
+```
+
+Cassandra requires a keyspace to be created before tables:
+
+```yaml
+up:
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_customer
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.customer (
+        id UUID PRIMARY KEY,
+        email TEXT
+      )
+```
+
 ### Prepared Statements
 
 Setting `prepared: true` on a `run` query causes the SQL statement to be prepared once per worker and reused across iterations. This reduces server-side parse overhead for high-throughput workloads by allowing the database to cache the query plan.
@@ -599,6 +675,8 @@ Each driver has its own placeholder format:
 | `oracle` | `:1`, `:2`, `:3` |
 | `mssql` | `@p1`, `@p2`, `@p3` |
 | `spanner` | `@p1`, `@p2`, `@p3` |
+| `mongodb` | `$1`, `$2`, `$3` (inlined into JSON commands) |
+| `cassandra` | `?` (positional) |
 
 Since `run` queries always use bind params, their SQL must use the correct format for the target driver.
 

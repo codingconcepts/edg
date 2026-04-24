@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"sync"
@@ -10,12 +9,13 @@ import (
 
 	"github.com/codingconcepts/edg/cmd/edg/workload"
 	"github.com/codingconcepts/edg/pkg/config"
+	"github.com/codingconcepts/edg/pkg/db"
 	"github.com/codingconcepts/edg/pkg/env"
 	"github.com/codingconcepts/edg/pkg/seq"
 )
 
 type workerDeps struct {
-	DB      *sql.DB
+	DB      db.DB
 	Req     *config.Request
 	InitEnv *env.Env
 	Results chan<- config.QueryResult

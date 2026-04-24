@@ -54,6 +54,8 @@ func (e *Env) sep() convert.RawSQL {
 		return convert.RawSQL("CODE_POINTS_TO_STRING([31])")
 	case "oracle":
 		return convert.RawSQL("codepoints-to-string(31)")
+	case "mongodb":
+		return ""
 	default:
 		return convert.RawSQL("chr(31)")
 	}

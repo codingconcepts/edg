@@ -17,6 +17,8 @@ You validate edg YAML workload configurations by running `edg validate` and inte
    - `CHAR(36)`, `UUID()`, `JSON_TABLE` → `mysql`
    - `UNIQUEIDENTIFIER`, `NEWID()`, `OPENJSON`, `NVARCHAR` → `mssql`
    - `VARCHAR2`, `SYSTIMESTAMP`, `XMLTABLE`, `CONNECT BY` → `oracle`
+   - `{"create":`, `{"insert":`, `{"find":`, `{"drop":` (JSON command syntax) → `mongodb`
+   - `CREATE KEYSPACE`, `KEYSPACE`, fully-qualified `ks.table` names → `cassandra`
    - If unclear, default to `pgx`
 
 3. **Run validation:**

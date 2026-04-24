@@ -38,7 +38,7 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 |---|---|---|---|
 | `--url`<br>`EDG_URL` | | | Database connection URL |
 | `--config`<br>`EDG_CONFIG` | | | Path to the workload YAML config file (required for database commands, optional for `repl`) |
-| `--driver`<br>`EDG_DRIVER` | | `pgx` | database/sql driver name (`pgx`, `dsql`, `oracle`, `mysql`, `mssql`, or `spanner`) |
+| `--driver`<br>`EDG_DRIVER` | | `pgx` | Database driver name (`pgx`, `mysql`, `mongodb`, `cassandra`, `mssql`, `oracle`, `dsql`, or `spanner`) |
 | `--rng-seed`<br>`EDG_RNG_SEED` | | | PRNG seed for deterministic output (useful for regression testing) |
 | `--duration` | `-d` | `1m` | Benchmark duration (run and all commands) |
 | `--workers` | `-w` | `1` | Number of concurrent workers (run and all commands) |
@@ -131,7 +131,7 @@ DSQL uses PostgreSQL-compatible SQL, so use `$1`, `$2` placeholders in your quer
 
 ## Licensing
 
-The `pgx` and `mysql` drivers are free to use. Enterprise drivers (`oracle`, `mssql`, `dsql`, `spanner`) require a license key passed via `--license` or `EDG_LICENSE`. The license is validated before connecting to the database. See the [Licensing](/docs/licensing/) page for full details.
+The `pgx`, `mysql`, `mongodb`, and `cassandra` drivers are free to use. Enterprise drivers (`oracle`, `mssql`, `dsql`, `spanner`) require a license key passed via `--license` or `EDG_LICENSE`. The license is validated before connecting to the database. See the [Licensing](/docs/licensing/) page for full details.
 
 ## Validating Config
 

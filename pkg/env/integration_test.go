@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/codingconcepts/edg/pkg/config"
+	edgdb "github.com/codingconcepts/edg/pkg/db"
 	"github.com/codingconcepts/edg/pkg/random"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -42,7 +43,7 @@ const runIterations = 5
 var (
 	dbTests    *bool
 	rngSeed    *uint64
-	db         *sql.DB
+	testDB     *sql.DB
 	driverName string
 
 	allTables = []string{
@@ -98,9 +99,9 @@ func setupDatabase() {
 
 	// Retry connection for up to 30 seconds to allow the database to start.
 	for range 30 {
-		db, err = sql.Open(driverName, connStr)
+		testDB, err = sql.Open(driverName, connStr)
 		if err == nil {
-			err = db.Ping()
+			err = testDB.Ping()
 		}
 		if err == nil {
 			return
@@ -112,8 +113,8 @@ func setupDatabase() {
 }
 
 func teardownDatabase() {
-	if db != nil {
-		db.Close()
+	if testDB != nil {
+		testDB.Close()
 	}
 }
 
@@ -135,7 +136,7 @@ func loadConfig(t *testing.T, data []byte) *config.Request {
 func rowCount(t *testing.T, table string) int {
 	t.Helper()
 	var count int
-	err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", table)).Scan(&count)
+	err := testDB.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", table)).Scan(&count)
 	require.NoError(t, err, "counting %s", table)
 	return count
 }
@@ -143,7 +144,7 @@ func rowCount(t *testing.T, table string) int {
 func tableExists(t *testing.T, query, table string) bool {
 	t.Helper()
 	var count int
-	err := db.QueryRow(query, table).Scan(&count)
+	err := testDB.QueryRow(query, table).Scan(&count)
 	require.NoError(t, err, "checking table %s", table)
 	return count > 0
 }
@@ -266,7 +267,7 @@ func runIntegrationTests(t *testing.T, config []byte, queries map[string]string)
 	req := loadConfig(t, config)
 	ctx := context.Background()
 
-	env, err := NewEnv(db, driverName, req)
+	env, err := NewEnv(edgdb.NewSQDB(testDB), driverName, req)
 	require.NoError(t, err, "creating env")
 
 	// Tear down tables when the test finishes.
@@ -312,7 +313,7 @@ func testSeedBatch(t *testing.T, queries map[string]string) {
 	assert.Equal(t, 5, rowCount(t, "test_batch"))
 
 	// Values should be 0..4.
-	rows, err := db.Query(queries["batch_vals"])
+	rows, err := testDB.Query(queries["batch_vals"])
 	require.NoError(t, err, "querying test_batch")
 	defer rows.Close()
 	var vals []int
@@ -360,7 +361,7 @@ func testRun(t *testing.T, env *Env, ctx context.Context, queries map[string]str
 func testRunScalars(t *testing.T, queries map[string]string) {
 	assert.Equal(t, runIterations, rowCount(t, "test_scalars"))
 
-	rows, err := db.Query(queries["scalars"])
+	rows, err := testDB.Query(queries["scalars"])
 	require.NoError(t, err, "querying")
 	defer rows.Close()
 
@@ -390,7 +391,7 @@ func testRunUUIDs(t *testing.T, queries map[string]string) {
 
 	uuidPat := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-	rows, err := db.Query(queries["uuids"])
+	rows, err := testDB.Query(queries["uuids"])
 	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
@@ -405,7 +406,7 @@ func testRunUUIDs(t *testing.T, queries map[string]string) {
 func testRunNumbers(t *testing.T, queries map[string]string) {
 	assert.Equal(t, runIterations, rowCount(t, "test_numbers"))
 
-	rows, err := db.Query(queries["numbers"])
+	rows, err := testDB.Query(queries["numbers"])
 	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
@@ -428,7 +429,7 @@ func testRunSets(t *testing.T, queries map[string]string) {
 	validWeighted := map[string]bool{"visa": true, "mastercard": true, "amex": true}
 	validDist := map[string]bool{"a": true, "b": true, "c": true, "d": true, "e": true}
 
-	rows, err := db.Query(queries["sets"])
+	rows, err := testDB.Query(queries["sets"])
 	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
@@ -447,7 +448,7 @@ func testRunSets(t *testing.T, queries map[string]string) {
 func testRunJSON(t *testing.T, queries map[string]string) {
 	assert.Equal(t, runIterations, rowCount(t, "test_json"))
 
-	rows, err := db.Query(queries["json"])
+	rows, err := testDB.Query(queries["json"])
 	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
@@ -462,7 +463,7 @@ func testRunJSON(t *testing.T, queries map[string]string) {
 func testRunGeo(t *testing.T, queries map[string]string) {
 	assert.Equal(t, runIterations, rowCount(t, "test_geo"))
 
-	rows, err := db.Query(queries["geo"])
+	rows, err := testDB.Query(queries["geo"])
 	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
@@ -482,7 +483,7 @@ func testRunTime(t *testing.T, queries map[string]string) {
 	timePat := regexp.MustCompile(`^\d{2}:\d{2}:\d{2}$`)
 	timezPat := regexp.MustCompile(`^\d{2}:\d{2}:\d{2}\+00:00$`)
 
-	rows, err := db.Query(queries["time"])
+	rows, err := testDB.Query(queries["time"])
 	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
@@ -505,7 +506,7 @@ func testRunTime(t *testing.T, queries map[string]string) {
 func testRunDistributions(t *testing.T, queries map[string]string) {
 	assert.Equal(t, runIterations, rowCount(t, "test_distributions"))
 
-	rows, err := db.Query(queries["distributions"])
+	rows, err := testDB.Query(queries["distributions"])
 	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
@@ -536,7 +537,7 @@ func testRunBinary(t *testing.T, queries map[string]string) {
 	bitPat := regexp.MustCompile(`^[01]{8}$`)
 	varbitPat := regexp.MustCompile(`^[01]{1,16}$`)
 
-	rows, err := db.Query(queries["binary"])
+	rows, err := testDB.Query(queries["binary"])
 	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
@@ -553,7 +554,7 @@ func testRunBinary(t *testing.T, queries map[string]string) {
 func testRunArrays(t *testing.T, queries map[string]string) {
 	assert.Equal(t, runIterations, rowCount(t, "test_arrays"))
 
-	rows, err := db.Query(queries["arrays"])
+	rows, err := testDB.Query(queries["arrays"])
 	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
@@ -568,7 +569,7 @@ func testRunArrays(t *testing.T, queries map[string]string) {
 func testRunRefs(t *testing.T, queries map[string]string) {
 	assert.Equal(t, runIterations, rowCount(t, "test_refs"))
 
-	rows, err := db.Query(queries["refs"])
+	rows, err := testDB.Query(queries["refs"])
 	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
@@ -594,7 +595,7 @@ func testRunRefs(t *testing.T, queries map[string]string) {
 func testRunRefDiff(t *testing.T, queries map[string]string) {
 	assert.Equal(t, runIterations, rowCount(t, "test_ref_diff"))
 
-	rows, err := db.Query(queries["ref_diff"])
+	rows, err := testDB.Query(queries["ref_diff"])
 	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
@@ -609,7 +610,7 @@ func testRunAgg(t *testing.T, queries map[string]string) {
 
 	// ref_source has ids 1..20 and weight = id * 10.
 	// All aggregation values are deterministic.
-	rows, err := db.Query(queries["agg"])
+	rows, err := testDB.Query(queries["agg"])
 	require.NoError(t, err, "querying")
 	defer rows.Close()
 	for rows.Next() {
@@ -632,7 +633,7 @@ func testRunRefPerm(t *testing.T, queries map[string]string) {
 	// All rows should have the same perm_id since the same Env
 	// is used for all iterations.
 	var distinct int
-	db.QueryRow(queries["ref_perm"]).Scan(&distinct)
+	testDB.QueryRow(queries["ref_perm"]).Scan(&distinct)
 	assert.Equal(t, 1, distinct, "ref_perm produced %d distinct values, want 1", distinct)
 }
 

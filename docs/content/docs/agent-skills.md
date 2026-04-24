@@ -53,6 +53,22 @@ Tables: users (id, email, name) and orders (id, user_id, amount, status).
 I'll use edg sync run with --rng-seed for deterministic dual-write testing.
 ```
 
+```
+/edg-config
+
+MongoDB workload: customers collection with email and name fields,
+and an accounts collection referencing customers with a balance field.
+Seed 500 customers and 500 accounts, then run random balance lookups.
+```
+
+```
+/edg-config
+
+Cassandra IoT schema: create a keyspace with a devices table (id UUID, name TEXT)
+and a readings table (device_id UUID, ts TIMESTAMP, value DOUBLE).
+Seed 100 devices and 10k readings, then run time-range queries.
+```
+
 **What it produces:**
 
 - A full YAML config with `globals`, `up`, `seed`, `init`, `run`, `run_weights`, `workers`, `deseed`, and `down` sections
@@ -151,20 +167,28 @@ I have a workload config for PostgreSQL and need it to work on SQL Server (mssql
 The config is at workloads/bench.yaml.
 ```
 
+```
+/edg-migrate
+
+Convert my PostgreSQL workload at workloads/users.yaml to MongoDB.
+```
+
 **What it translates:**
 
 | Concern | What changes |
 |---|---|
 | Batch expansion | `unnest(string_to_array(...))` → `JSON_TABLE` / `OPENJSON` / `XMLTABLE` / `UNNEST(SPLIT(...))` (Spanner) |
-| Cleanup | `TRUNCATE CASCADE` → `DELETE FROM` / `CASCADE CONSTRAINTS PURGE` / `DELETE FROM ... WHERE TRUE` (Spanner) |
-| Column types | `UUID` → `CHAR(36)` / `STRING(36)`, `STRING` → `VARCHAR(n)`, etc. |
+| Cleanup | `TRUNCATE CASCADE` → `DELETE FROM` / `CASCADE CONSTRAINTS PURGE` / `DELETE FROM ... WHERE TRUE` (Spanner) / `TRUNCATE` (Cassandra) / `{"delete": ...}` (MongoDB) |
+| Column types | `UUID` → `CHAR(36)` / `STRING(36)` / `TEXT` (Cassandra), `STRING` → `VARCHAR(n)`, etc. |
 | DDL safety | `IF NOT EXISTS` → `IF OBJECT_ID(...)` / PL/SQL exception blocks / `CREATE TABLE IF NOT EXISTS` (Spanner) |
 | Default values | `gen_random_uuid()` → `UUID()` / `NEWID()` / `GENERATE_UUID()` / args-based |
 | Pagination | `LIMIT/OFFSET` → `FETCH NEXT ... ROWS ONLY` |
-| Placeholders | `$1` → `?` (MySQL) / `:1` (Oracle) / `@p1` (MSSQL, Spanner) |
+| Placeholders | `$1` → `?` (MySQL, Cassandra) / `:1` (Oracle) / `@p1` (MSSQL, Spanner) / inlined JSON (MongoDB) |
 | Primary key | inline `PRIMARY KEY` → table-level `PRIMARY KEY (col)` (Spanner) |
+| Query format | SQL → BSON/JSON commands (MongoDB) / CQL (Cassandra) |
 | Random ordering | `random()` → `RAND()` / `NEWID()` / `DBMS_RANDOM.VALUE` / `TABLESAMPLE RESERVOIR` (Spanner) |
 | Row generation | `generate_series` → recursive CTE / `CONNECT BY` / `GENERATE_ARRAY` + `UNNEST` (Spanner) |
+| Schema creation | `CREATE TABLE` → `{"create": "collection"}` (MongoDB) / `CREATE KEYSPACE` + `CREATE TABLE` (Cassandra) |
 | Upsert | `ON CONFLICT` → `ON DUPLICATE KEY` / `MERGE INTO` / `INSERT OR UPDATE` (Spanner) |
 
 Expression args (`gen()`, `ref_rand()`, `zipf()`, etc.) are driver-agnostic and remain unchanged.

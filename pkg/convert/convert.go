@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,8 @@ import (
 // Sep is the batch field separator (ASCII unit separator, char 31).
 // Used to delimit values within a single batch-expanded SQL placeholder.
 const Sep = "\x1f"
+
+var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 func Constant(v any) any {
 	return v
@@ -188,7 +191,12 @@ type RawSQL string
 // string literal) for all others.
 func SQLFormatValue(v any, driver string) string {
 	if v == nil {
-		return "NULL"
+		switch driver {
+		case "mongodb":
+			return "null"
+		default:
+			return "NULL"
+		}
 	}
 	switch n := v.(type) {
 	case RawSQL:
@@ -204,6 +212,16 @@ func SQLFormatValue(v any, driver string) string {
 		}
 	default:
 		s := fmt.Sprint(n)
-		return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+		switch driver {
+		case "mongodb":
+			return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
+		case "cassandra":
+			if uuidPattern.MatchString(s) {
+				return s
+			}
+			return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+		default:
+			return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+		}
 	}
 }

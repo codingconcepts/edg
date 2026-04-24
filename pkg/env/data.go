@@ -2,21 +2,15 @@ package env
 
 import (
 	"context"
-	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"strings"
 
 	"github.com/codingconcepts/edg/pkg/config"
+	"github.com/codingconcepts/edg/pkg/db"
 )
 
-// Executor abstracts *sql.DB and *sql.Tx for query execution.
-type Executor interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-}
-
-func (e *Env) Query(ctx context.Context, ex Executor, q *config.Query, args ...any) error {
+func (e *Env) Query(ctx context.Context, ex db.Executor, q *config.Query, args ...any) error {
 	rows, err := ex.QueryContext(ctx, q.Query, args...)
 	if err != nil {
 		return fmt.Errorf("running statement: %w", err)
@@ -32,8 +26,8 @@ func (e *Env) Query(ctx context.Context, ex Executor, q *config.Query, args ...a
 	return nil
 }
 
-func (e *Env) Exec(ctx context.Context, ex Executor, q *config.Query, args ...any) error {
-	_, err := ex.ExecContext(ctx, q.Query, args...)
+func (e *Env) Exec(ctx context.Context, ex db.Executor, q *config.Query, args ...any) error {
+	err := ex.ExecContext(ctx, q.Query, args...)
 	if err != nil {
 		return fmt.Errorf("running statement: %w", err)
 	}
@@ -41,7 +35,7 @@ func (e *Env) Exec(ctx context.Context, ex Executor, q *config.Query, args ...an
 	return nil
 }
 
-func (e *Env) QueryPrepared(ctx context.Context, stmt *sql.Stmt, q *config.Query, args ...any) error {
+func (e *Env) QueryPrepared(ctx context.Context, stmt db.PreparedStatement, q *config.Query, args ...any) error {
 	rows, err := stmt.QueryContext(ctx, args...)
 	if err != nil {
 		return fmt.Errorf("running prepared statement: %w", err)
@@ -57,8 +51,8 @@ func (e *Env) QueryPrepared(ctx context.Context, stmt *sql.Stmt, q *config.Query
 	return nil
 }
 
-func (e *Env) ExecPrepared(ctx context.Context, stmt *sql.Stmt, q *config.Query, args ...any) error {
-	_, err := stmt.ExecContext(ctx, args...)
+func (e *Env) ExecPrepared(ctx context.Context, stmt db.PreparedStatement, q *config.Query, args ...any) error {
+	err := stmt.ExecContext(ctx, args...)
 	if err != nil {
 		return fmt.Errorf("running prepared statement: %w", err)
 	}
@@ -66,7 +60,7 @@ func (e *Env) ExecPrepared(ctx context.Context, stmt *sql.Stmt, q *config.Query,
 	return nil
 }
 
-func ReadRows(rows *sql.Rows) ([]map[string]any, error) {
+func ReadRows(rows db.RowIterator) ([]map[string]any, error) {
 	defer rows.Close()
 
 	columns, err := rows.Columns()

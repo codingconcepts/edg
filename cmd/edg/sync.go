@@ -210,13 +210,13 @@ func syncVerifyCmd() *cobra.Command {
 
 			ctx := cmd.Context()
 
-			sourceDB, err := connectDBWith(syncSourceDriver, syncSourceURL)
+			sourceDB, err := connectSQLDB(syncSourceDriver, syncSourceURL)
 			if err != nil {
 				return fmt.Errorf("source: %w", err)
 			}
 			defer sourceDB.Close()
 
-			targetDB, err := connectDBWith(syncTargetDriver, syncTargetURL)
+			targetDB, err := connectSQLDB(syncTargetDriver, syncTargetURL)
 			if err != nil {
 				return fmt.Errorf("target: %w", err)
 			}

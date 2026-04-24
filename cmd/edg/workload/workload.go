@@ -2,7 +2,6 @@ package workload
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"fmt"
 	"os"
@@ -10,13 +9,14 @@ import (
 	"time"
 
 	"github.com/codingconcepts/edg/pkg/config"
+	"github.com/codingconcepts/edg/pkg/db"
 	"github.com/codingconcepts/edg/pkg/env"
 	"github.com/codingconcepts/edg/pkg/seq"
 	"github.com/spf13/cobra"
 )
 
 type RunParams struct {
-	DB             *sql.DB
+	DB             db.DB
 	Req            *config.Request
 	Duration       time.Duration
 	Workers        int
@@ -29,8 +29,8 @@ type RunFunc func(ctx context.Context, cancel context.CancelFunc, p RunParams) e
 
 // Deps holds dependencies injected from the main package.
 type Deps struct {
-	Connect   func() (*sql.DB, *config.Request, error)
-	ConnectDB func() (*sql.DB, error)
+	Connect   func() (db.DB, *config.Request, error)
+	ConnectDB func() (db.DB, error)
 	Driver    func() string
 	Run       RunFunc
 }
@@ -44,12 +44,14 @@ func Cmd() *cobra.Command {
 }
 
 var driverFile = map[string]string{
-	"pgx":     "crdb.yaml",
-	"dsql":    "crdb.yaml",
-	"mysql":   "mysql.yaml",
-	"oracle":  "oracle.yaml",
-	"mssql":   "mssql.yaml",
-	"spanner": "spanner.yaml",
+	"pgx":       "crdb.yaml",
+	"dsql":      "crdb.yaml",
+	"mysql":     "mysql.yaml",
+	"oracle":    "oracle.yaml",
+	"mssql":     "mssql.yaml",
+	"spanner":   "spanner.yaml",
+	"mongodb":   "mongodb.yaml",
+	"cassandra": "cassandra.yaml",
 }
 
 // LoadWorkload reads the correct embedded YAML for the given driver.
@@ -71,7 +73,7 @@ func LoadWorkload(fs embed.FS, name, driver string) (*config.Request, error) {
 // the embedded FS instead of from a --config file.
 func WithWorkload(deps Deps, fs embed.FS, name string) Deps {
 	return Deps{
-		Connect: func() (*sql.DB, *config.Request, error) {
+		Connect: func() (db.DB, *config.Request, error) {
 			req, err := LoadWorkload(fs, name, deps.Driver())
 			if err != nil {
 				return nil, nil, err

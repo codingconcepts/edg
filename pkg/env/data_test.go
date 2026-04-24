@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/codingconcepts/edg/pkg/config"
+	edgdb "github.com/codingconcepts/edg/pkg/db"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
@@ -77,7 +78,7 @@ func TestReadRows(t *testing.T) {
 			rows, err := db.Query("SELECT")
 			require.NoError(t, err)
 
-			got, err := ReadRows(rows)
+			got, err := ReadRows(edgdb.NewSQLRowIterator(rows))
 			require.NoError(t, err)
 
 			err = mock.ExpectationsWereMet()
@@ -191,7 +192,7 @@ func BenchmarkReadRows(b *testing.B) {
 				mock.ExpectQuery("SELECT").WillReturnRows(mockRows)
 
 				rows, _ := db.Query("SELECT")
-				ReadRows(rows)
+				ReadRows(edgdb.NewSQLRowIterator(rows))
 				db.Close()
 			}
 		})
@@ -213,16 +214,17 @@ func newTestEnv(t *testing.T) *Env {
 }
 
 func TestQueryPrepared(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	sqlDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer sqlDB.Close()
 
 	mock.ExpectPrepare("SELECT id, name FROM users").
 		ExpectQuery().
 		WithArgs(1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow(1, "alice"))
 
-	stmt, err := db.Prepare("SELECT id, name FROM users WHERE id = ?")
+	wrapped := edgdb.NewSQDB(sqlDB)
+	stmt, err := wrapped.PrepareContext(context.Background(), "SELECT id, name FROM users WHERE id = ?")
 	require.NoError(t, err)
 	defer stmt.Close()
 
@@ -239,16 +241,17 @@ func TestQueryPrepared(t *testing.T) {
 }
 
 func TestExecPrepared(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	sqlDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer sqlDB.Close()
 
 	mock.ExpectPrepare("INSERT INTO users").
 		ExpectExec().
 		WithArgs(1, "alice").
 		WillReturnResult(driver.ResultNoRows)
 
-	stmt, err := db.Prepare("INSERT INTO users VALUES (?, ?)")
+	wrapped := edgdb.NewSQDB(sqlDB)
+	stmt, err := wrapped.PrepareContext(context.Background(), "INSERT INTO users VALUES (?, ?)")
 	require.NoError(t, err)
 	defer stmt.Close()
 
@@ -304,9 +307,9 @@ func TestQuery(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := sqlmock.New()
+			sqlDB, mock, err := sqlmock.New()
 			require.NoError(t, err)
-			defer db.Close()
+			defer sqlDB.Close()
 
 			eq := mock.ExpectQuery(tt.mockPattern)
 			if len(tt.args) > 0 {
@@ -323,7 +326,7 @@ func TestQuery(t *testing.T) {
 			}
 
 			env := newTestEnv(t)
-			err = env.Query(context.Background(), db, &tt.query, tt.args...)
+			err = env.Query(context.Background(), edgdb.NewSQDB(sqlDB), &tt.query, tt.args...)
 
 			if tt.expErr != "" {
 				require.EqualError(t, err, tt.expErr)

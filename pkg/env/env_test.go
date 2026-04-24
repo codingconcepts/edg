@@ -2,7 +2,6 @@ package env
 
 import (
 	"context"
-	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/codingconcepts/edg/pkg/convert"
+	edgdb "github.com/codingconcepts/edg/pkg/db"
 	"github.com/codingconcepts/edg/pkg/test"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -25,7 +25,7 @@ func testEnv(data map[string][]map[string]any) *Env {
 		oneCache:        map[string]any{},
 		permCache:       map[string]any{},
 		vectorCentroids: map[string][][]float64{},
-		stmtCache:       map[*config.Query]*sql.Stmt{},
+		stmtCache:       map[*config.Query]edgdb.PreparedStatement{},
 		env:             map[string]any{},
 	}
 	for name, rows := range data {
@@ -294,7 +294,7 @@ func TestRunIteration_NoWeights(t *testing.T) {
 	mock.ExpectExec("INSERT INTO t2").WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
@@ -319,7 +319,7 @@ func TestRunIteration_WithWeights(t *testing.T) {
 	mock.ExpectExec("INSERT").WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
@@ -637,7 +637,7 @@ func TestRunSection_Exec(t *testing.T) {
 	mock.ExpectExec("CREATE TABLE").WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
@@ -648,7 +648,7 @@ func TestRunSection_Exec(t *testing.T) {
 		{Name: "create_t", Type: config.QueryTypeExec, Query: "CREATE TABLE t (id INT)"},
 	}
 
-	require.NoError(t, env.runSection(context.Background(), queries, config.ConfigSectionUp, db))
+	require.NoError(t, env.runSection(context.Background(), queries, config.ConfigSectionUp, edgdb.NewSQDB(db)))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -662,7 +662,7 @@ func TestRunSection_SeedUsesBindParams(t *testing.T) {
 		WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env: map[string]any{
@@ -680,7 +680,7 @@ func TestRunSection_SeedUsesBindParams(t *testing.T) {
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
-	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionSeed, db))
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionSeed, edgdb.NewSQDB(db)))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -692,7 +692,7 @@ func TestRunSection_SeedCapturesNamedArgs(t *testing.T) {
 	mock.ExpectExec("INSERT INTO employees").WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{"const": convert.Constant},
@@ -710,7 +710,7 @@ func TestRunSection_SeedCapturesNamedArgs(t *testing.T) {
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
-	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionSeed, db))
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionSeed, edgdb.NewSQDB(db)))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	data, ok := env.env["ceo"].([]map[string]any)
@@ -728,7 +728,7 @@ func TestRunSection_SeedCapturesBatchArgs(t *testing.T) {
 	mock.ExpectExec("INSERT INTO employees").WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{"const": convert.Constant},
@@ -747,7 +747,7 @@ func TestRunSection_SeedCapturesBatchArgs(t *testing.T) {
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
-	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionSeed, db))
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionSeed, edgdb.NewSQDB(db)))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	data, ok := env.env["vps"].([]map[string]any)
@@ -768,7 +768,7 @@ func TestRunSection_SeedCaptureHierarchical(t *testing.T) {
 	mock.ExpectExec("INSERT INTO employees").WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{"const": convert.Constant},
@@ -799,7 +799,7 @@ func TestRunSection_SeedCaptureHierarchical(t *testing.T) {
 	}
 	require.NoError(t, vps.CompileArgs(env.env))
 
-	require.NoError(t, env.runSection(context.Background(), []*config.Query{ceo, vps}, config.ConfigSectionSeed, db))
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{ceo, vps}, config.ConfigSectionSeed, edgdb.NewSQDB(db)))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// CEO captured
@@ -825,7 +825,7 @@ func TestRunSection_SeedCaptureNotInRunSection(t *testing.T) {
 	mock.ExpectExec("INSERT INTO t").WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{"const": convert.Constant},
@@ -843,7 +843,7 @@ func TestRunSection_SeedCaptureNotInRunSection(t *testing.T) {
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
-	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, edgdb.NewSQDB(db)))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	_, ok := env.env["insert_t"].([]map[string]any)
@@ -859,7 +859,7 @@ func TestRunSection_RunSectionPassesArgs(t *testing.T) {
 		WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env: map[string]any{
@@ -876,7 +876,7 @@ func TestRunSection_RunSectionPassesArgs(t *testing.T) {
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
-	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, edgdb.NewSQDB(db)))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -888,7 +888,7 @@ func TestRunSection_WaitRespectsContextCancel(t *testing.T) {
 	mock.ExpectExec("INSERT").WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
@@ -905,7 +905,7 @@ func TestRunSection_WaitRespectsContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
-	err = env.runSection(ctx, []*config.Query{q}, config.ConfigSectionRun, db)
+	err = env.runSection(ctx, []*config.Query{q}, config.ConfigSectionRun, edgdb.NewSQDB(db))
 	require.True(t, errors.Is(err, context.Canceled), "runSection error = %v, want context.Canceled", err)
 }
 
@@ -919,7 +919,7 @@ func TestRunSection_QueryStoresResults(t *testing.T) {
 	)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
@@ -930,7 +930,7 @@ func TestRunSection_QueryStoresResults(t *testing.T) {
 		{Name: "items", Type: config.QueryTypeQuery, Query: "SELECT id FROM items"},
 	}
 
-	require.NoError(t, env.runSection(context.Background(), queries, config.ConfigSectionInit, db))
+	require.NoError(t, env.runSection(context.Background(), queries, config.ConfigSectionInit, edgdb.NewSQDB(db)))
 
 	data, ok := env.env["items"].([]map[string]any)
 	require.True(t, ok, "runSection did not store query results")
@@ -1146,10 +1146,10 @@ func TestRunSection_PreparedExec(t *testing.T) {
 		WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
-		stmtCache: map[*config.Query]*sql.Stmt{},
+		stmtCache: map[*config.Query]edgdb.PreparedStatement{},
 		env:       map[string]any{"const": convert.Constant},
 		request:   &config.Request{},
 	}
@@ -1163,7 +1163,7 @@ func TestRunSection_PreparedExec(t *testing.T) {
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
-	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, edgdb.NewSQDB(db)))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -1178,10 +1178,10 @@ func TestRunSection_PreparedQuery(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow(1, "alice"))
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
-		stmtCache: map[*config.Query]*sql.Stmt{},
+		stmtCache: map[*config.Query]edgdb.PreparedStatement{},
 		env:       map[string]any{"const": convert.Constant},
 		request:   &config.Request{},
 	}
@@ -1195,7 +1195,7 @@ func TestRunSection_PreparedQuery(t *testing.T) {
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
-	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, edgdb.NewSQDB(db)))
 
 	data, ok := env.env["lookup"].([]map[string]any)
 	require.True(t, ok, "prepared query did not store results")
@@ -1215,10 +1215,10 @@ func TestRunSection_PreparedCachesStmt(t *testing.T) {
 	prep.ExpectExec().WithArgs(2).WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
-		stmtCache: map[*config.Query]*sql.Stmt{},
+		stmtCache: map[*config.Query]edgdb.PreparedStatement{},
 		env:       map[string]any{"const": convert.Constant},
 		request:   &config.Request{},
 	}
@@ -1232,13 +1232,13 @@ func TestRunSection_PreparedCachesStmt(t *testing.T) {
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
-	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, edgdb.NewSQDB(db)))
 
 	// Change arg for second call, re-compile.
 	q.Args = config.PositionalArgs("const(2)")
 	require.NoError(t, q.CompileArgs(env.env))
 
-	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, edgdb.NewSQDB(db)))
 
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -1252,10 +1252,10 @@ func TestRunSection_PreparedIgnoredForBatch(t *testing.T) {
 	mock.ExpectExec("INSERT INTO t").WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
-		stmtCache: map[*config.Query]*sql.Stmt{},
+		stmtCache: map[*config.Query]edgdb.PreparedStatement{},
 		env:       map[string]any{"const": convert.Constant},
 		request:   &config.Request{},
 	}
@@ -1270,7 +1270,7 @@ func TestRunSection_PreparedIgnoredForBatch(t *testing.T) {
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
-	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, edgdb.NewSQDB(db)))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -1283,11 +1283,12 @@ func TestEnvClose(t *testing.T) {
 	mock.ExpectClose()
 
 	q := &config.Query{Name: "test", Query: "SELECT 1"}
-	stmt, err := db.Prepare("SELECT 1")
+	wrapped := edgdb.NewSQDB(db)
+	stmt, err := wrapped.PrepareContext(context.Background(), "SELECT 1")
 	require.NoError(t, err)
 
 	env := &Env{
-		stmtCache: map[*config.Query]*sql.Stmt{q: stmt},
+		stmtCache: map[*config.Query]edgdb.PreparedStatement{q: stmt},
 	}
 
 	env.Close()
@@ -1334,11 +1335,11 @@ func TestRunSection_PreparedTranslatesPlaceholders(t *testing.T) {
 		WillReturnResult(driver.ResultNoRows)
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		driver:    "mysql",
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
-		stmtCache: map[*config.Query]*sql.Stmt{},
+		stmtCache: map[*config.Query]edgdb.PreparedStatement{},
 		env:       map[string]any{"const": convert.Constant},
 		request:   &config.Request{},
 	}
@@ -1352,7 +1353,7 @@ func TestRunSection_PreparedTranslatesPlaceholders(t *testing.T) {
 	}
 	require.NoError(t, q.CompileArgs(env.env))
 
-	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, db))
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionRun, edgdb.NewSQDB(db)))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -1369,7 +1370,7 @@ func TestRunTransaction_RollbackIfTrue(t *testing.T) {
 
 	results := make(chan config.QueryResult, 10)
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
@@ -1419,7 +1420,7 @@ func TestRunTransaction_RollbackIfFalse(t *testing.T) {
 
 	results := make(chan config.QueryResult, 10)
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
@@ -1464,7 +1465,7 @@ func TestRunTransaction_NoRollbackIf(t *testing.T) {
 	mock.ExpectCommit()
 
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{},
@@ -1620,7 +1621,7 @@ func TestRunTransaction_WithLocals(t *testing.T) {
 
 	results := make(chan config.QueryResult, 10)
 	env := &Env{
-		db:        db,
+		db:        edgdb.NewSQDB(db),
 		oneCache:  map[string]any{},
 		permCache: map[string]any{},
 		env:       map[string]any{"const": convert.Constant},

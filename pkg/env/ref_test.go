@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	edgdb "github.com/codingconcepts/edg/pkg/db"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -186,7 +188,7 @@ func TestRefEach(t *testing.T) {
 			AddRow(3, "charlie"),
 	)
 
-	env := &Env{db: db}
+	env := &Env{db: edgdb.NewSQDB(db)}
 	got, err := env.refEach("SELECT id, name FROM items")
 	require.NoError(t, err)
 
@@ -205,7 +207,7 @@ func TestRefEach_QueryError(t *testing.T) {
 
 	mock.ExpectQuery("SELECT").WillReturnError(fmt.Errorf("connection refused"))
 
-	env := &Env{db: db}
+	env := &Env{db: edgdb.NewSQDB(db)}
 	got, err := env.refEach("SELECT 1")
 
 	require.Error(t, err)
@@ -221,7 +223,7 @@ func TestRefEach_NoRows(t *testing.T) {
 		sqlmock.NewRows([]string{"id", "name"}),
 	)
 
-	env := &Env{db: db}
+	env := &Env{db: edgdb.NewSQDB(db)}
 	got, err := env.refEach("SELECT id, name FROM empty_table")
 	require.NoError(t, err)
 

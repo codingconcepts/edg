@@ -2,18 +2,18 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"maps"
 	"time"
 
 	"github.com/codingconcepts/edg/pkg/config"
+	"github.com/codingconcepts/edg/pkg/db"
 	envpkg "github.com/codingconcepts/edg/pkg/env"
 	"github.com/expr-lang/expr"
 )
 
-func checkExpectations(db *sql.DB, expectations []config.Expectation, globals map[string]any, stats map[string]*queryStats, elapsed time.Duration) error {
+func checkExpectations(database db.DB, expectations []config.Expectation, globals map[string]any, stats map[string]*queryStats, elapsed time.Duration) error {
 	if len(expectations) == 0 {
 		return nil
 	}
@@ -61,12 +61,12 @@ func checkExpectations(db *sql.DB, expectations []config.Expectation, globals ma
 		evalEnv := env
 
 		if e.Query != "" {
-			if db == nil {
+			if database == nil {
 				slog.Error("expectation failed", "check", e.Expr, "error", "query expectation requires a database connection")
 				failures++
 				continue
 			}
-			rows, err := db.QueryContext(context.Background(), e.Query)
+			rows, err := database.QueryContext(context.Background(), e.Query)
 			if err != nil {
 				slog.Error("expectation failed", "check", e.Expr, "error", err)
 				failures++

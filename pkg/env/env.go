@@ -2,7 +2,6 @@ package env
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/codingconcepts/edg/pkg/config"
 	"github.com/codingconcepts/edg/pkg/convert"
+	"github.com/codingconcepts/edg/pkg/db"
 	"github.com/codingconcepts/edg/pkg/gen"
 	"github.com/codingconcepts/edg/pkg/output"
 	"github.com/codingconcepts/edg/pkg/random"
@@ -30,8 +30,8 @@ import (
 var ErrConditionalRollback = errors.New("conditional rollback")
 
 type Env struct {
-	db      *sql.DB
-	driver  string
+	db     db.DB
+	driver string
 	request *config.Request
 
 	envMutex sync.RWMutex
@@ -62,26 +62,26 @@ type Env struct {
 
 	txLocals map[string]any
 
-	stmtCache map[*config.Query]*sql.Stmt
+	stmtCache map[*config.Query]db.PreparedStatement
 
 	Retries int
 	Output  output.Writer
 	Results chan<- config.QueryResult
 }
 
-func NewEnv(db *sql.DB, driver string, r *config.Request, sections ...config.ConfigSection) (*Env, error) {
+func NewEnv(database db.DB, driver string, r *config.Request, sections ...config.ConfigSection) (*Env, error) {
 	if err := r.Validate(sections...); err != nil {
 		return nil, fmt.Errorf("config validation: %w", err)
 	}
 
 	env := Env{
-		db:              db,
+		db:              database,
 		driver:          driver,
 		oneCache:        map[string]any{},
 		permCache:       map[string]any{},
 		nurandC:         map[int]int{},
 		vectorCentroids: map[string][][]float64{},
-		stmtCache:       map[*config.Query]*sql.Stmt{},
+		stmtCache:       map[*config.Query]db.PreparedStatement{},
 		request:         r,
 	}
 
@@ -511,7 +511,7 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 
 // RunQuery executes a query against the given executor via the
 // appropriate method (Query for reads, Exec for writes).
-func (e *Env) RunQuery(ctx context.Context, ex Executor, q *config.Query, args ...any) error {
+func (e *Env) RunQuery(ctx context.Context, ex db.Executor, q *config.Query, args ...any) error {
 	switch q.Type {
 	case config.QueryTypeExec, config.QueryTypeExecBatch:
 		if err := e.Exec(ctx, ex, q, args...); err != nil {
@@ -527,7 +527,7 @@ func (e *Env) RunQuery(ctx context.Context, ex Executor, q *config.Query, args .
 }
 
 // RunQueryPrepared executes a query using a prepared statement.
-func (e *Env) RunQueryPrepared(ctx context.Context, stmt *sql.Stmt, q *config.Query, args ...any) error {
+func (e *Env) RunQueryPrepared(ctx context.Context, stmt db.PreparedStatement, q *config.Query, args ...any) error {
 	switch q.Type {
 	case config.QueryTypeExec:
 		if err := e.ExecPrepared(ctx, stmt, q, args...); err != nil {
@@ -548,7 +548,7 @@ func (e *Env) RunQueryPrepared(ctx context.Context, stmt *sql.Stmt, q *config.Qu
 // sets from gen_batch/batch/ref_each). This provides cross-driver
 // placeholder compatibility and avoids pgx-stdlib DECIMAL type issues.
 // All other queries use native driver bind params.
-func (e *Env) runSection(ctx context.Context, queries []*config.Query, section config.ConfigSection, ex Executor) error {
+func (e *Env) runSection(ctx context.Context, queries []*config.Query, section config.ConfigSection, ex db.Executor) error {
 	verbose := section != config.ConfigSectionInit && section != config.ConfigSectionRun && section != config.ConfigSectionWorker
 
 	for _, q := range queries {
@@ -580,7 +580,7 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 		// is not a batch type (batch queries change SQL text each time).
 		usePrepared := q.Prepared && !q.IsBatch() && !batchExpanded
 
-		var stmt *sql.Stmt
+		var stmt db.PreparedStatement
 		if usePrepared {
 			stmt, err = e.getOrPrepare(ctx, q)
 			if err != nil {
@@ -847,12 +847,16 @@ func inlineArgs(query string, args []any, driver string) string {
 // getOrPrepare returns a cached prepared statement for q, creating
 // one if it doesn't exist yet. The query's $N placeholders are
 // translated to the driver's native format before preparing.
-func (e *Env) getOrPrepare(ctx context.Context, q *config.Query) (*sql.Stmt, error) {
+func (e *Env) getOrPrepare(ctx context.Context, q *config.Query) (db.PreparedStatement, error) {
 	if stmt, ok := e.stmtCache[q]; ok {
 		return stmt, nil
 	}
+	preparer, ok := e.db.(db.Preparer)
+	if !ok {
+		return nil, fmt.Errorf("driver does not support prepared statements")
+	}
 	query := translatePlaceholders(q.Query, e.driver)
-	stmt, err := e.db.PrepareContext(ctx, query)
+	stmt, err := preparer.PrepareContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("preparing statement %s: %w", q.Name, err)
 	}
@@ -866,7 +870,7 @@ func (e *Env) getOrPrepare(ctx context.Context, q *config.Query) (*sql.Stmt, err
 func translatePlaceholders(query, driver string) string {
 	var replaceFn func(int) string
 	switch driver {
-	case "mysql":
+	case "mysql", "cassandra":
 		replaceFn = func(int) string { return "?" }
 	case "oracle":
 		replaceFn = func(i int) string { return fmt.Sprintf(":%d", i) }
@@ -1027,7 +1031,12 @@ func (e *Env) runTransaction(ctx context.Context, tx *config.Transaction) error 
 }
 
 func (e *Env) tryTransaction(ctx context.Context, tx *config.Transaction) error {
-	dbTx, err := e.db.BeginTx(ctx, nil)
+	transactor, ok := e.db.(db.Transactor)
+	if !ok {
+		return fmt.Errorf("driver does not support transactions")
+	}
+
+	dbTx, err := transactor.BeginTx(ctx)
 	if err != nil {
 		return fmt.Errorf("beginning transaction %s: %w", tx.Name, err)
 	}
@@ -1055,7 +1064,7 @@ func (e *Env) tryTransaction(ctx context.Context, tx *config.Transaction) error 
 // runTransactionQueries executes each query in the transaction.
 // When a rollback_if element is encountered, its condition is
 // evaluated; if true, ErrConditionalRollback is returned.
-func (e *Env) runTransactionQueries(ctx context.Context, tx *config.Transaction, dbTx *sql.Tx) error {
+func (e *Env) runTransactionQueries(ctx context.Context, tx *config.Transaction, dbTx db.Transaction) error {
 	for _, q := range tx.Queries {
 		if q.IsRollbackIf() {
 			result, err := expr.Run(q.CompiledRollbackIf, e.env)

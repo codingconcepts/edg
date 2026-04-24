@@ -13,6 +13,8 @@ edg is free to use for PostgreSQL/CockroachDB and MySQL workloads. Enterprise dr
 |---|---|---|
 | PostgreSQL / CockroachDB | `pgx` | No |
 | MySQL | `mysql` | No |
+| MongoDB | `mongodb` | No |
+| Cassandra | `cassandra` | No |
 | Oracle | `oracle` | Yes |
 | Microsoft SQL Server | `mssql` | <strong>Yes</strong> |
 | AWS Aurora DSQL | `dsql` | <strong>Yes</strong> |

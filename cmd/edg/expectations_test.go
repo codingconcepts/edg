@@ -6,6 +6,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/codingconcepts/edg/pkg/config"
+	edgdb "github.com/codingconcepts/edg/pkg/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -112,9 +113,9 @@ func TestCheckExpectations_TotalMetrics(t *testing.T) {
 }
 
 func TestCheckExpectations_QueryExpectation(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	sqlDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer sqlDB.Close()
 
 	mock.ExpectQuery("SELECT COUNT").
 		WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(int64(42)))
@@ -123,14 +124,14 @@ func TestCheckExpectations_QueryExpectation(t *testing.T) {
 		{Query: "SELECT COUNT(*) AS cnt FROM account", Expr: "cnt == 42"},
 	}
 
-	require.NoError(t, checkExpectations(db, expectations, nil, nil, time.Minute))
+	require.NoError(t, checkExpectations(edgdb.NewSQDB(sqlDB), expectations, nil, nil, time.Minute))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestCheckExpectations_QueryExpectationFail(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	sqlDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer sqlDB.Close()
 
 	mock.ExpectQuery("SELECT COUNT").
 		WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(int64(0)))
@@ -139,16 +140,16 @@ func TestCheckExpectations_QueryExpectationFail(t *testing.T) {
 		{Query: "SELECT COUNT(*) AS cnt FROM account", Expr: "cnt > 0"},
 	}
 
-	err = checkExpectations(db, expectations, nil, nil, time.Minute)
+	err = checkExpectations(edgdb.NewSQDB(sqlDB), expectations, nil, nil, time.Minute)
 	require.Error(t, err)
 	require.EqualError(t, err, "1 expectation(s) failed")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestCheckExpectations_MixedExpectations(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	sqlDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer sqlDB.Close()
 
 	mock.ExpectQuery("SELECT COUNT").
 		WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(int64(100)))
@@ -167,7 +168,7 @@ func TestCheckExpectations_MixedExpectations(t *testing.T) {
 		{Query: "SELECT COUNT(*) AS cnt FROM account", Expr: "cnt == 100"},
 	}
 
-	require.NoError(t, checkExpectations(db, expectations, nil, stats, time.Minute))
+	require.NoError(t, checkExpectations(edgdb.NewSQDB(sqlDB), expectations, nil, stats, time.Minute))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -195,9 +196,9 @@ func TestCheckExpectations_GlobalVariables(t *testing.T) {
 }
 
 func TestCheckExpectations_GlobalVariablesWithQuery(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	sqlDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer sqlDB.Close()
 
 	mock.ExpectQuery("SELECT COUNT").
 		WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(int64(42)))
@@ -210,7 +211,7 @@ func TestCheckExpectations_GlobalVariablesWithQuery(t *testing.T) {
 		{Query: "SELECT COUNT(*) AS cnt FROM account", Expr: "cnt == expected_rows"},
 	}
 
-	require.NoError(t, checkExpectations(db, expectations, globals, nil, time.Minute))
+	require.NoError(t, checkExpectations(edgdb.NewSQDB(sqlDB), expectations, globals, nil, time.Minute))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

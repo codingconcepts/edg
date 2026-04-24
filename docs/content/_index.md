@@ -26,11 +26,29 @@ Query arguments are written as expressions compiled at startup, giving you acces
 | Database | Driver | URL (example) |
 |---|---|---|
 | CockroachDB / PostgreSQL | `pgx` | `postgres://root@localhost:26257/db?sslmode=disable` |
+| MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
+| MongoDB | `mongodb` | `mongodb://localhost:27017/db` |
+| Cassandra | `cassandra` | `localhost:9042` |
 | Aurora DSQL | `dsql` | `clusterid.dsql.us-east-1.on.aws` |
 | Oracle | `oracle` | `oracle://system:password@localhost:1521/db` |
-| MySQL | `mysql` | `user:password@tcp(host:port)/db?parseTime=true` |
 | MSSQL | `mssql` | `sqlserver://user:password@host:port?database=db&encrypt=disable` |
 | Google Cloud Spanner | `spanner` | `projects/PROJECT/instances/INSTANCE/databases/DATABASE` |
+
+## Feature matrix
+
+| Feature | pgx | mysql | mongodb | cassandra | mssql | oracle | dsql | spanner |
+|---|---|---|---|---|---|---|---|---|
+| License required | | | | | ☑️ | ☑️ | ☑️ | ☑️ |
+| up / seed / run / deseed / down | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
+| Transactions | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
+| Prepared statements | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
+| Batch operations | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
+| Workers | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
+| Stages | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
+| Expectations | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
+| Sync run / down | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
+| Sync verify | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
+| Init (schema introspection) | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
 
 ## Quick start
 

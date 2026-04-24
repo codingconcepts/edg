@@ -76,7 +76,7 @@ func main() {
 
 	root.PersistentFlags().StringVar(&flagURL, "url", "", "database connection URL (env: EDG_URL)")
 	root.PersistentFlags().StringVar(&configFile, "config", "", "workload YAML config file (env: EDG_CONFIG)")
-	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql, mssql, dsql, spanner] (env: EDG_DRIVER)")
+	root.PersistentFlags().StringVar(&flagDriver, "driver", "pgx", "database/sql driver name [pgx, oracle, mysql, mssql, dsql, spanner, mongodb, cassandra] (env: EDG_DRIVER)")
 	root.PersistentFlags().StringVar(&flagLicense, "license", "", "license key for enterprise drivers (env: EDG_LICENSE)")
 	root.PersistentFlags().Uint64Var(&flagRngSeed, "rng-seed", 0, "PRNG seed for deterministic output (env: EDG_RNG_SEED)")
 	root.PersistentFlags().StringVar(&flagMetricsAddr, "metrics-addr", "", "address for Prometheus metrics endpoint (e.g. :9090) (env: EDG_METRICS_ADDR)")

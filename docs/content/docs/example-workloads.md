@@ -15,6 +15,7 @@ Complete workload configs you can run directly or use as starting points for you
 | [CH-benCHmark](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/ch_benchmark/) | Mixed OLTP+OLAP workload combining TPC-C transactions with TPC-H-style analytical queries |
 | [Batch](https://github.com/codingconcepts/edg/tree/main/_examples/batch/) | Demonstrates `query_batch` and `exec_batch` query types for batch inserts and updates |
 | [Blob](https://github.com/codingconcepts/edg/tree/main/_examples/blob/) | Binary data with `blob()` (all databases) and `bytes()` (PostgreSQL/CockroachDB) |
+| [Cassandra](https://github.com/codingconcepts/edg/tree/main/_examples/cassandra/) | Cassandra (CQL) with keyspaces, tables, batch inserts, and reference data |
 | [Composite Types](https://github.com/codingconcepts/edg/tree/main/_examples/composite_types/) | PostgreSQL/CockroachDB composite types (`CREATE TYPE ... AS (...)`) as column types with `ROW(...)::type` construction and `(col).field` access |
 | [Distributions](https://github.com/codingconcepts/edg/tree/main/_examples/distributions/) | All five distribution functions (uniform, zipf, norm_f, exp_f, lognorm_f) |
 | [E-Commerce](https://github.com/codingconcepts/edg/tree/main/_examples/ecommerce/) | E-commerce with categories, products, customers, and orders |
@@ -30,6 +31,7 @@ Complete workload configs you can run directly or use as starting points for you
 | [IoT](https://github.com/codingconcepts/edg/tree/main/_examples/iot/) | IoT devices, sensors, and time-series readings |
 | [LTREE](https://github.com/codingconcepts/edg/tree/main/_examples/ltree/) | Hierarchical org chart using PostgreSQL's `ltree` extension with `ltree()` path builder |
 | [Locale](https://github.com/codingconcepts/edg/tree/main/_examples/locale/) | Locale-aware PII generation (`gen_locale`) with deterministic masking (`mask`) across JP and DE regions |
+| [MongoDB](https://github.com/codingconcepts/edg/tree/main/_examples/mongodb/) | MongoDB with BSON/JSON command syntax, collection operations, and reference data |
 | [Normal](https://github.com/codingconcepts/edg/tree/main/_examples/normal/) | Product reviews with normal distribution ratings |
 | [Named Args](https://github.com/codingconcepts/edg/tree/main/_examples/named_args/) | Map-style args with `arg('name')` instead of `arg(0)` |
 | [Nullable](https://github.com/codingconcepts/edg/tree/main/_examples/nullable/) | Demonstrates `nullable(expr, probability)` for injecting NULLs with controlled frequency |

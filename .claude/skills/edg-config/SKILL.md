@@ -13,7 +13,7 @@ You are an expert at creating edg (Expression-based Data Generator) workload con
 The user will describe:
 - The database tables and their columns
 - The type of workload (read-heavy, write-heavy, mixed)
-- The target database driver (pgx, mysql, mssql, oracle, dsql)
+- The target database driver (pgx, mysql, mssql, oracle, dsql, spanner, mongodb, cassandra)
 - Any specific data distribution requirements (hot keys, skewed access, etc.)
 
 If the user does not specify a driver, default to `pgx`.
@@ -428,6 +428,141 @@ Apply these patterns based on the target driver.
 
 - Follows the same patterns as `pgx` (uses PostgreSQL wire protocol)
 - Note: Some CockroachDB-specific SQL (e.g., `STRING` type) may not be available; prefer standard PostgreSQL types
+
+### mongodb
+
+MongoDB uses BSON/JSON command syntax instead of SQL. Queries are JSON objects specifying the command and its parameters.
+
+- **Collections (not tables)**: Use `{"create": "name"}` to create, `{"drop": "name"}` to drop
+- **Inserts**: `{"insert": "collection", "documents": [{"_id": $1, "field": $2}]}`
+- **Reads**: `{"find": "collection", "filter": {}}` or `{"find": "collection", "filter": {"field": $1}}`
+- **Deletes**: `{"delete": "collection", "deletes": [{"q": {}, "limit": 0}]}`
+- **Updates**: `{"update": "collection", "updates": [{"q": {"_id": $1}, "u": {"$set": {"field": $2}}}]}`
+- **Placeholders**: `$1`, `$2`, etc. are inlined directly into the JSON command text
+- **No DDL types**: MongoDB is schemaless; `up` creates collections, `down` drops them
+- **Batch inserts**: Use `exec_batch` with `count`/`size`; each batch inserts one document per execution
+- **Reference data**: Use `{"find": "collection", "filter": {}}` in `seed` or `init` with `type: query` to populate datasets
+
+Example:
+```yaml
+up:
+  - name: create_users
+    type: exec
+    query: |-
+      {"create": "users"}
+
+seed:
+  - name: insert_users
+    type: exec_batch
+    count: 1000
+    args:
+      - gen('uuid')
+      - gen('email')
+    query: |-
+      {"insert": "users", "documents": [{"_id": $1, "email": $2}]}
+
+  - name: fetch_users
+    query: |-
+      {"find": "users", "filter": {}}
+
+init:
+  - name: load_users
+    query: |-
+      {"find": "users", "filter": {}}
+
+run:
+  - name: get_user
+    args:
+      - ref_rand('load_users')._id
+    query: |-
+      {"find": "users", "filter": {"_id": $1}}
+
+deseed:
+  - name: delete_users
+    type: exec
+    query: |-
+      {"delete": "users", "deletes": [{"q": {}, "limit": 0}]}
+
+down:
+  - name: drop_users
+    type: exec
+    query: |-
+      {"drop": "users"}
+```
+
+### cassandra
+
+Cassandra uses CQL (Cassandra Query Language). Tables must live inside a keyspace.
+
+- **Keyspaces**: `CREATE KEYSPACE IF NOT EXISTS ks WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}`
+- **Tables**: `CREATE TABLE IF NOT EXISTS ks.table (id UUID PRIMARY KEY, ...)`
+- **Column types**: `UUID`, `TEXT`, `INT`, `DOUBLE`, `TIMESTAMP`, `BOOLEAN`, `BLOB`
+- **No `DEFAULT` values**: Generate all values in args (e.g., `gen('uuid')` for UUIDs)
+- **Inserts**: Standard `INSERT INTO ks.table (col1, col2) VALUES ($1, $2)`
+- **Reads**: `SELECT col1, col2 FROM ks.table` or `SELECT ... WHERE partition_key = $1`
+- **Batch inserts**: Use `exec_batch` with `count`/`size`; edg uses Cassandra's unlogged batch internally
+- **Cleanup**: `TRUNCATE ks.table` for deseed
+- **Teardown**: `DROP TABLE IF EXISTS ks.table` then `DROP KEYSPACE IF EXISTS ks`
+- **Placeholders**: Use `$1`, `$2`, etc.; edg converts to `?` automatically
+- **No transactions**: Cassandra does not support multi-statement transactions; use standalone queries only
+
+Example:
+```yaml
+up:
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_users
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.users (
+        id UUID PRIMARY KEY,
+        email TEXT
+      )
+
+seed:
+  - name: insert_users
+    type: exec_batch
+    count: 1000
+    args:
+      - gen('uuid')
+      - gen('email')
+    query: |-
+      INSERT INTO edg.users (id, email) VALUES ($1, $2)
+
+  - name: fetch_users
+    query: |-
+      SELECT id, email FROM edg.users
+
+init:
+  - name: load_users
+    query: |-
+      SELECT id FROM edg.users
+
+run:
+  - name: get_user
+    args:
+      - ref_rand('load_users').id
+    query: |-
+      SELECT id, email FROM edg.users WHERE id = $1
+
+deseed:
+  - name: truncate_users
+    type: exec
+    query: TRUNCATE edg.users
+
+down:
+  - name: drop_users
+    type: exec
+    query: DROP TABLE IF EXISTS edg.users
+
+  - name: drop_keyspace
+    type: exec
+    query: DROP KEYSPACE IF EXISTS edg
+```
 
 ## Generating from an existing database
 
