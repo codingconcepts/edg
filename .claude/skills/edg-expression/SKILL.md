@@ -133,6 +133,23 @@ You help users compose, debug, and understand edg expressions. edg uses [expr-la
 | `batch(n)` | Sequential indices [0, n) |
 | `gen_batch(total, size, pattern)` | Batched gofakeit values |
 
+### PII & Masking
+| Function | Description |
+|---|---|
+| `gen_locale('first_name', 'ja_JP')` | Locale-aware name/address/phone generation |
+| `gen_locale('name', 'de_DE')` | Full name in locale order (eastern = last+first, western = first last) |
+| `mask(value)` | Deterministic 16-char hex token (same input → same output) |
+| `mask(value, length)` | Hex token truncated to `length` chars |
+| `mask(value, 'base64')` | Base64-encoded token |
+| `mask(value, 'base32')` | Base32-encoded token |
+| `mask(value, 'asterisk')` | Repeated `*` characters (default 16) |
+| `mask(value, 'asterisk', 4)` | 4 asterisks |
+| `mask(value, 'redact')` | Fixed string `[REDACTED]`, length ignored |
+| `mask(value, 'email')` | Preserves `@domain`, masks local part with `*` |
+| `mask(value, 'email', 4)` | `****@domain.com` |
+
+Supported locales: `en_US`, `ja_JP`, `de_DE`, `fr_FR`, `es_ES`, `pt_BR`, `zh_CN`, `ko_KR` (aliases: `ja`, `de`, `fr`, etc.)
+
 ### Other
 | Function | Description |
 |---|---|
@@ -220,6 +237,18 @@ args:
 # SQL: split_part('$2', ',', 1)::NUMERIC  -- subtotal
 #      split_part('$2', ',', 2)::NUMERIC  -- tax
 #      split_part('$2', ',', 3)::NUMERIC  -- shipping
+```
+
+### Masking PII
+```yaml
+args:
+  first_name: gen_locale('first_name', 'ja_JP')
+  last_name: gen_locale('last_name', 'ja_JP')
+  full_name: arg('last_name') + arg('first_name')
+  email: gen('email')
+  masked_name: mask(arg('full_name'))                # hex token
+  masked_email: mask(arg('email'), 'email', 4)       # ****@example.com
+  redacted_phone: mask(arg('phone'), 'redact')       # [REDACTED]
 ```
 
 ### Error handling with fail/fatal

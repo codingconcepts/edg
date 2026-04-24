@@ -103,6 +103,17 @@ A complete edg YAML config with all applicable sections:
 - `distribute_weighted(total, weights, noise, precision)` splits a total by proportional weights with controlled noise (0=exact, 1=fully random). Returns comma-separated values; use `split_part` (pgx) or `SUBSTRING_INDEX` (MySQL) to extract individual parts
 - These are useful for invoice/line-item patterns, budget breakdowns, and tax allocations
 
+### PII & masking
+- `gen_locale('first_name', 'ja_JP')` for locale-aware names, cities, streets, phones, zips, addresses
+- `gen_locale('name', 'de_DE')` for full name in locale order (eastern = last+first, western = first last)
+- Supported locales: `en_US`, `ja_JP`, `de_DE`, `fr_FR`, `es_ES`, `pt_BR`, `zh_CN`, `ko_KR` (aliases: `ja`, `de`, etc.)
+- `mask(value)` for deterministic hex pseudonymization (16 chars default)
+- `mask(value, length)` for custom-length hex token
+- `mask(value, 'base64')` / `mask(value, 'base32')` for alternative encodings
+- `mask(value, 'asterisk')` for `****************` (length configurable)
+- `mask(value, 'redact')` for fixed `[REDACTED]` output
+- `mask(value, 'email')` to preserve `@domain` and mask local part: `mask(arg('email'), 'email', 4)` → `****@example.com`
+
 ### Dependent columns
 - `arg(index)` to reference a previously evaluated arg by zero-based index
 - `arg('name')` to reference by name when using named args (map-style `args:`)

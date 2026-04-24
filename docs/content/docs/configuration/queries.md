@@ -1,6 +1,6 @@
 ---
 title: Queries
-weight: 1
+weight: 2
 ---
 
 # Queries

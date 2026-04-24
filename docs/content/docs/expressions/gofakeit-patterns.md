@@ -1,6 +1,6 @@
 ---
 title: gofakeit Patterns
-weight: 5
+weight: 4
 ---
 
 # Available gofakeit Patterns

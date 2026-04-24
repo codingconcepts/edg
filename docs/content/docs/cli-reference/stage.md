@@ -1,6 +1,6 @@
 ---
 title: Stage
-weight: 1
+weight: 3
 ---
 
 # Stage

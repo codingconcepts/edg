@@ -1,6 +1,6 @@
 ---
 title: expr-lang Syntax
-weight: 2
+weight: 3
 ---
 
 # expr-lang Syntax

@@ -1,6 +1,6 @@
 ---
 title: Init
-weight: 4
+weight: 1
 ---
 
 # Init
