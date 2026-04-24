@@ -1,7 +1,6 @@
 ---
 title: Configuration
 weight: 3
-bookCollapseSection: true
 ---
 
 # Configuration

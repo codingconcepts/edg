@@ -1,7 +1,6 @@
 ---
 title: CLI Reference
 weight: 5
-bookCollapseSection: true
 ---
 
 # CLI Reference

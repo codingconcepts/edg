@@ -1,7 +1,6 @@
 ---
 title: Expressions
 weight: 4
-bookCollapseSection: true
 ---
 
 # Expressions
