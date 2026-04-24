@@ -139,6 +139,7 @@ func main() {
 		validateCmd(),
 		versionCmd(),
 		initCmd(),
+		syncCmd(),
 		wCmd,
 	)
 	root.SilenceUsage = true

@@ -44,12 +44,22 @@ Write-heavy workload simulating add-to-cart with Zipfian product selection
 (some products are much more popular). Use batch inserts for seeding.
 ```
 
+```
+/edg-config
+
+Generate a sync config pair for CockroachDB (pgx) and MySQL.
+Tables: users (id, email, name) and orders (id, user_id, amount, status).
+1000 users and 5000 orders, batched 100 at a time.
+I'll use edg sync run with --rng-seed for deterministic dual-write testing.
+```
+
 **What it produces:**
 
 - A full YAML config with `globals`, `up`, `seed`, `init`, `run`, `run_weights`, `workers`, `deseed`, and `down` sections
 - Appropriate expressions for data generation (`gen()`, `uuid_v7()`, distributions)
 - Reference data setup via `init` queries for use in `run` with `ref_rand()`, `ref_same()`, etc.
 - Driver-specific SQL patterns (batch expansion, DDL safety, upsert syntax)
+- **Sync config pairs** for cross-database consistency testing - matched schemas with explicit IDs, identical seed args, and driver-specific batch SQL for use with `edg sync run`
 
 ---
 

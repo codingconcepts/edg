@@ -499,3 +499,114 @@ After generating the config, suggest staging to preview data:
 ```sh
 edg stage --config workload.yaml --format csv -o ./preview
 ```
+
+## Sync Configs (Cross-Database Consistency)
+
+When the user wants to test dual-write consistency, CDC pipelines, or cross-database replication, generate **paired configs** - one per database driver - for use with `edg sync run`.
+
+### Requirements for sync-compatible configs
+
+- **Explicit IDs**: Use `INT PRIMARY KEY` with `seq(1, 1)` instead of auto-generated IDs (`SERIAL`, `AUTO_INCREMENT`, `UUID`). Both databases must produce identical IDs.
+- **Matching schemas**: Same table names, column names, and logical types. SQL dialect differs (e.g., `DEFAULT NOW()` vs `DEFAULT CURRENT_TIMESTAMP`).
+- **Matching seed args**: Both configs must use identical `args` expressions (same `gen()`, `ref_rand()`, `uniform()`, `set_rand()`, etc.). The `--rng-seed` flag + PRNG re-seeding ensures identical values.
+- **Use `exec_batch`**: Sync configs should use `type: exec_batch` with `count` and `size` for efficient bulk inserts.
+- **Driver-specific batch SQL**: Use `unnest(string_to_array('$N', __sep__))` for pgx and `JSON_TABLE(CONCAT(...))` for MySQL (same patterns as non-sync batch configs).
+- **No `run` section**: Sync configs only need `up`, `seed`, `deseed`, and `down`. The benchmark workload is separate.
+- **Shared globals**: Both configs should use the same `globals` values (row counts, batch sizes).
+
+### Example
+
+For a CockroachDB + MySQL sync pair, generate two files:
+
+**crdb.yaml:**
+```yaml
+globals:
+  user_count: 1000
+  batch_size: 100
+
+up:
+  - name: create_users
+    query: |-
+      CREATE TABLE IF NOT EXISTS users (
+        id INT PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+
+seed:
+  - name: seed_users
+    type: exec_batch
+    count: user_count
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - gen('email')
+      - gen('name')
+    query: |-
+      INSERT INTO users (id, email, name)
+      SELECT
+        unnest(string_to_array('$1', __sep__))::INT,
+        unnest(string_to_array('$2', __sep__)),
+        unnest(string_to_array('$3', __sep__))
+```
+
+**mysql.yaml:**
+```yaml
+globals:
+  user_count: 1000
+  batch_size: 100
+
+up:
+  - name: create_users
+    query: |-
+      CREATE TABLE IF NOT EXISTS users (
+        id INT PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+
+seed:
+  - name: seed_users
+    type: exec_batch
+    count: user_count
+    size: batch_size
+    args:
+      - seq(1, 1)
+      - gen('email')
+      - gen('name')
+    query: |-
+      INSERT INTO users (id, email, name)
+      SELECT CAST(j1.val AS UNSIGNED), j2.val, j3.val
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(20) PATH '$', rn FOR ORDINALITY)
+      ) j1
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$2', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(255) PATH '$', rn FOR ORDINALITY)
+      ) j2 ON j1.rn = j2.rn
+      JOIN JSON_TABLE(
+        CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(255) PATH '$', rn FOR ORDINALITY)
+      ) j3 ON j1.rn = j3.rn
+```
+
+### Usage
+
+After generating paired configs, show the user how to run them:
+
+```sh
+edg sync run \
+  --source-driver pgx --source-url "postgres://..." --source-config crdb.yaml \
+  --target-driver mysql --target-url "root:pass@tcp(...)/?parseTime=true" --target-config mysql.yaml \
+  --rng-seed 42
+
+edg sync verify \
+  --source-driver pgx --source-url "postgres://..." \
+  --target-driver mysql --target-url "root:pass@tcp(...)/?parseTime=true" \
+  --tables users --order-by id --ignore-columns created_at
+```
+
+For CDC mode (source only, replication handles target), omit `--target-config` from `sync run`.

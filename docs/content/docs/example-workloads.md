@@ -43,6 +43,7 @@ Complete workload configs you can run directly or use as starting points for you
 | [SEATS](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/seats/) | Airline reservation system benchmark with flight booking contention |
 | [Social](https://github.com/codingconcepts/edg/tree/main/_examples/social/) | Social network with users, posts, follows, and tags |
 | [Stages](https://github.com/codingconcepts/edg/tree/main/_examples/stages/) | Staged execution with different worker counts and durations per phase |
+| [Sync](https://github.com/codingconcepts/edg/tree/main/_examples/sync/) | Dual-write consistency testing across databases (CockroachDB + MySQL) with batched verification |
 | [Sysbench Insert](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/sysbench_insert/) | Pure insert micro-benchmark (`oltp_insert`) for ingestion throughput |
 | [Sysbench Point Select](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/sysbench_point_select/) | Pure point-select micro-benchmark (`oltp_point_select`) for read latency |
 | [Sysbench Read Write](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/sysbench_read_write/) | Mixed read-write micro-benchmark (`oltp_read_write`) with scans, updates, and deletes |

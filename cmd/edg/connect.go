@@ -47,8 +47,12 @@ func connectDB() (*sql.DB, error) {
 		return nil, errors.New("--url flag or URL env var required")
 	}
 
-	if license.IsEnterprise(flagDriver) {
-		if err := checkLicense(flagDriver); err != nil {
+	return connectDBWith(flagDriver, url)
+}
+
+func connectDBWith(driver, url string) (*sql.DB, error) {
+	if license.IsEnterprise(driver) {
+		if err := checkLicense(driver); err != nil {
 			return nil, err
 		}
 	}
@@ -57,13 +61,13 @@ func connectDB() (*sql.DB, error) {
 		db  *sql.DB
 		err error
 	)
-	switch flagDriver {
+	switch driver {
 	case "dsql":
 		db, err = connectDSQL(context.Background(), url)
 	case "mssql":
 		db, err = sql.Open("sqlserver", url)
 	default:
-		db, err = sql.Open(flagDriver, url)
+		db, err = sql.Open(driver, url)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)

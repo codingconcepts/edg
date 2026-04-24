@@ -20,6 +20,9 @@ weight: 5
 | `init` | Generate a starter config from an existing database schema |
 | `repl` | Interactive expression evaluator |
 | `workload <name> <command>` | Run a built-in workload without a config file |
+| `sync run` | Write identical data to multiple databases |
+| `sync verify` | Verify data consistency between two databases |
+| `sync down` | Tear down schema on both databases |
 | `validate config` | Validate a config file without connecting to a database |
 | `validate license` | Validate a license key and print its details |
 
