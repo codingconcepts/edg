@@ -113,7 +113,7 @@ When would I use each one?
 
 **What it covers:**
 
-- All ~60 built-in functions with signatures and descriptions
+- All 60+ built-in functions with signatures and descriptions
 - Distribution selection guidance (uniform vs normal vs zipf vs exponential)
 - Reference data patterns (`ref_rand` vs `ref_same` vs `ref_perm` vs `ref_diff`)
 - Dependent column patterns with `arg()`, `cond()`, and `bool()`

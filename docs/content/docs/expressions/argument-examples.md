@@ -119,6 +119,17 @@ These expressions are used in the `args:` list of a `run` query. Each entry in `
 |---|---|
 | `inet('192.168.1.0/24')` | Random IP address within a CIDR block |
 
+## Correlated totals
+
+| Expression | Description |
+|---|---|
+| `distribute_sum(100.00, 3, 7, 2)` | 3-7 random amounts that sum exactly to 100.00, each with 2 decimal places |
+| `distribute_sum(arg(1), 3, 7, 2)` | Partition a previously computed total across 3-7 child values |
+| `distribute_sum(ref_same('invoices').total, 3, 7, 2)` | Partition an invoice's total into line item amounts |
+| `distribute_weighted(1000, [50, 30, 20], 0, 2)` | Exact 50/30/20 split: `500.00,300.00,200.00` |
+| `distribute_weighted(1000, [50, 30, 20], 0.3, 2)` | Approximate 50/30/20 split with 30% noise |
+| `distribute_weighted(arg(1), [7, 2, 1], 0.1, 2)` | Split a parent value roughly 70/20/10 |
+
 ## Numeric distributions
 
 | Expression | Description |

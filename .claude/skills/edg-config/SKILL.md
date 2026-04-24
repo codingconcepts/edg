@@ -98,6 +98,11 @@ A complete edg YAML config with all applicable sections:
 - `ref_diff('dataset').field` for unique rows within a single query execution
 - `ref_n('dataset', 'field', min, max)` for N unique values as comma-separated string
 
+### Correlated totals
+- `distribute_sum(total, minN, maxN, precision)` partitions a total into N random parts (comma-separated) that sum exactly to it. Use SQL `unnest`/`string_to_array` (pgx) or `JSON_TABLE` (MySQL) to expand into rows
+- `distribute_weighted(total, weights, noise, precision)` splits a total by proportional weights with controlled noise (0=exact, 1=fully random). Returns comma-separated values; use `split_part` (pgx) or `SUBSTRING_INDEX` (MySQL) to extract individual parts
+- These are useful for invoice/line-item patterns, budget breakdowns, and tax allocations
+
 ### Dependent columns
 - `arg(index)` to reference a previously evaluated arg by zero-based index
 - `arg('name')` to reference by name when using named args (map-style `args:`)

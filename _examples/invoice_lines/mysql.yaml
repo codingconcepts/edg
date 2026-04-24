@@ -1,0 +1,92 @@
+# Correlated Totals: Invoice with line items (MySQL)
+#
+# Demonstrates distribute_sum() and distribute_weighted():
+# - Each invoice has 3-7 line items whose amounts sum to the total.
+# - Each invoice's total is split into subtotal/tax/shipping (~85/10/5).
+#
+# Connection URL format:
+#   user:password@tcp(host:port)/database?parseTime=true
+
+globals:
+  invoices: 100
+
+up:
+
+  - name: create_invoice
+    query: |-
+      CREATE TABLE IF NOT EXISTS invoice (
+        id CHAR(36) PRIMARY KEY,
+        total DECIMAL(12,2) NOT NULL,
+        subtotal DECIMAL(12,2) NOT NULL,
+        tax DECIMAL(12,2) NOT NULL,
+        shipping DECIMAL(12,2) NOT NULL
+      )
+
+  - name: create_line_item
+    query: |-
+      CREATE TABLE IF NOT EXISTS line_item (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        invoice_id CHAR(36) NOT NULL,
+        amount DECIMAL(12,2) NOT NULL,
+        FOREIGN KEY (invoice_id) REFERENCES invoice(id)
+      )
+
+seed:
+
+  - name: populate_invoices
+    type: exec_batch
+    count: invoices
+    size: 1
+    args:
+      - uuid_v4()
+      - uniform_f(100, 10000, 2)
+      - distribute_weighted(arg(1), [85, 10, 5], 0.1, 2)
+    query: |-
+      INSERT INTO invoice (id, total, subtotal, tax, shipping)
+      VALUES (
+        '$1',
+        $2,
+        CAST(SUBSTRING_INDEX('$3', ',', 1) AS DECIMAL(12,2)),
+        CAST(SUBSTRING_INDEX(SUBSTRING_INDEX('$3', ',', 2), ',', -1) AS DECIMAL(12,2)),
+        CAST(SUBSTRING_INDEX('$3', ',', -1) AS DECIMAL(12,2))
+      )
+
+  - name: fetch_invoices
+    type: query
+    query: SELECT id, total FROM invoice
+
+  - name: populate_line_items
+    type: exec_batch
+    count: count('fetch_invoices')
+    size: 1
+    args:
+      - ref_diff('fetch_invoices')
+      - arg(0).id
+      - distribute_sum(arg(0).total, 3, 7, 2)
+    query: |-
+      INSERT INTO line_item (invoice_id, amount)
+      SELECT '$2', CAST(j.val AS DECIMAL(12,2))
+      FROM JSON_TABLE(
+        CONCAT('["', REPLACE('$3', ',', '","'), '"]'),
+        '$[*]' COLUMNS(val VARCHAR(20) PATH '$')
+      ) j
+
+deseed:
+
+  - name: delete_line_item
+    type: exec
+    query: DELETE FROM line_item
+
+  - name: delete_invoice
+    type: exec
+    query: DELETE FROM invoice
+
+down:
+
+  - name: drop_line_item
+    type: exec
+    query: DROP TABLE IF EXISTS line_item
+
+  - name: drop_invoice
+    type: exec
+    query: DROP TABLE IF EXISTS invoice

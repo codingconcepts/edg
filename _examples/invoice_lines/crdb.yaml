@@ -1,0 +1,75 @@
+# Correlated Totals: Invoice with line items
+#
+# Demonstrates distribute_sum() and distribute_weighted():
+# - Each invoice has 3-7 line items whose amounts sum to the total.
+# - Each invoice's total is split into subtotal/tax/shipping (~85/10/5).
+
+globals:
+  invoices: 100
+
+up:
+
+  - name: create_invoice
+    query: |-
+      CREATE TABLE IF NOT EXISTS invoice (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        total NUMERIC(12,2) NOT NULL,
+        subtotal NUMERIC(12,2) NOT NULL,
+        tax NUMERIC(12,2) NOT NULL,
+        shipping NUMERIC(12,2) NOT NULL
+      )
+
+  - name: create_line_item
+    query: |-
+      CREATE TABLE IF NOT EXISTS line_item (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        invoice_id UUID NOT NULL REFERENCES invoice(id),
+        amount NUMERIC(12,2) NOT NULL
+      )
+
+seed:
+
+  - name: populate
+    type: exec_batch
+    count: invoices
+    size: 1
+    args:
+      - uuid_v4()
+      - uniform_f(100, 10000, 2)
+      - distribute_sum(arg(1), 3, 7, 2)
+      - distribute_weighted(arg(1), [85, 10, 5], 0.1, 2)
+    query: |-
+      WITH inv AS (
+        INSERT INTO invoice (id, total, subtotal, tax, shipping)
+        VALUES (
+          '$1'::UUID,
+          $2,
+          split_part('$4', ',', 1)::NUMERIC,
+          split_part('$4', ',', 2)::NUMERIC,
+          split_part('$4', ',', 3)::NUMERIC
+        )
+        RETURNING id
+      )
+      INSERT INTO line_item (invoice_id, amount)
+      SELECT inv.id, unnest(string_to_array('$3', ',')::NUMERIC[])
+      FROM inv
+
+deseed:
+
+  - name: truncate_line_item
+    type: exec
+    query: TRUNCATE TABLE line_item CASCADE
+
+  - name: truncate_invoice
+    type: exec
+    query: TRUNCATE TABLE invoice CASCADE
+
+down:
+
+  - name: drop_line_item
+    type: exec
+    query: DROP TABLE IF EXISTS line_item
+
+  - name: drop_invoice
+    type: exec
+    query: DROP TABLE IF EXISTS invoice

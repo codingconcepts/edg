@@ -114,6 +114,19 @@ You help users compose, debug, and understand edg expressions. edg uses [expr-la
 | `fail(message)` | Stop current worker gracefully with error |
 | `fatal(message)` | Terminate entire process immediately |
 
+### Correlated Totals
+| Function | Description |
+|---|---|
+| `distribute_sum(total, minN, maxN, precision)` | N random parts summing exactly to total (comma-separated) |
+| `distribute_weighted(total, weights, noise, precision)` | Split total by proportional weights with controlled noise (0=exact, 1=random) |
+
+### Multi-Value
+| Function | Description |
+|---|---|
+| `nurand_n(A, x, y, minN, maxN)` | N unique NURand values (comma-separated) |
+| `norm_n(mean, stddev, min, max, minN, maxN)` | N unique normally-distributed values (comma-separated) |
+| `weighted_sample_n(name, field, weightField, minN, maxN)` | N weighted unique rows from a dataset (comma-separated) |
+
 ### Batch
 | Function | Description |
 |---|---|
@@ -128,6 +141,7 @@ You help users compose, debug, and understand edg expressions. edg uses [expr-la
 | `bit(n)` | Fixed-length bit string |
 | `varbit(n)` | Variable-length bit string |
 | `inet(cidr)` | Random IP in CIDR block |
+| `ltree(parts...)` | PostgreSQL ltree path from dot-joined parts |
 | `point(lat, lon, radiusKM)` | Random geographic point (map) |
 | `point_wkt(lat, lon, radiusKM)` | Random point as WKT string |
 
@@ -187,6 +201,25 @@ args:
 ```yaml
 args:
   - ref_perm('fetch_warehouses').w_id  # same warehouse for entire worker lifetime
+```
+
+### Invoice line items (distribute_sum)
+```yaml
+args:
+  - uuid_v4()                           # invoice id
+  - uniform_f(100, 10000, 2)            # total
+  - distribute_sum(arg(1), 3, 7, 2)     # 3-7 amounts summing to total
+# SQL: unnest(string_to_array('$3', ',')::NUMERIC[])
+```
+
+### Subtotal/tax/shipping breakdown (distribute_weighted)
+```yaml
+args:
+  - uniform_f(100, 10000, 2)                           # total
+  - distribute_weighted(arg(0), [85, 10, 5], 0.1, 2)   # ~85/10/5 split with 10% noise
+# SQL: split_part('$2', ',', 1)::NUMERIC  -- subtotal
+#      split_part('$2', ',', 2)::NUMERIC  -- tax
+#      split_part('$2', ',', 3)::NUMERIC  -- shipping
 ```
 
 ### Error handling with fail/fatal

@@ -252,6 +252,197 @@ func TestWeightedSampleN_EdgeCases(t *testing.T) {
 	}
 }
 
+func TestDistributeSum_Basic(t *testing.T) {
+	env := testEnv(nil)
+
+	result, err := env.distributeSum(100.0, 5, 5, 2)
+	require.NoError(t, err)
+
+	parts := strings.Split(result, ",")
+	assert.Equal(t, 5, len(parts), "expected 5 parts, got %d", len(parts))
+
+	sum := 0.0
+	for _, p := range parts {
+		var v float64
+		fmt.Sscanf(p, "%f", &v)
+		assert.True(t, v >= 0, "part %s is negative", p)
+		sum += v
+	}
+	assert.InDelta(t, 100.0, sum, 0.005, "parts sum to %f, want 100.00", sum)
+}
+
+func TestDistributeSum_VariableN(t *testing.T) {
+	env := testEnv(nil)
+
+	counts := map[int]bool{}
+	for range 100 {
+		result, err := env.distributeSum(500.0, 3, 7, 2)
+		require.NoError(t, err)
+
+		parts := strings.Split(result, ",")
+		n := len(parts)
+		assert.True(t, n >= 3 && n <= 7, "got %d parts, want 3-7", n)
+		counts[n] = true
+
+		sum := 0.0
+		for _, p := range parts {
+			var v float64
+			fmt.Sscanf(p, "%f", &v)
+			sum += v
+		}
+		assert.InDelta(t, 500.0, sum, 0.005, "parts sum to %f, want 500.00", sum)
+	}
+	assert.True(t, len(counts) > 1, "expected varying N, got only %v", counts)
+}
+
+func TestDistributeSum_SinglePart(t *testing.T) {
+	env := testEnv(nil)
+
+	result, err := env.distributeSum(42.50, 1, 1, 2)
+	require.NoError(t, err)
+	assert.Equal(t, "42.50", result)
+}
+
+func TestDistributeSum_ZeroPrecision(t *testing.T) {
+	env := testEnv(nil)
+
+	result, err := env.distributeSum(1000, 4, 4, 0)
+	require.NoError(t, err)
+
+	parts := strings.Split(result, ",")
+	sum := 0.0
+	for _, p := range parts {
+		var v float64
+		fmt.Sscanf(p, "%f", &v)
+		assert.Equal(t, v, float64(int(v)), "expected integer, got %s", p)
+		sum += v
+	}
+	assert.InDelta(t, 1000.0, sum, 0.5, "parts sum to %f, want 1000", sum)
+}
+
+func TestDistributeSum_Errors(t *testing.T) {
+	env := testEnv(nil)
+
+	_, err := env.distributeSum(-10.0, 3, 5, 2)
+	assert.Error(t, err, "negative total should error")
+
+	_, err = env.distributeSum(100.0, 0, 5, 2)
+	assert.Error(t, err, "minN < 1 should error")
+
+	_, err = env.distributeSum(100.0, 5, 3, 2)
+	assert.Error(t, err, "maxN < minN should error")
+}
+
+func TestDistributeWeighted_ExactProportions(t *testing.T) {
+	env := testEnv(nil)
+
+	result, err := env.distributeWeighted(1000.0, []any{50, 30, 20}, 0.0, 2)
+	require.NoError(t, err)
+
+	parts := strings.Split(result, ",")
+	assert.Equal(t, 3, len(parts))
+
+	var values [3]float64
+	sum := 0.0
+	for i, p := range parts {
+		fmt.Sscanf(p, "%f", &values[i])
+		sum += values[i]
+	}
+	assert.InDelta(t, 1000.0, sum, 0.005)
+	assert.InDelta(t, 500.0, values[0], 0.01, "expected ~500 for weight 50")
+	assert.InDelta(t, 300.0, values[1], 0.01, "expected ~300 for weight 30")
+	assert.InDelta(t, 200.0, values[2], 0.01, "expected ~200 for weight 20")
+}
+
+func TestDistributeWeighted_WithNoise(t *testing.T) {
+	env := testEnv(nil)
+
+	sums := [3]float64{}
+	const iterations = 1000
+	for range iterations {
+		result, err := env.distributeWeighted(1000.0, []any{50, 30, 20}, 0.3, 2)
+		require.NoError(t, err)
+
+		parts := strings.Split(result, ",")
+		require.Equal(t, 3, len(parts))
+
+		sum := 0.0
+		for i, p := range parts {
+			var v float64
+			fmt.Sscanf(p, "%f", &v)
+			sums[i] += v
+			sum += v
+		}
+		assert.InDelta(t, 1000.0, sum, 0.005)
+	}
+
+	// Averages should still approximate the proportions.
+	avg0 := sums[0] / iterations
+	avg1 := sums[1] / iterations
+	avg2 := sums[2] / iterations
+	assert.True(t, avg0 > avg1, "weight 50 avg (%f) should exceed weight 30 avg (%f)", avg0, avg1)
+	assert.True(t, avg1 > avg2, "weight 30 avg (%f) should exceed weight 20 avg (%f)", avg1, avg2)
+}
+
+func TestDistributeWeighted_FullNoise(t *testing.T) {
+	env := testEnv(nil)
+
+	result, err := env.distributeWeighted(500.0, []any{1, 1, 1, 1}, 1.0, 2)
+	require.NoError(t, err)
+
+	parts := strings.Split(result, ",")
+	assert.Equal(t, 4, len(parts))
+
+	sum := 0.0
+	for _, p := range parts {
+		var v float64
+		fmt.Sscanf(p, "%f", &v)
+		sum += v
+	}
+	assert.InDelta(t, 500.0, sum, 0.005)
+}
+
+func TestDistributeWeighted_SingleWeight(t *testing.T) {
+	env := testEnv(nil)
+
+	result, err := env.distributeWeighted(42.50, []any{1}, 0.0, 2)
+	require.NoError(t, err)
+	assert.Equal(t, "42.50", result)
+}
+
+func TestDistributeWeighted_Errors(t *testing.T) {
+	env := testEnv(nil)
+
+	_, err := env.distributeWeighted(-10.0, []any{1, 2}, 0.0, 2)
+	assert.Error(t, err, "negative total")
+
+	_, err = env.distributeWeighted(100.0, []any{}, 0.0, 2)
+	assert.Error(t, err, "empty weights")
+
+	_, err = env.distributeWeighted(100.0, []any{0, 0}, 0.0, 2)
+	assert.Error(t, err, "all-zero weights")
+
+	_, err = env.distributeWeighted(100.0, []any{1, 2}, 1.5, 2)
+	assert.Error(t, err, "noise > 1")
+
+	_, err = env.distributeWeighted(100.0, []any{-1, 2}, 0.0, 2)
+	assert.Error(t, err, "negative weight")
+}
+
+func BenchmarkDistributeSum(b *testing.B) {
+	env := benchEnv(0)
+	b.Run("n_5", func(b *testing.B) {
+		for range b.N {
+			_, _ = env.distributeSum(1000.0, 5, 5, 2)
+		}
+	})
+	b.Run("n_3_7", func(b *testing.B) {
+		for range b.N {
+			_, _ = env.distributeSum(1000.0, 3, 7, 2)
+		}
+	})
+}
+
 func BenchmarkNurand(b *testing.B) {
 	env := benchEnv(0)
 	_, _ = env.nuRand(1023, 1, 3000)

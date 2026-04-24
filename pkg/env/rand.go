@@ -2,6 +2,8 @@ package env
 
 import (
 	"fmt"
+	"math"
+	"sort"
 	"strings"
 
 	"github.com/codingconcepts/edg/pkg/convert"
@@ -336,4 +338,185 @@ func (e *Env) weightedSampleN(name, field, weightField string, rawMinN, rawMaxN 
 		return "", fmt.Errorf("weighted_sample_n: could not find %d unique values after %d iterations", n, random.MaxIter)
 	}
 	return strings.Join(parts, ","), nil
+}
+
+// distributeSum partitions a total value into N random positive parts
+// that sum exactly to total, where N is chosen randomly in [minN, maxN].
+// Each part is rounded to the given number of decimal places. Returns
+// a comma-separated string (e.g. "25.50,14.30,10.20").
+//
+//	distribute_sum(100.00, 3, 7, 2)
+func (e *Env) distributeSum(rawTotal, rawMinN, rawMaxN, rawPrecision any) (string, error) {
+	total, err := convert.ToFloat(rawTotal)
+	if err != nil {
+		return "", fmt.Errorf("distribute_sum total: %w", err)
+	}
+	minN, err := convert.ToInt(rawMinN)
+	if err != nil {
+		return "", fmt.Errorf("distribute_sum minN: %w", err)
+	}
+	maxN, err := convert.ToInt(rawMaxN)
+	if err != nil {
+		return "", fmt.Errorf("distribute_sum maxN: %w", err)
+	}
+	p, err := convert.ToInt(rawPrecision)
+	if err != nil {
+		return "", fmt.Errorf("distribute_sum precision: %w", err)
+	}
+
+	if minN < 1 {
+		return "", fmt.Errorf("distribute_sum: minN must be >= 1, got %d", minN)
+	}
+	if maxN < minN {
+		return "", fmt.Errorf("distribute_sum: maxN must be >= minN, got %d < %d", maxN, minN)
+	}
+	if total <= 0 {
+		return "", fmt.Errorf("distribute_sum: total must be > 0, got %g", total)
+	}
+
+	n := minN
+	if maxN > minN {
+		n += random.Rng.IntN(maxN - minN + 1)
+	}
+
+	shift := math.Pow(10, float64(p))
+	format := fmt.Sprintf("%%.%df", p)
+
+	if n == 1 {
+		return fmt.Sprintf(format, math.Round(total*shift)/shift), nil
+	}
+
+	// Random breakpoints in (0, total), sorted.
+	breaks := make([]float64, n-1)
+	for i := range breaks {
+		breaks[i] = random.Rng.Float64() * total
+	}
+	sort.Float64s(breaks)
+
+	// Parts are differences between consecutive breakpoints.
+	parts := make([]float64, n)
+	prev := 0.0
+	for i, bp := range breaks {
+		parts[i] = math.Round((bp-prev)*shift) / shift
+		prev = bp
+	}
+	parts[n-1] = math.Round((total-prev)*shift) / shift
+
+	// Correct rounding drift: add residual to last part.
+	sum := 0.0
+	for _, v := range parts {
+		sum += v
+	}
+	residual := math.Round((total-sum)*shift) / shift
+	parts[n-1] += residual
+
+	strs := make([]string, n)
+	for i, v := range parts {
+		strs[i] = fmt.Sprintf(format, v)
+	}
+	return strings.Join(strs, ","), nil
+}
+
+// distributeWeighted partitions a total into parts proportional to the
+// given weights, with controlled randomness. noise (0-1) blends between
+// exact proportions (0) and fully random (1). Returns a comma-separated
+// string whose values sum exactly to total.
+//
+//	distribute_weighted(1000, [50, 30, 20], 0.2, 2)
+func (e *Env) distributeWeighted(rawTotal, rawWeights, rawNoise, rawPrecision any) (string, error) {
+	total, err := convert.ToFloat(rawTotal)
+	if err != nil {
+		return "", fmt.Errorf("distribute_weighted total: %w", err)
+	}
+	weights, err := toFloatSlice(rawWeights)
+	if err != nil {
+		return "", fmt.Errorf("distribute_weighted weights: %w", err)
+	}
+	noise, err := convert.ToFloat(rawNoise)
+	if err != nil {
+		return "", fmt.Errorf("distribute_weighted noise: %w", err)
+	}
+	p, err := convert.ToInt(rawPrecision)
+	if err != nil {
+		return "", fmt.Errorf("distribute_weighted precision: %w", err)
+	}
+
+	n := len(weights)
+	if n < 1 {
+		return "", fmt.Errorf("distribute_weighted: weights must have at least 1 element")
+	}
+	if total <= 0 {
+		return "", fmt.Errorf("distribute_weighted: total must be > 0, got %g", total)
+	}
+	if noise < 0 || noise > 1 {
+		return "", fmt.Errorf("distribute_weighted: noise must be in [0, 1], got %g", noise)
+	}
+
+	sumW := 0.0
+	for _, w := range weights {
+		if w < 0 {
+			return "", fmt.Errorf("distribute_weighted: weights must be >= 0")
+		}
+		sumW += w
+	}
+	if sumW == 0 {
+		return "", fmt.Errorf("distribute_weighted: weights must not all be zero")
+	}
+
+	// Blend each weight's proportion with a uniform random value.
+	blended := make([]float64, n)
+	blendedSum := 0.0
+	for i, w := range weights {
+		proportion := w / sumW
+		uniform := random.Rng.Float64()
+		blended[i] = (1-noise)*proportion + noise*uniform
+		blendedSum += blended[i]
+	}
+
+	// Scale to total.
+	parts := make([]float64, n)
+	shift := math.Pow(10, float64(p))
+	format := fmt.Sprintf("%%.%df", p)
+
+	if n == 1 {
+		return fmt.Sprintf(format, math.Round(total*shift)/shift), nil
+	}
+
+	runningSum := 0.0
+	for i := 0; i < n-1; i++ {
+		parts[i] = math.Round(blended[i]/blendedSum*total*shift) / shift
+		runningSum += parts[i]
+	}
+	parts[n-1] = math.Round((total-runningSum)*shift) / shift
+
+	strs := make([]string, n)
+	for i, v := range parts {
+		strs[i] = fmt.Sprintf(format, v)
+	}
+	return strings.Join(strs, ","), nil
+}
+
+func toFloatSlice(v any) ([]float64, error) {
+	switch s := v.(type) {
+	case []any:
+		result := make([]float64, len(s))
+		for i, item := range s {
+			f, err := convert.ToFloat(item)
+			if err != nil {
+				return nil, fmt.Errorf("element[%d]: %w", i, err)
+			}
+			result[i] = f
+		}
+		return result, nil
+	case []float64:
+		return s, nil
+	case []int:
+		result := make([]float64, len(s))
+		for i, item := range s {
+			result[i] = float64(item)
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("expected array, got %T", v)
+	}
 }
