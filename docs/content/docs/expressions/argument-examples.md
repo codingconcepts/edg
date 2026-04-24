@@ -153,14 +153,15 @@ These expressions are used in the `args:` list of a `run` query. Each entry in `
 |---|---|
 | `gen_locale('first_name', 'ja_JP')` | Japanese first name (e.g. 太郎, 花子) |
 | `gen_locale('last_name', 'de_DE')` | German last name (e.g. Müller, Schmidt) |
-| `gen_locale('name', 'ja_JP')` | Full name in locale order (東 = 佐藤太郎, 西 = Hans Müller) |
+| `gen_locale('name', 'ja_JP')` | Independent full name in locale order (東 = 佐藤太郎, 西 = Hans Müller). First and last are picked independently of `first_name`/`last_name` args. |
+| `arg('first_name') + " " + arg('last_name')` | Composed full name from previously generated args. Use this when `first_name` and `last_name` are separate args and the full name must match. For eastern-order locales, use `arg('last_name') + arg('first_name')` (no space). |
 | `gen_locale('city', 'fr_FR')` | French city name (e.g. Paris, Lyon) |
 | `gen_locale('street', 'es_ES')` | Spanish street name (e.g. Gran Vía) |
 | `gen_locale('phone', 'ko_KR')` | Korean phone number (e.g. 010-1234-5678) |
 | `gen_locale('zip', 'ja_JP')` | Japanese postal code (e.g. 123-4567) |
 | `gen_locale('address', 'de_DE')` | Full German address with street number, city, and zip |
-| `mask('john@example.com')` | Deterministic 16-char hex token (same input → same output) |
-| `mask(arg('email'), 8)` | 8-char masked token of a previously generated email |
+| `mask('john@example.com')` | Deterministic 16-char hex token (e.g. `a3f8c1d9e2b74f06`). Same input → same output within a session |
+| `mask(arg('email'), 8)` | 8-char masked token of a previously generated email (e.g. `a3f8c1d9`) |
 
 Supported locales: `en_US`, `ja_JP`, `de_DE`, `fr_FR`, `es_ES`, `pt_BR`, `zh_CN`, `ko_KR`. Aliases like `ja`, `de`, `fr` also work.
 
