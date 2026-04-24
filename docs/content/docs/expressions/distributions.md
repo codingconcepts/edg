@@ -1,6 +1,6 @@
 ---
 title: Distributions
-weight: 2
+weight: 3
 ---
 
 # Distributions

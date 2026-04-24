@@ -1,6 +1,6 @@
 ---
 title: Workload
-weight: 4
+weight: 6
 ---
 
 # Workload
