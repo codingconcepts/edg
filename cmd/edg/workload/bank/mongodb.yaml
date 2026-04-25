@@ -27,10 +27,10 @@ seed:
     count: customers
     size: batch_size
     args:
-      - gen('uuid')
+      - objectid()
       - gen('email')
     query: |-
-      {"insert": "customer", "documents": [{"_id": "$1", "email": "$2"}]}
+      {"insert": "customer", "documents": [{"_id": {"$oid": "$1"}, "email": "$2"}]}
 
   - name: fetch_customers
     type: query
@@ -42,11 +42,11 @@ seed:
     count: customers
     size: batch_size
     args:
-      - gen('uuid')
+      - objectid()
       - ref_rand('fetch_customers')._id
       - initial_balance
     query: |-
-      {"insert": "account", "documents": [{"_id": "$1", "customer_id": "$2", "balance": $3}]}
+      {"insert": "account", "documents": [{"_id": {"$oid": "$1"}, "customer_id": {"$oid": "$2"}, "balance": $3}]}
 
 deseed:
 
@@ -91,7 +91,7 @@ run:
     args:
       - ref_rand('fetch_accounts')._id
     query: |-
-      {"find": "account", "filter": {"_id": "$1"}}
+      {"find": "account", "filter": {"_id": {"$oid": "$1"}}}
 
   - name: credit_account
     type: exec
@@ -99,7 +99,7 @@ run:
       - ref_rand('fetch_accounts')._id
       - gen('number:1,1000')
     query: |-
-      {"update": "account", "updates": [{"q": {"_id": "$1"}, "u": {"$inc": {"balance": $2}}}]}
+      {"update": "account", "updates": [{"q": {"_id": {"$oid": "$1"}}, "u": {"$inc": {"balance": $2}}}]}
 
   - transaction: make_transfer
     locals:
@@ -110,7 +110,7 @@ run:
         args:
           - ref_diff('fetch_accounts')._id
         query: |-
-          {"find": "account", "filter": {"_id": "$1"}}
+          {"find": "account", "filter": {"_id": {"$oid": "$1"}}}
 
       - rollback_if: "ref_same('read_source').balance < local('amount')"
 
@@ -119,7 +119,7 @@ run:
         args:
           - ref_diff('fetch_accounts')._id
         query: |-
-          {"find": "account", "filter": {"_id": "$1"}}
+          {"find": "account", "filter": {"_id": {"$oid": "$1"}}}
 
       - name: debit_source
         type: exec
@@ -127,7 +127,7 @@ run:
           - ref_same('read_source')._id
           - local('amount')
         query: |-
-          {"update": "account", "updates": [{"q": {"_id": "$1"}, "u": {"$inc": {"balance": -$2}}}]}
+          {"update": "account", "updates": [{"q": {"_id": {"$oid": "$1"}}, "u": {"$inc": {"balance": -$2}}}]}
 
       - name: credit_target
         type: exec
@@ -135,7 +135,7 @@ run:
           - ref_same('read_target')._id
           - local('amount')
         query: |-
-          {"update": "account", "updates": [{"q": {"_id": "$1"}, "u": {"$inc": {"balance": $2}}}]}
+          {"update": "account", "updates": [{"q": {"_id": {"$oid": "$1"}}, "u": {"$inc": {"balance": $2}}}]}
 
 
 expectations:

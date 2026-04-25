@@ -10,6 +10,7 @@ import (
 
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/google/uuid"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const (
@@ -329,4 +330,8 @@ func degreesToRadians(degrees float64) float64 {
 
 func radiansToDegrees(radians float64) float64 {
 	return radians * 180 / math.Pi
+}
+
+func ObjectID() bson.ObjectID {
+	return bson.NewObjectID()
 }

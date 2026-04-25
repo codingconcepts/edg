@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/codingconcepts/edg/pkg/random"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // Sep is the batch field separator (ASCII unit separator, char 31).
@@ -151,6 +152,9 @@ func BatchFormatValue(v any, driver string) string {
 	if v == nil {
 		return "NULL"
 	}
+	if oid, ok := v.(bson.ObjectID); ok {
+		return oid.Hex()
+	}
 	if b, ok := v.([]byte); ok {
 		switch driver {
 		case "mongodb":
@@ -211,6 +215,14 @@ func SQLFormatValue(v any, driver string) string {
 	switch n := v.(type) {
 	case RawSQL:
 		return string(n)
+	case bson.ObjectID:
+		h := n.Hex()
+		switch driver {
+		case "mongodb":
+			return `"` + h + `"`
+		default:
+			return "'" + h + "'"
+		}
 	case int, int8, int16, int32, int64:
 		return fmt.Sprint(v)
 	case float64:

@@ -161,7 +161,7 @@ seed:
     count: flights
     size: batch_size
     args:
-      - gen('uuid')
+      - objectid()
       - ref_rand('fetch_customers_seed')._id
       - ref_rand('fetch_flights_seed')._id
       - gen('number:1,150')
@@ -169,7 +169,7 @@ seed:
       - gen('number:0,99')
       - gen('number:0,99')
     query: |-
-      {"insert": "reservation", "documents": [{"_id": "$1", "r_c_id": $2, "r_f_id": $3, "r_seat": $4, "r_price": $5, "r_iattr00": $6, "r_iattr01": $7}]}
+      {"insert": "reservation", "documents": [{"_id": {"$oid": "$1"}, "r_c_id": $2, "r_f_id": $3, "r_seat": $4, "r_price": $5, "r_iattr00": $6, "r_iattr01": $7}]}
 
   # Decrement f_seats_left for each seeded reservation.
   # In a real setup you would run an aggregation pipeline, but for
@@ -313,7 +313,7 @@ run:
       - ref_rand('fetch_reservations')._id
       - gen('number:0,100')
     query: |-
-      {"update": "reservation", "updates": [{"q": {"_id": "$1"}, "u": {"$set": {"r_iattr00": $2}}}]}
+      {"update": "reservation", "updates": [{"q": {"_id": {"$oid": "$1"}}, "u": {"$set": {"r_iattr00": $2}}}]}
 
   # Cancel a reservation and release the seat.
   # Delete the reservation, then increment seats on the flight.
@@ -323,7 +323,7 @@ run:
       - ref_rand('fetch_reservations')._id
       - ref_rand('fetch_reservations').r_f_id
     query: |-
-      {"delete": "reservation", "deletes": [{"q": {"_id": "$1"}, "limit": 1}]}
+      {"delete": "reservation", "deletes": [{"q": {"_id": {"$oid": "$1"}}, "limit": 1}]}
 
 
 expectations:

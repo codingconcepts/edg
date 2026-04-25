@@ -141,6 +141,7 @@ func NewEnv(database db.DB, driver string, r *config.Request, sections ...config
 		"nullable":            convert.Nullable,       // Return NULL with given probability, otherwise the value.
 		"nurand_n":            env.nuRandN,            // N unique Non-Uniform Random values (comma-separated).
 		"nurand":              env.nuRand,             // Non-Uniform Random per TPC-C spec.
+		"objectid":            gen.GenObjectID,        // Generate a MongoDB ObjectID.
 		"point_wkt":           gen.GenPointWKT,        // Random geographic point as WKT string.
 		"point":               gen.GenPoint,           // Random geographic point within a radius.
 		"ref_diff":            env.refDiff,            // Use unique rows across multiple arguments.
@@ -455,7 +456,11 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 		} else {
 			singleQuoted := fmt.Sprintf("'$%d'", i+1)
 			doubleQuoted := fmt.Sprintf(`"$%d"`, i+1)
-			if strings.Contains(q.Query, singleQuoted) || strings.Contains(q.Query, doubleQuoted) {
+			if strings.Contains(q.Query, singleQuoted) {
+				formatters[i] = func(v any) string { return convert.BatchFormatValue(v, e.driver) }
+			} else if strings.Contains(q.Query, doubleQuoted) && e.driver == "mongodb" {
+				formatters[i] = func(v any) string { return convert.SQLFormatValue(v, e.driver) }
+			} else if strings.Contains(q.Query, doubleQuoted) {
 				formatters[i] = func(v any) string { return convert.BatchFormatValue(v, e.driver) }
 			} else {
 				formatters[i] = func(v any) string { return convert.SQLFormatValue(v, e.driver) }
@@ -628,9 +633,14 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 					// wraps these in quotes, so this avoids double-quoting.
 					// RawSQL values (batch CSVs) are unquoted by design and
 					// must preserve the surrounding quotes in the query.
-					if _, isRaw := args[j].(convert.RawSQL); !isRaw {
+					_, isRaw := args[j].(convert.RawSQL)
+					if !isRaw {
 						singleQuoted := "'" + placeholder + "'"
 						inlined = strings.ReplaceAll(inlined, singleQuoted, formatted)
+						doubleQuoted := `"` + placeholder + `"`
+						inlined = strings.ReplaceAll(inlined, doubleQuoted, formatted)
+					}
+					if isRaw && e.driver == "mongodb" {
 						doubleQuoted := `"` + placeholder + `"`
 						inlined = strings.ReplaceAll(inlined, doubleQuoted, formatted)
 					}
@@ -849,9 +859,14 @@ func inlineArgs(query string, args []any, driver string) string {
 	for j := len(args) - 1; j >= 0; j-- {
 		placeholder := fmt.Sprintf("$%d", j+1)
 		formatted := convert.SQLFormatValue(args[j], driver)
-		if _, isRaw := args[j].(convert.RawSQL); !isRaw {
+		_, isRaw := args[j].(convert.RawSQL)
+		if !isRaw {
 			quotedPlaceholder := "'" + placeholder + "'"
 			query = strings.ReplaceAll(query, quotedPlaceholder, formatted)
+		}
+		if driver == "mongodb" {
+			dqPlaceholder := `"` + placeholder + `"`
+			query = strings.ReplaceAll(query, dqPlaceholder, formatted)
 		}
 		query = strings.ReplaceAll(query, placeholder, formatted)
 	}

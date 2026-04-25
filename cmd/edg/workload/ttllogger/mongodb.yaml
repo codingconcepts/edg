@@ -58,13 +58,13 @@ run:
   - name: write_log
     type: exec
     args:
-      - gen('uuid')
+      - objectid()
       - set_rand(['DEBUG','INFO','WARN','ERROR','FATAL'], [10,50,25,12,3])
       - set_rand(['api','worker','scheduler','auth','billing'], [])
       - regex('[a-zA-Z0-9 ]{64,256}')
       - date_offset('0s')
     query: |-
-      {"insert": "events", "documents": [{"_id": "$1", "level": "$2", "source": "$3", "message": "$4", "created_at": {"$date": "$5"}}]}
+      {"insert": "events", "documents": [{"_id": {"$oid": "$1"}, "level": "$2", "source": "$3", "message": "$4", "created_at": {"$date": "$5"}}]}
 
   - name: read_recent
     type: query

@@ -50,11 +50,11 @@ run:
   - name: insert_row
     type: exec
     args:
-      - gen('uuid')
+      - objectid()
       - blob(payload_size)
       - date_offset('0s')
     query: |-
-      {"insert": "ttlbench", "documents": [{"_id": "$1", "payload": "$2", "inserted_at": {"$date": "$3"}}]}
+      {"insert": "ttlbench", "documents": [{"_id": {"$oid": "$1"}, "payload": "$2", "inserted_at": {"$date": "$3"}}]}
 
   - name: read_recent
     type: query

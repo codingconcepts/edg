@@ -262,13 +262,13 @@ seed:
     count: customers
     size: batch_size
     args:
-      - gen('uuid')
+      - objectid()
       - iter()
       - gen('number:1,10')
       - ref_rand('fetch_warehouses').w_id
       - regex('[a-zA-Z]{12,24}')
     query: |-
-      {"insert": "history", "documents": [{"_id": "$1", "h_c_id": $2, "h_c_d_id": $3, "h_c_w_id": $4, "h_d_id": $3, "h_w_id": $4, "h_date": {"$date": "2024-01-01T00:00:00Z"}, "h_amount": 10, "h_data": "$5"}]}
+      {"insert": "history", "documents": [{"_id": {"$oid": "$1"}, "h_c_id": $2, "h_c_d_id": $3, "h_c_w_id": $4, "h_d_id": $3, "h_w_id": $4, "h_date": {"$date": "2024-01-01T00:00:00Z"}, "h_amount": 10, "h_data": "$5"}]}
 
   - name: populate_oorder
     type: exec_batch

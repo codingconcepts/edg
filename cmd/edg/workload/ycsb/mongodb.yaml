@@ -100,7 +100,7 @@ run:
   - name: insert
     type: exec
     args:
-      - uuid_v7()
+      - objectid()
       - regex('[a-zA-Z0-9]{100}')
       - regex('[a-zA-Z0-9]{100}')
       - regex('[a-zA-Z0-9]{100}')
