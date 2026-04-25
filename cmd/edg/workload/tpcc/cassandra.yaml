@@ -29,12 +29,14 @@
 #   - Stock-Level (SELECT from stock with ALLOW FILTERING)
 
 globals:
-  warehouses: 1    # W
-  districts: 10    # W * 10
-  customers: 30000 # W * 10 * 3000
-  orders: 30000    # W * 10 * 3000
-  stock: 100000    # W * 100,000
-  items: 100000    # 100,000
+  warehouses: int(coalesce(env_nil('WAREHOUSES'), 1))
+  districts: int(coalesce(env_nil('DISTRICTS'), 10))
+  customers: int(coalesce(env_nil('CUSTOMERS'), 300))
+  orders: int(coalesce(env_nil('ORDERS'), 300))
+  stock: int(coalesce(env_nil('STOCK'), 1000))
+  items: int(coalesce(env_nil('ITEMS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
+  ol_batch: int(coalesce(env_nil('OL_BATCH'), 100))
 
 up:
 
@@ -205,12 +207,13 @@ seed:
   - name: populate_item
     type: exec_batch
     count: items
+    size: 50
     args:
-      - gen('number:1,100000')
+      - iter()
       - gen('number:1,10000')
-      - gen('string:6,24')
-      - gen('float:1.00,100.00')
-      - gen('string:26,50')
+      - regex('[a-zA-Z]{6,24}')
+      - uniform_f(1.00, 100.00, 2)
+      - regex('[a-zA-Z]{26,50}')
     query: |-
       INSERT INTO edg.item (i_id, i_im_id, i_name, i_price, i_data)
       VALUES ($1, $2, $3, $4, $5)
@@ -218,15 +221,16 @@ seed:
   - name: populate_warehouse
     type: exec_batch
     count: warehouses
+    size: 50
     args:
-      - gen('number:1,1000')
-      - gen('string:6,10')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:2,2')
-      - gen('string:9,9')
-      - gen('float:0.0000,0.2000')
+      - iter()
+      - regex('[a-zA-Z]{6,10}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{2,2}')
+      - regex('[a-zA-Z]{9,9}')
+      - uniform_f(0.0000, 0.2000, 4)
     query: |-
       INSERT INTO edg.warehouse (w_id, w_name, w_street_1, w_street_2,
         w_city, w_state, w_zip, w_tax, w_ytd)
@@ -239,16 +243,17 @@ seed:
   - name: populate_district
     type: exec_batch
     count: districts
+    size: 50
     args:
       - ref_rand('fetch_warehouses').w_id
-      - gen('number:1,10')
-      - gen('string:6,10')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:2,2')
-      - gen('string:9,9')
-      - gen('float:0.0000,0.2000')
+      - iter()
+      - regex('[a-zA-Z]{6,10}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{2,2}')
+      - regex('[a-zA-Z]{9,9}')
+      - uniform_f(0.0000, 0.2000, 4)
     query: |-
       INSERT INTO edg.district (d_w_id, d_id, d_name, d_street_1, d_street_2,
         d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id)
@@ -257,20 +262,21 @@ seed:
   - name: populate_customer
     type: exec_batch
     count: customers
+    size: 50
     args:
       - ref_rand('fetch_warehouses').w_id
       - gen('number:1,10')
-      - gen('number:1,3000')
-      - gen('string:6,16')
-      - gen('string:6,16')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:2,2')
-      - gen('string:9,9')
-      - gen('string:16,16')
-      - gen('float:0.0000,0.5000')
-      - gen('string:300,500')
+      - iter()
+      - regex('[a-zA-Z]{6,16}')
+      - regex('[a-zA-Z]{6,16}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{2,2}')
+      - regex('[a-zA-Z]{9,9}')
+      - regex('[a-zA-Z]{16,16}')
+      - uniform_f(0.0000, 0.5000, 4)
+      - regex('[a-zA-Z]{300,500}')
     query: |-
       INSERT INTO edg.customer (c_w_id, c_d_id, c_id, c_first, c_middle,
         c_last, c_street_1, c_street_2, c_city, c_state, c_zip, c_phone,
@@ -282,12 +288,13 @@ seed:
   - name: populate_history
     type: exec_batch
     count: customers
+    size: 50
     args:
       - gen('uuid')
-      - gen('number:1,3000')
+      - iter()
       - gen('number:1,10')
       - ref_rand('fetch_warehouses').w_id
-      - gen('string:12,24')
+      - regex('[a-zA-Z]{12,24}')
     query: |-
       INSERT INTO edg.history (h_id, h_c_id, h_c_d_id, h_c_w_id,
         h_d_id, h_w_id, h_date, h_amount, h_data)
@@ -296,10 +303,11 @@ seed:
   - name: populate_oorder
     type: exec_batch
     count: orders
+    size: 50
     args:
       - ref_rand('fetch_warehouses').w_id
       - gen('number:1,10')
-      - gen('number:1,3000')
+      - iter()
       - gen('number:1,3000')
       - gen('number:5,15')
     query: |-
@@ -310,10 +318,11 @@ seed:
   - name: populate_new_order
     type: exec_batch
     count: districts
+    size: 50
     args:
       - ref_rand('fetch_warehouses').w_id
       - gen('number:1,10')
-      - gen('number:2101,3000')
+      - iter()
     query: |-
       INSERT INTO edg.new_order (no_w_id, no_d_id, no_o_id)
       VALUES ($1, $2, $3)
@@ -321,14 +330,15 @@ seed:
   - name: populate_order_line
     type: exec_batch
     count: orders
+    size: 50
     args:
       - ref_rand('fetch_warehouses').w_id
       - gen('number:1,10')
       - gen('number:1,3000')
       - gen('number:1,15')
       - gen('number:1,100000')
-      - gen('float:0.00,9999.99')
-      - gen('string:24,24')
+      - uniform_f(0.00, 9999.99, 2)
+      - regex('[a-zA-Z]{24,24}')
     query: |-
       INSERT INTO edg.order_line (ol_w_id, ol_d_id, ol_o_id, ol_number,
         ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount,
@@ -338,21 +348,22 @@ seed:
   - name: populate_stock
     type: exec_batch
     count: stock
+    size: 50
     args:
       - ref_rand('fetch_warehouses').w_id
-      - gen('number:1,100000')
+      - iter()
       - gen('number:10,100')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:26,50')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{26,50}')
     query: |-
       INSERT INTO edg.stock (s_w_id, s_i_id, s_quantity,
         s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05,
@@ -459,7 +470,7 @@ run:
   # Reads district to get next order ID, inserts order and new_order
   # in a logged batch for atomicity.
   - transaction: new_order
-    wait: 18s
+    wait: 180ms
     locals:
       order_id: gen('number:3001,999999')
       ol_cnt: gen('number:5,15')
@@ -500,14 +511,15 @@ run:
   # Updates warehouse ytd, customer balance, and inserts history
   # in a logged batch for atomicity.
   - transaction: payment
-    wait: 3s
+    wait: 30ms
     locals:
+      w_id: ref_perm('fetch_warehouses').w_id
       amount: gen('number:100,500000')
     queries:
       - name: update_warehouse
         type: exec
         args:
-          - ref_perm('fetch_warehouses').w_id
+          - local('w_id')
           - local('amount')
         query: |-
           UPDATE edg.warehouse SET w_ytd = $2 WHERE w_id = $1
@@ -515,12 +527,15 @@ run:
       - name: read_customer
         type: query
         args:
-          - ref_same('update_warehouse').w_id
+          - local('w_id')
           - gen('number:1,10')
           - nurand(1023, 1, customers / districts)
         query: |-
-          SELECT c_w_id, c_d_id, c_id, c_balance FROM edg.customer
+          SELECT c_w_id, c_d_id, c_id, c_balance, c_ytd_payment, c_payment_cnt
+          FROM edg.customer
           WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3
+
+      - rollback_if: "ref_same('read_customer').c_id == nil"
 
       - name: update_customer
         type: exec
@@ -528,11 +543,13 @@ run:
           - ref_same('read_customer').c_w_id
           - ref_same('read_customer').c_d_id
           - ref_same('read_customer').c_id
-          - local('amount')
+          - ref_same('read_customer').c_balance + local('amount')
+          - ref_same('read_customer').c_ytd_payment + local('amount')
+          - ref_same('read_customer').c_payment_cnt + 1
         query: |-
-          UPDATE edg.customer SET c_balance = c_balance + $4,
-            c_ytd_payment = c_ytd_payment + $4,
-            c_payment_cnt = c_payment_cnt + 1
+          UPDATE edg.customer SET c_balance = $4,
+            c_ytd_payment = $5,
+            c_payment_cnt = $6
           WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3
 
       - name: insert_history
@@ -553,7 +570,7 @@ run:
   # warehouse and district. Uses DESC clustering to get latest.
   - name: order_status
     type: query
-    wait: 2s
+    wait: 20ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')
@@ -568,7 +585,7 @@ run:
   # Requires all primary key components for Cassandra DELETE.
   - name: delivery
     type: exec
-    wait: 2s
+    wait: 20ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')
@@ -582,7 +599,7 @@ run:
   # FILTERING since s_quantity is not part of the primary key.
   - name: stock_level
     type: query
-    wait: 2s
+    wait: 20ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')

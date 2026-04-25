@@ -36,14 +36,14 @@
 #   q12_shipping_modes     - Order urgency by carrier (5%)
 
 globals:
-  warehouses: 1
-  districts: 10
-  customers: int(coalesce(env_nil('CUSTOMERS'), 10000))
-  orders: int(coalesce(env_nil('ORDERS'), 10000))
-  stock: int(coalesce(env_nil('STOCK'), 10000))
-  items: int(coalesce(env_nil('ITEMS'), 10000))
-  batch_size: 500
-  ol_batch: 100
+  warehouses: int(coalesce(env_nil('WAREHOUSES'), 1))
+  districts: int(coalesce(env_nil('DISTRICTS'), 10))
+  customers: int(coalesce(env_nil('CUSTOMERS'), 300))
+  orders: int(coalesce(env_nil('ORDERS'), 300))
+  stock: int(coalesce(env_nil('STOCK'), 1000))
+  items: int(coalesce(env_nil('ITEMS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
+  ol_batch: int(coalesce(env_nil('OL_BATCH'), 100))
 
 up:
   - name: create_warehouse

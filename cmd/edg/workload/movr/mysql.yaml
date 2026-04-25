@@ -4,11 +4,11 @@
 #   user:password@tcp(host:port)/database?parseTime=true
 
 globals:
-  num_users: 1000
-  num_vehicles: 500
-  num_rides: 2000
-  num_promo_codes: 100
-  batch_size: 100
+  num_users: int(coalesce(env_nil('NUM_USERS'), 100))
+  num_vehicles: int(coalesce(env_nil('NUM_VEHICLES'), 50))
+  num_rides: int(coalesce(env_nil('NUM_RIDES'), 200))
+  num_promo_codes: int(coalesce(env_nil('NUM_PROMO_CODES'), 10))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 

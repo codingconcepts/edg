@@ -36,7 +36,7 @@ The `rate` field uses the format `times/interval`. For example, `1/5s` means onc
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run

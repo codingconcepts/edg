@@ -5,8 +5,8 @@ Write identical data to PostgreSQL and MySQL, then verify both databases match. 
 ## Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
-docker compose -f _examples/compose_mysql.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_mysql.yml up -d
 
 until cockroach sql --insecure -e "SELECT 1" &>/dev/null; do sleep 1; done
 until mysql -u root -ppassword -h 127.0.0.1 -e "SELECT 1" &>/dev/null 2>&1; do sleep 1; done
@@ -105,6 +105,6 @@ go run ./cmd/edg sync down \
 --target-url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true" \
 --target-config _examples/sync/mysql.yaml
 
-docker compose -f _examples/compose_crdb.yml down
-docker compose -f _examples/compose_mysql.yml down
+docker compose -f cmd/harness/compose/compose_crdb.yml down
+docker compose -f cmd/harness/compose/compose_mysql.yml down
 ```

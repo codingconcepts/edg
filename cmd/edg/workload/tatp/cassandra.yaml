@@ -13,7 +13,8 @@
 # All tables partitioned by s_id for efficient subscriber lookups.
 
 globals:
-  subscribers: 100000
+  subscribers: int(coalesce(env_nil('SUBSCRIBERS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 
@@ -113,8 +114,9 @@ seed:
   - name: populate_subscriber
     type: exec_batch
     count: subscribers
+    size: 50
     args:
-      - gen('number:1,100000')
+      - iter()
       - regex('[0-9]{15}')
       - gen('number:0,1')
       - gen('number:0,1')
@@ -173,6 +175,7 @@ seed:
   - name: populate_access_info
     type: exec_batch
     count: subscribers
+    size: 50
     args:
       - ref_rand('fetch_subscriber_ids').s_id
       - gen('number:1,4')
@@ -187,6 +190,7 @@ seed:
   - name: populate_special_facility
     type: exec_batch
     count: subscribers
+    size: 50
     args:
       - ref_rand('fetch_subscriber_ids').s_id
       - gen('number:1,4')
@@ -206,6 +210,7 @@ seed:
   - name: populate_call_forwarding
     type: exec_batch
     count: subscribers
+    size: 50
     args:
       - ref_rand('fetch_special_facilities').s_id
       - ref_rand('fetch_special_facilities').sf_type
@@ -323,11 +328,11 @@ run:
   - name: update_location
     type: exec
     args:
-      - ref_rand('fetch_subscribers').sub_nbr
+      - ref_rand('fetch_subscribers').s_id
       - gen('number:0,65535')
     query: |-
       UPDATE edg.subscriber SET vlr_location = $2
-      WHERE sub_nbr = $1
+      WHERE s_id = $1
 
   # Insert a new call forwarding rule.
   - name: insert_call_forwarding

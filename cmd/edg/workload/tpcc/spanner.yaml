@@ -21,14 +21,14 @@
 #   - Delivery is simplified to process one district at a time
 
 globals:
-  warehouses: 1 # W
-  districts: 10 # W * 10
-  customers: int(coalesce(env_nil('CUSTOMERS'), 10000))
-  orders: int(coalesce(env_nil('ORDERS'), 10000))
-  stock: int(coalesce(env_nil('STOCK'), 10000))
-  items: int(coalesce(env_nil('ITEMS'), 10000))
-  batch_size: 500
-  ol_batch: 100 # order_line batch: o_ids per batch iteration
+  warehouses: int(coalesce(env_nil('WAREHOUSES'), 1))
+  districts: int(coalesce(env_nil('DISTRICTS'), 10))
+  customers: int(coalesce(env_nil('CUSTOMERS'), 300))
+  orders: int(coalesce(env_nil('ORDERS'), 300))
+  stock: int(coalesce(env_nil('STOCK'), 1000))
+  items: int(coalesce(env_nil('ITEMS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
+  ol_batch: int(coalesce(env_nil('OL_BATCH'), 100))
 
 up:
   - name: create_warehouse
@@ -516,7 +516,7 @@ run:
   # procedures for atomicity.
   - name: new_order
     type: exec
-    wait: 18s
+    wait: 180ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')
@@ -538,7 +538,7 @@ run:
   # warehouse/district YTD and insert history atomically.
   - name: payment
     type: exec
-    wait: 3s
+    wait: 30ms
     args:
       - gen('number:100,500000')
       - ref_perm('fetch_warehouses').w_id
@@ -557,7 +557,7 @@ run:
   # Looks up the latest order and its order lines for a customer.
   - name: order_status
     type: query
-    wait: 2s
+    wait: 20ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')
@@ -584,7 +584,7 @@ run:
   # Deletes the oldest new_order for a single district.
   - name: delivery
     type: exec
-    wait: 2s
+    wait: 20ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')
@@ -602,7 +602,7 @@ run:
   # Counts recently-ordered items with stock below threshold.
   - name: stock_level
     type: query
-    wait: 2s
+    wait: 20ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')

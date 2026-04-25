@@ -27,12 +27,14 @@
 # syntax) since they pass args via database/sql positional parameters.
 
 globals:
-  warehouses: 1    # W
-  districts: 10    # W * 10
-  customers: 30000 # W * 10 * 3000
-  orders: 30000    # W * 10 * 3000
-  stock: 100000    # W * 100,000
-  items: 100000    # 100,000
+  warehouses: int(coalesce(env_nil('WAREHOUSES'), 1))
+  districts: int(coalesce(env_nil('DISTRICTS'), 10))
+  customers: int(coalesce(env_nil('CUSTOMERS'), 300))
+  orders: int(coalesce(env_nil('ORDERS'), 300))
+  stock: int(coalesce(env_nil('STOCK'), 1000))
+  items: int(coalesce(env_nil('ITEMS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
+  ol_batch: int(coalesce(env_nil('OL_BATCH'), 100))
 
 up:
 
@@ -575,7 +577,7 @@ run:
   # Uses params subquery to avoid repeating positional @pN params.
   - name: new_order
     type: exec
-    wait: 18s
+    wait: 180ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')
@@ -593,7 +595,7 @@ run:
   # is referenced once but used in two SET expressions.
   - name: payment
     type: exec
-    wait: 3s
+    wait: 30ms
     args:
       - gen('number:100,500000')
       - ref_perm('fetch_warehouses').w_id
@@ -614,7 +616,7 @@ run:
   # Uses params subquery so w_id can be referenced in correlated subquery.
   - name: order_status
     type: query
-    wait: 2s
+    wait: 20ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')
@@ -640,7 +642,7 @@ run:
   # Uses params subquery so w_id and d_id can be reused.
   - name: delivery
     type: exec
-    wait: 2s
+    wait: 20ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')
@@ -657,7 +659,7 @@ run:
   # Counts recently-ordered items with stock below threshold.
   - name: stock_level
     type: query
-    wait: 2s
+    wait: 20ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')

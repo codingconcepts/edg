@@ -8,8 +8,8 @@
 # Schema matches standard sysbench sbtest1 collection.
 
 globals:
-  records: 10000
-  batch_size: 1000
+  records: int(coalesce(env_nil('RECORDS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 
@@ -23,8 +23,9 @@ seed:
   - name: populate_sbtest1
     type: exec_batch
     count: records
+    size: batch_size
     args:
-      - seq()
+      - seq(1, 1)
       - gen('number:0,10000')
       - regex('[a-zA-Z0-9]{120}')
       - regex('[a-zA-Z0-9]{60}')

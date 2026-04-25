@@ -1,6 +1,7 @@
 package convert
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -146,19 +147,28 @@ func Tmpl(format string, args ...any) string {
 	return fmt.Sprintf(format, args...)
 }
 
-// BatchFormatValue formats a value for use inside a batch-delimited string
-// that will be placed within an already-quoted SQL context (e.g.
-// string_to_array('$1', __sep__)). Values are not wrapped in quotes;
-// embedded single quotes are escaped for SQL safety. []byte values
-// are hex-encoded.
-func BatchFormatValue(v any) string {
+func BatchFormatValue(v any, driver string) string {
 	if v == nil {
 		return "NULL"
 	}
 	if b, ok := v.([]byte); ok {
-		return hex.EncodeToString(b)
+		switch driver {
+		case "mongodb":
+			return base64.StdEncoding.EncodeToString(b)
+		default:
+			return hex.EncodeToString(b)
+		}
 	}
-	s := fmt.Sprint(v)
+	var s string
+	if f, ok := v.(float64); ok {
+		if f == float64(int64(f)) {
+			s = fmt.Sprintf("%d", int64(f))
+		} else {
+			s = strconv.FormatFloat(f, 'f', -1, 64)
+		}
+	} else {
+		s = fmt.Sprint(v)
+	}
 	return strings.ReplaceAll(s, "'", "''")
 }
 
@@ -201,12 +211,19 @@ func SQLFormatValue(v any, driver string) string {
 	switch n := v.(type) {
 	case RawSQL:
 		return string(n)
-	case int, int64, float64:
+	case int, int8, int16, int32, int64:
 		return fmt.Sprint(v)
+	case float64:
+		if n == float64(int64(n)) {
+			return fmt.Sprintf("%d", int64(n))
+		}
+		return strconv.FormatFloat(n, 'f', -1, 64)
 	case []byte:
 		switch driver {
-		case "mssql":
+		case "mssql", "cassandra":
 			return "0x" + hex.EncodeToString(n)
+		case "mongodb":
+			return `"` + base64.StdEncoding.EncodeToString(n) + `"`
 		default:
 			return "X'" + hex.EncodeToString(n) + "'"
 		}

@@ -7,7 +7,7 @@
 #   oracle://user:password@host:port/service
 
 globals:
-  message_size: 256
+  message_size: int(coalesce(env_nil('MESSAGE_SIZE'), 256))
 
 up:
 

@@ -50,54 +50,58 @@ Start the database with docker compose, then run the corresponding test target.
 
 ```sh
 # CockroachDB
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 make integration_test_crdb
-docker compose -f _examples/compose_crdb.yml down
+docker compose -f cmd/harness/compose/compose_crdb.yml down
 
 # MySQL
-docker compose -f _examples/compose_mysql.yml up -d
+docker compose -f cmd/harness/compose/compose_mysql.yml up -d
 make integration_test_mysql
-docker compose -f _examples/compose_mysql.yml down
+docker compose -f cmd/harness/compose/compose_mysql.yml down
 
 # MSSQL
-docker compose -f _examples/compose_mssql.yml up -d
+docker compose -f cmd/harness/compose/compose_mssql.yml up -d
 make integration_test_mssql
-docker compose -f _examples/compose_mssql.yml down
+docker compose -f cmd/harness/compose/compose_mssql.yml down
 
 # Oracle
-docker compose -f _examples/compose_oracle.yml up -d
+docker compose -f cmd/harness/compose/compose_oracle.yml up -d
 make integration_test_oracle
-docker compose -f _examples/compose_oracle.yml down
+docker compose -f cmd/harness/compose/compose_oracle.yml down
 ```
 
 **Schema tests** (`pkg/schema`):
 
 ```sh
 # CockroachDB
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 make integration_test_schema_crdb
-docker compose -f _examples/compose_crdb.yml down
+docker compose -f cmd/harness/compose/compose_crdb.yml down
 
 # MySQL
-docker compose -f _examples/compose_mysql.yml up -d
+docker compose -f cmd/harness/compose/compose_mysql.yml up -d
 make integration_test_schema_mysql
-docker compose -f _examples/compose_mysql.yml down
+docker compose -f cmd/harness/compose/compose_mysql.yml down
 
 # MSSQL
-docker compose -f _examples/compose_mssql.yml up -d
+docker compose -f cmd/harness/compose/compose_mssql.yml up -d
 make integration_test_schema_mssql
-docker compose -f _examples/compose_mssql.yml down
+docker compose -f cmd/harness/compose/compose_mssql.yml down
 
 # Oracle
-docker compose -f _examples/compose_oracle.yml up -d
+docker compose -f cmd/harness/compose/compose_oracle.yml up -d
 make integration_test_schema_oracle
-docker compose -f _examples/compose_oracle.yml down
+docker compose -f cmd/harness/compose/compose_oracle.yml down
 ```
 
 ## Todos
 
+* Add expectations for all edg workload configs
+* Rethink iter() - perhaps its better to use seq with a start pos
+* Ensure MongoDB uses object ids
+* Ensure all batch queries are inserting at least 10 rows (some cassandra batches are 1 at a time)
+* Unique constraint awareness (e.g. uniq(gen('email')) will repeated call gen until a new unique value is found. For uniq(gen('email'), 10), it will try 10 times, then fail)
 * MongoDB and Cassandra sync verify support
 * Log levels
 * Better error output
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences
-* Unique constraint awareness

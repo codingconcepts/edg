@@ -14,7 +14,8 @@
 #     Cassandra is an upsert by default).
 
 globals:
-  records: 10000
+  records: int(coalesce(env_nil('RECORDS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 
@@ -39,8 +40,9 @@ seed:
   - name: populate_sbtest1
     type: exec_batch
     count: records
+    size: 50
     args:
-      - seq()
+      - seq(1, 1)
       - gen('number:0,9999')
       - regex('[a-zA-Z0-9]{120}')
       - regex('[a-zA-Z0-9]{60}')

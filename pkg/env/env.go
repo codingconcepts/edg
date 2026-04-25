@@ -22,6 +22,7 @@ import (
 	"github.com/codingconcepts/edg/pkg/seq"
 
 	"github.com/expr-lang/expr"
+	"github.com/expr-lang/expr/vm"
 )
 
 // ErrConditionalRollback is returned when a transaction's rollback_if
@@ -45,6 +46,12 @@ type Env struct {
 
 	uniqIndexMutex sync.RWMutex
 	uniqIndex      int
+
+	iterCounter int
+
+	uniqSeenMutex sync.Mutex
+	uniqSeen      map[string]map[any]struct{}
+	uniqProg      map[string]*vm.Program
 
 	nurandCMutex sync.RWMutex
 	nurandC      map[int]int
@@ -78,6 +85,8 @@ func NewEnv(database db.DB, driver string, r *config.Request, sections ...config
 		db:              database,
 		driver:          driver,
 		oneCache:        map[string]any{},
+		uniqSeen:        map[string]map[any]struct{}{},
+		uniqProg:        map[string]*vm.Program{},
 		permCache:       map[string]any{},
 		nurandC:         map[int]int{},
 		vectorCentroids: map[string][][]float64{},
@@ -117,6 +126,7 @@ func NewEnv(database db.DB, driver string, r *config.Request, sections ...config
 		"global":              env.global,             // Use a value in the global config section.
 		"local":               env.local,              // Use a transaction-scoped local variable.
 		"inet":                gen.GenInet,            // Random IP address within a CIDR block.
+		"iter":                env.iter,               // 1-based row counter for exec_batch queries.
 		"json_arr":            gen.JsonArr,            // Build a JSON array of N random values.
 		"json_obj":            gen.JsonObj,            // Build a JSON object from key-value pairs.
 		"lognorm_f":           gen.LognormRandF,       // Log-normal-distribution random float with precision.
@@ -154,6 +164,7 @@ func NewEnv(database db.DB, driver string, r *config.Request, sections ...config
 		"set_zipf":            setZipfian,             // Pick from a set using Zipfian distribution.
 		"sum":                 env.aggSum,             // Sum a numeric field across all rows in a dataset.
 		"template":            convert.Tmpl,           // Format string interpolation (fmt.Sprintf).
+		"gen_uniq":            env.uniq,               // Retry expression until unique value found.
 		"time":                gen.GenTime,            // Random time of day (HH:MM:SS).
 		"timestamp":           gen.RandTimestamp,      // Random timestamp between min and max (RFC3339).
 		"timez":               gen.GenTimez,           // Random time of day with timezone (HH:MM:SS+00:00).
@@ -440,11 +451,12 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 	formatters := make([]func(any) string, len(q.CompiledArgs))
 	for i := range q.CompiledArgs {
 		if useJSON {
-			formatters[i] = convert.BatchFormatValue
+			formatters[i] = func(v any) string { return convert.BatchFormatValue(v, e.driver) }
 		} else {
-			quoted := fmt.Sprintf("'$%d'", i+1)
-			if strings.Contains(q.Query, quoted) {
-				formatters[i] = convert.BatchFormatValue
+			singleQuoted := fmt.Sprintf("'$%d'", i+1)
+			doubleQuoted := fmt.Sprintf(`"$%d"`, i+1)
+			if strings.Contains(q.Query, singleQuoted) || strings.Contains(q.Query, doubleQuoted) {
+				formatters[i] = func(v any) string { return convert.BatchFormatValue(v, e.driver) }
 			} else {
 				formatters[i] = func(v any) string { return convert.SQLFormatValue(v, e.driver) }
 			}
@@ -617,8 +629,10 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 					// RawSQL values (batch CSVs) are unquoted by design and
 					// must preserve the surrounding quotes in the query.
 					if _, isRaw := args[j].(convert.RawSQL); !isRaw {
-						quotedPlaceholder := "'" + placeholder + "'"
-						inlined = strings.ReplaceAll(inlined, quotedPlaceholder, formatted)
+						singleQuoted := "'" + placeholder + "'"
+						inlined = strings.ReplaceAll(inlined, singleQuoted, formatted)
+						doubleQuoted := `"` + placeholder + `"`
+						inlined = strings.ReplaceAll(inlined, doubleQuoted, formatted)
 					}
 					inlined = strings.ReplaceAll(inlined, placeholder, formatted)
 				}
@@ -1200,4 +1214,60 @@ func (e *Env) resetUniqIndex() {
 	defer e.uniqIndexMutex.Unlock()
 
 	e.uniqIndex = 0
+	e.iterCounter = 0
+
+	e.uniqSeenMutex.Lock()
+	clear(e.uniqSeen)
+	clear(e.uniqProg)
+	e.uniqSeenMutex.Unlock()
+}
+
+func (e *Env) iter() int {
+	e.iterCounter++
+	return e.iterCounter
+}
+
+func (e *Env) uniq(expression string, args ...any) (any, error) {
+	maxRetries := 100
+	if len(args) > 0 {
+		v, err := convert.ToInt(args[0])
+		if err != nil {
+			return nil, fmt.Errorf("gen_uniq: max retries must be an integer: %w", err)
+		}
+		maxRetries = v
+	}
+
+	e.uniqSeenMutex.Lock()
+	prog, ok := e.uniqProg[expression]
+	if !ok {
+		var err error
+		prog, err = expr.Compile(expression, expr.Env(e.env))
+		if err != nil {
+			e.uniqSeenMutex.Unlock()
+			return nil, fmt.Errorf("gen_uniq: compiling %q: %w", expression, err)
+		}
+		e.uniqProg[expression] = prog
+	}
+	seen := e.uniqSeen[expression]
+	if seen == nil {
+		seen = map[any]struct{}{}
+		e.uniqSeen[expression] = seen
+	}
+	e.uniqSeenMutex.Unlock()
+
+	for range maxRetries {
+		v, err := expr.Run(prog, e.env)
+		if err != nil {
+			return nil, fmt.Errorf("gen_uniq: evaluating %q: %w", expression, err)
+		}
+		e.uniqSeenMutex.Lock()
+		if _, dup := seen[v]; !dup {
+			seen[v] = struct{}{}
+			e.uniqSeenMutex.Unlock()
+			return v, nil
+		}
+		e.uniqSeenMutex.Unlock()
+	}
+
+	return nil, fmt.Errorf("gen_uniq(%q): failed to generate unique value after %d attempts", expression, maxRetries)
 }

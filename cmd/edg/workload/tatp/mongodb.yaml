@@ -20,7 +20,8 @@
 #   delete_call_forwarding - Remove a forwarding rule (2%)
 
 globals:
-  subscribers: 100000
+  subscribers: int(coalesce(env_nil('SUBSCRIBERS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 
@@ -49,8 +50,9 @@ seed:
   - name: populate_subscriber
     type: exec_batch
     count: subscribers
+    size: batch_size
     args:
-      - gen('number:1,100000')
+      - iter()
       - regex('[0-9]{15}')
       - gen('number:0,1')
       - gen('number:0,1')
@@ -94,6 +96,7 @@ seed:
   - name: populate_access_info
     type: exec_batch
     count: subscribers
+    size: batch_size
     args:
       - ref_rand('fetch_subscriber_ids')._id
       - gen('number:1,4')
@@ -107,6 +110,7 @@ seed:
   - name: populate_special_facility
     type: exec_batch
     count: subscribers
+    size: batch_size
     args:
       - ref_rand('fetch_subscriber_ids')._id
       - gen('number:1,4')
@@ -124,6 +128,7 @@ seed:
   - name: populate_call_forwarding
     type: exec_batch
     count: subscribers
+    size: batch_size
     args:
       - ref_rand('fetch_special_facilities').s_id
       - ref_rand('fetch_special_facilities').sf_type

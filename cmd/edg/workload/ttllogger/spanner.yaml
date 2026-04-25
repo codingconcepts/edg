@@ -7,7 +7,7 @@
 #   projects/PROJECT/instances/INSTANCE/databases/DATABASE
 
 globals:
-  message_size: 256
+  message_size: int(coalesce(env_nil('MESSAGE_SIZE'), 256))
 
 up:
 

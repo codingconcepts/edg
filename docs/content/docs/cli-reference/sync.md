@@ -57,8 +57,8 @@ This example writes 1,000 users and 5,000 orders to both CockroachDB and MySQL, 
 Start both databases and wait for them to be available:
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
-docker compose -f _examples/compose_mysql.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_mysql.yml up -d
 ```
 
 ### Seed both databases
@@ -184,8 +184,8 @@ edg sync down \
   --target-url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true" \
   --target-config _examples/sync/mysql.yaml
 
-docker compose -f _examples/compose_crdb.yml down
-docker compose -f _examples/compose_mysql.yml down
+docker compose -f cmd/harness/compose/compose_crdb.yml down
+docker compose -f cmd/harness/compose/compose_mysql.yml down
 ```
 
 ## External Replication mode

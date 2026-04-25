@@ -7,7 +7,7 @@ Built-in workloads (bank, kv, movr, tpcc, tpch, ttlbench, ttllogger, ycsb) that 
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run
@@ -67,7 +67,7 @@ go run ./cmd/edg workload ycsb all \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_mysql.yml up -d
+docker compose -f cmd/harness/compose/compose_mysql.yml up -d
 ```
 
 ### Run
@@ -127,7 +127,7 @@ go run ./cmd/edg workload ycsb all \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_oracle.yml up -d
+docker compose -f cmd/harness/compose/compose_oracle.yml up -d
 ```
 
 ### Run
@@ -187,7 +187,7 @@ go run ./cmd/edg workload ycsb all \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_spanner.yml up -d
+docker compose -f cmd/harness/compose/compose_spanner.yml up -d
 
 # Create instance and databases.
 curl -s -X POST 'http://localhost:9020/v1/projects/test-project/instances' \
@@ -268,7 +268,7 @@ go run ./cmd/edg workload ycsb all \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_mssql.yml up -d
+docker compose -f cmd/harness/compose/compose_mssql.yml up -d
 ```
 
 ### Run

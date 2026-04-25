@@ -5,7 +5,7 @@ A basic MongoDB example demonstrating collection creation, document inserts with
 ## Setup
 
 ```sh
-docker compose -f _examples/compose_mongo.yml up -d
+docker compose -f cmd/harness/compose/compose_mongo.yml up -d
 ```
 
 MongoDB takes a few seconds to become ready:

@@ -36,7 +36,7 @@ run_weights:
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run
@@ -53,7 +53,7 @@ go run ./cmd/edg all \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_mysql.yml up -d
+docker compose -f cmd/harness/compose/compose_mysql.yml up -d
 ```
 
 ### Run
@@ -70,7 +70,7 @@ go run ./cmd/edg all \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_oracle.yml up -d
+docker compose -f cmd/harness/compose/compose_oracle.yml up -d
 ```
 
 ### Run
@@ -87,7 +87,7 @@ go run ./cmd/edg all \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_mssql.yml up -d
+docker compose -f cmd/harness/compose/compose_mssql.yml up -d
 ```
 
 ### Run
@@ -106,7 +106,7 @@ MongoDB transactions use multi-document sessions. Requires a replica set (standa
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_mongodb.yml up -d
+docker compose -f cmd/harness/compose/compose_mongodb.yml up -d
 ```
 
 ### Run
@@ -125,7 +125,7 @@ Cassandra transactions use logged batches for atomic writes. Reads execute immed
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_cassandra.yml up -d
+docker compose -f cmd/harness/compose/compose_cassandra.yml up -d
 ```
 
 ### Run

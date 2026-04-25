@@ -4,9 +4,9 @@
 #   sqlserver://user:password@host:port?database=database&encrypt=disable
 
 globals:
-  keys: 10000
-  batch_size: 1000
-  value_size: 256
+  keys: int(coalesce(env_nil('KEYS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
+  value_size: int(coalesce(env_nil('VALUE_SIZE'), 256))
 
 up:
 

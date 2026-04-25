@@ -11,14 +11,14 @@
 #     --url "projects/my-project/instances/my-instance/databases/seats"
 
 globals:
-  countries: 50
-  airports: 200
-  airlines: 20
-  customers: 10000
-  flights: 5000
-  seats_per_flight: 150
-  reservations_per_flight: 120
-  batch_size: 1000
+  countries: int(coalesce(env_nil('COUNTRIES'), 50))
+  airports: int(coalesce(env_nil('AIRPORTS'), 200))
+  airlines: int(coalesce(env_nil('AIRLINES'), 20))
+  customers: int(coalesce(env_nil('CUSTOMERS'), 1000))
+  flights: int(coalesce(env_nil('FLIGHTS'), 500))
+  seats_per_flight: int(coalesce(env_nil('SEATS_PER_FLIGHT'), 150))
+  reservations_per_flight: int(coalesce(env_nil('RESERVATIONS_PER_FLIGHT'), 120))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 
@@ -133,7 +133,7 @@ seed:
     query: |-
       INSERT INTO airport (ap_id, ap_code, ap_name, ap_city, ap_co_id)
       VALUES ($1,
-        SUBSTR(TO_HEX(MD5(CAST($1 AS STRING))), 1, 3),
+        CONCAT(CHR(65 + DIV($1 - 1, 676)), CHR(65 + MOD(DIV($1 - 1, 26), 26)), CHR(65 + MOD($1 - 1, 26))),
         CONCAT('Airport_', LPAD(CAST($1 AS STRING), 4, '0')),
         CONCAT('City_', LPAD(CAST($1 AS STRING), 4, '0')),
         MOD($1 - 1, $2) + 1)

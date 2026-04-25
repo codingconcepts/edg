@@ -8,7 +8,7 @@
 # entries are automatically expired by the TTL index.
 
 globals:
-  message_size: 256
+  message_size: int(coalesce(env_nil('MESSAGE_SIZE'), 256))
 
 up:
 
@@ -62,8 +62,9 @@ run:
       - set_rand(['DEBUG','INFO','WARN','ERROR','FATAL'], [10,50,25,12,3])
       - set_rand(['api','worker','scheduler','auth','billing'], [])
       - regex('[a-zA-Z0-9 ]{64,256}')
+      - date_offset('0s')
     query: |-
-      {"insert": "events", "documents": [{"_id": "$1", "level": "$2", "source": "$3", "message": "$4", "created_at": {"$date": {"$numberLong": "now()"}}}]}
+      {"insert": "events", "documents": [{"_id": "$1", "level": "$2", "source": "$3", "message": "$4", "created_at": {"$date": "$5"}}]}
 
   - name: read_recent
     type: query
@@ -74,5 +75,6 @@ run:
     type: query
     args:
       - set_rand(['ERROR','WARN','FATAL'], [60,30,10])
+      - date_offset('-5m')
     query: |-
-      {"find": "events", "filter": {"level": "$1", "created_at": {"$gte": {"$date": {"$numberLong": "now(-5m)"}}}}, "sort": {"created_at": -1}, "limit": 20}
+      {"find": "events", "filter": {"level": "$1", "created_at": {"$gte": {"$date": "$2"}}}, "sort": {"created_at": -1}, "limit": 20}

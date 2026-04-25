@@ -21,7 +21,7 @@ func NewMongoDB(database *mongo.Database) *MongoDB {
 
 func (m *MongoDB) QueryContext(ctx context.Context, query string, args ...any) (RowIterator, error) {
 	var cmd bson.D
-	if err := bson.UnmarshalExtJSON([]byte(query), true, &cmd); err != nil {
+	if err := bson.UnmarshalExtJSON([]byte(query), false, &cmd); err != nil {
 		return nil, fmt.Errorf("parsing MongoDB command: %w", err)
 	}
 
@@ -44,7 +44,7 @@ func (m *MongoDB) ExecContext(ctx context.Context, query string, args ...any) er
 	}
 
 	var cmd bson.D
-	if err := bson.UnmarshalExtJSON([]byte(query), true, &cmd); err != nil {
+	if err := bson.UnmarshalExtJSON([]byte(query), false, &cmd); err != nil {
 		return fmt.Errorf("parsing MongoDB command: %w", err)
 	}
 
@@ -54,7 +54,7 @@ func (m *MongoDB) ExecContext(ctx context.Context, query string, args ...any) er
 func (m *MongoDB) execBatch(ctx context.Context, query string) error {
 	for _, q := range ExpandBatchQuery(query) {
 		var cmd bson.D
-		if err := bson.UnmarshalExtJSON([]byte(q), true, &cmd); err != nil {
+		if err := bson.UnmarshalExtJSON([]byte(q), false, &cmd); err != nil {
 			return fmt.Errorf("parsing MongoDB command: %w", err)
 		}
 		if err := m.database.RunCommand(ctx, cmd).Err(); err != nil {
@@ -88,7 +88,7 @@ type mongoTransaction struct {
 func (t *mongoTransaction) QueryContext(ctx context.Context, query string, args ...any) (RowIterator, error) {
 	ctx = mongo.NewSessionContext(ctx, t.session)
 	var cmd bson.D
-	if err := bson.UnmarshalExtJSON([]byte(query), true, &cmd); err != nil {
+	if err := bson.UnmarshalExtJSON([]byte(query), false, &cmd); err != nil {
 		return nil, fmt.Errorf("parsing MongoDB command: %w", err)
 	}
 	result := t.database.RunCommand(ctx, cmd)
@@ -107,7 +107,7 @@ func (t *mongoTransaction) ExecContext(ctx context.Context, query string, args .
 	if strings.Contains(query, batchSep) {
 		for _, q := range ExpandBatchQuery(query) {
 			var cmd bson.D
-			if err := bson.UnmarshalExtJSON([]byte(q), true, &cmd); err != nil {
+			if err := bson.UnmarshalExtJSON([]byte(q), false, &cmd); err != nil {
 				return fmt.Errorf("parsing MongoDB command: %w", err)
 			}
 			if err := t.database.RunCommand(ctx, cmd).Err(); err != nil {
@@ -117,7 +117,7 @@ func (t *mongoTransaction) ExecContext(ctx context.Context, query string, args .
 		return nil
 	}
 	var cmd bson.D
-	if err := bson.UnmarshalExtJSON([]byte(query), true, &cmd); err != nil {
+	if err := bson.UnmarshalExtJSON([]byte(query), false, &cmd); err != nil {
 		return fmt.Errorf("parsing MongoDB command: %w", err)
 	}
 	return t.database.RunCommand(ctx, cmd).Err()
@@ -148,6 +148,14 @@ func newMongoRowIterator(raw bson.M) *mongoRowIterator {
 				for _, item := range arr {
 					docs = append(docs, bsonToM(item))
 				}
+			}
+		}
+	}
+
+	if len(docs) == 0 {
+		if v, ok := raw["value"]; ok {
+			if vm, ok := v.(bson.M); ok {
+				docs = []bson.M{vm}
 			}
 		}
 	}

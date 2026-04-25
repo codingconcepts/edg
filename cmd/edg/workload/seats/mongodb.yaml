@@ -20,13 +20,14 @@
 #   delete_reservation - Cancel a reservation (20%)
 
 globals:
-  countries: 50
-  airports: 200
-  airlines: 20
-  customers: 100000
-  flights: 50000
-  seats_per_flight: 150
-  reservations_per_flight: 120
+  countries: int(coalesce(env_nil('COUNTRIES'), 50))
+  airports: int(coalesce(env_nil('AIRPORTS'), 200))
+  airlines: int(coalesce(env_nil('AIRLINES'), 20))
+  customers: int(coalesce(env_nil('CUSTOMERS'), 1000))
+  flights: int(coalesce(env_nil('FLIGHTS'), 500))
+  seats_per_flight: int(coalesce(env_nil('SEATS_PER_FLIGHT'), 150))
+  reservations_per_flight: int(coalesce(env_nil('RESERVATIONS_PER_FLIGHT'), 120))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 
@@ -83,8 +84,9 @@ seed:
   - name: populate_country
     type: exec_batch
     count: countries
+    size: batch_size
     args:
-      - gen('number:1,50')
+      - iter()
       - regex('Country_[0-9]{3}')
     query: |-
       {"insert": "country", "documents": [{"_id": $1, "co_name": "$2"}]}
@@ -92,8 +94,9 @@ seed:
   - name: populate_airport
     type: exec_batch
     count: airports
+    size: batch_size
     args:
-      - gen('number:1,200')
+      - iter()
       - regex('[A-Z]{3}')
       - regex('Airport_[0-9]{4}')
       - regex('City_[0-9]{4}')
@@ -108,8 +111,9 @@ seed:
   - name: populate_airline
     type: exec_batch
     count: airlines
+    size: batch_size
     args:
-      - gen('number:1,20')
+      - iter()
       - regex('[A-Z]{2}')
       - regex('Airline_[0-9]{3}')
     query: |-
@@ -118,8 +122,9 @@ seed:
   - name: populate_customer
     type: exec_batch
     count: customers
+    size: batch_size
     args:
-      - gen('number:1,100000')
+      - iter()
       - ref_rand('fetch_airports_seed')._id
       - regex('[a-z]{16}')
       - regex('[a-z]{16}')
@@ -131,13 +136,14 @@ seed:
   - name: populate_flight
     type: exec_batch
     count: flights
+    size: batch_size
     args:
-      - gen('number:1,50000')
+      - iter()
       - gen('number:1,20')
       - ref_rand('fetch_airports_seed')._id
       - ref_rand('fetch_airports_seed')._id
-      - gen('timestamp')
-      - gen('timestamp')
+      - timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
+      - timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
       - gen('number:100,999')
     query: |-
       {"insert": "flight", "documents": [{"_id": $1, "f_al_id": $2, "f_depart_ap_id": $3, "f_arrive_ap_id": $4, "f_depart_time": "$5", "f_arrive_time": "$6", "f_seats_total": 150, "f_seats_left": 150, "f_base_price": $7}]}
@@ -153,6 +159,7 @@ seed:
   - name: populate_reservation
     type: exec_batch
     count: flights
+    size: batch_size
     args:
       - gen('uuid')
       - ref_rand('fetch_customers_seed')._id
@@ -285,13 +292,9 @@ run:
   - name: new_reservation
     type: exec
     args:
-      - ref_rand('fetch_customers')._id
       - ref_rand('fetch_flights')._id
-      - gen('number:1,150')
-      - gen('number:50,1000')
-      - gen('uuid')
     query: |-
-      {"findAndModify": "flight", "query": {"_id": $2, "f_seats_left": {"$gt": 0}}, "update": {"$inc": {"f_seats_left": -1}}, "new": true}
+      {"findAndModify": "flight", "query": {"_id": $1, "f_seats_left": {"$gt": 0}}, "update": {"$inc": {"f_seats_left": -1}}, "new": true}
 
   # Update customer attributes.
   - name: update_customer

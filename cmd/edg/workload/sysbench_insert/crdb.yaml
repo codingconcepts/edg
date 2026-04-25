@@ -7,8 +7,8 @@
 # Schema matches standard sysbench sbtest1 table.
 
 globals:
-  records: 10000
-  batch_size: 1000
+  records: int(coalesce(env_nil('RECORDS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 
@@ -35,7 +35,7 @@ seed:
       INSERT INTO sbtest1 (id, k, c, pad)
       SELECT
         $1::INT * $2::INT + s,
-        floor(random()::FLOAT8 * $2::INT)::INT,
+        floor(random() * $2::FLOAT8)::INT,
         lpad('', 120, md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text)),
         lpad('', 60, md5(random()::FLOAT8::text) || md5(random()::FLOAT8::text))
       FROM generate_series(1, $2::INT) AS s

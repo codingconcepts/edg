@@ -15,7 +15,7 @@ The `ltree()` function joins its arguments with dots and sanitizes labels to val
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run

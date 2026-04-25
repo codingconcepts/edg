@@ -7,7 +7,7 @@ Demonstrates CockroachDB composite types (user-defined record types) used as col
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run

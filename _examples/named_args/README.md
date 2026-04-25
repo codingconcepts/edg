@@ -38,7 +38,7 @@ Named args bind to `$1`, `$2`, etc. in declaration order, so query placeholders 
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run

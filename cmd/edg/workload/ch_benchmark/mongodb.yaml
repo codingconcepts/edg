@@ -21,12 +21,14 @@
 #   q12_shipping_modes     - Order urgency by carrier (5%)
 
 globals:
-  warehouses: 1
-  districts: 10
-  customers: 30000
-  orders: 30000
-  stock: 100000
-  items: 100000
+  warehouses: int(coalesce(env_nil('WAREHOUSES'), 1))
+  districts: int(coalesce(env_nil('DISTRICTS'), 10))
+  customers: int(coalesce(env_nil('CUSTOMERS'), 300))
+  orders: int(coalesce(env_nil('ORDERS'), 300))
+  stock: int(coalesce(env_nil('STOCK'), 1000))
+  items: int(coalesce(env_nil('ITEMS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
+  ol_batch: int(coalesce(env_nil('OL_BATCH'), 100))
 
 up:
 
@@ -128,64 +130,88 @@ up:
 seed:
 
   - name: populate_region
-    type: exec_batch
-    count: 5
-    args:
-      - gen('number:0,4')
-      - set_seq(['AFRICA','AMERICA','ASIA','EUROPE','MIDDLE EAST'], [])
-      - gen('string:10,30')
+    type: exec
     query: |-
-      {"insert": "region", "documents": [{"_id": $1, "r_regionkey": $1, "r_name": "$2", "r_comment": "$3"}]}
+      {"insert": "region", "documents": [
+        {"_id": 0, "r_regionkey": 0, "r_name": "AFRICA", "r_comment": "ref"},
+        {"_id": 1, "r_regionkey": 1, "r_name": "AMERICA", "r_comment": "ref"},
+        {"_id": 2, "r_regionkey": 2, "r_name": "ASIA", "r_comment": "ref"},
+        {"_id": 3, "r_regionkey": 3, "r_name": "EUROPE", "r_comment": "ref"},
+        {"_id": 4, "r_regionkey": 4, "r_name": "MIDDLE EAST", "r_comment": "ref"}
+      ]}
 
   - name: populate_nation
-    type: exec_batch
-    count: 25
-    args:
-      - gen('number:0,24')
-      - set_seq(['ALGERIA','ARGENTINA','BRAZIL','CANADA','EGYPT','ETHIOPIA','FRANCE','GERMANY','INDIA','INDONESIA','IRAN','IRAQ','JAPAN','JORDAN','KENYA','MOROCCO','MOZAMBIQUE','PERU','CHINA','ROMANIA','SAUDI ARABIA','VIETNAM','RUSSIA','UNITED KINGDOM','UNITED STATES'], [])
-      - gen('number:0,4')
-      - gen('string:10,30')
+    type: exec
     query: |-
-      {"insert": "nation", "documents": [{"_id": $1, "n_nationkey": $1, "n_name": "$2", "n_regionkey": $3, "n_comment": "$4"}]}
+      {"insert": "nation", "documents": [
+        {"_id": 0, "n_nationkey": 0, "n_name": "ALGERIA", "n_regionkey": 0, "n_comment": ""},
+        {"_id": 1, "n_nationkey": 1, "n_name": "ARGENTINA", "n_regionkey": 1, "n_comment": ""},
+        {"_id": 2, "n_nationkey": 2, "n_name": "BRAZIL", "n_regionkey": 1, "n_comment": ""},
+        {"_id": 3, "n_nationkey": 3, "n_name": "CANADA", "n_regionkey": 1, "n_comment": ""},
+        {"_id": 4, "n_nationkey": 4, "n_name": "EGYPT", "n_regionkey": 4, "n_comment": ""},
+        {"_id": 5, "n_nationkey": 5, "n_name": "ETHIOPIA", "n_regionkey": 0, "n_comment": ""},
+        {"_id": 6, "n_nationkey": 6, "n_name": "FRANCE", "n_regionkey": 3, "n_comment": ""},
+        {"_id": 7, "n_nationkey": 7, "n_name": "GERMANY", "n_regionkey": 3, "n_comment": ""},
+        {"_id": 8, "n_nationkey": 8, "n_name": "INDIA", "n_regionkey": 2, "n_comment": ""},
+        {"_id": 9, "n_nationkey": 9, "n_name": "INDONESIA", "n_regionkey": 2, "n_comment": ""},
+        {"_id": 10, "n_nationkey": 10, "n_name": "IRAN", "n_regionkey": 4, "n_comment": ""},
+        {"_id": 11, "n_nationkey": 11, "n_name": "IRAQ", "n_regionkey": 4, "n_comment": ""},
+        {"_id": 12, "n_nationkey": 12, "n_name": "JAPAN", "n_regionkey": 2, "n_comment": ""},
+        {"_id": 13, "n_nationkey": 13, "n_name": "JORDAN", "n_regionkey": 4, "n_comment": ""},
+        {"_id": 14, "n_nationkey": 14, "n_name": "KENYA", "n_regionkey": 0, "n_comment": ""},
+        {"_id": 15, "n_nationkey": 15, "n_name": "MOROCCO", "n_regionkey": 0, "n_comment": ""},
+        {"_id": 16, "n_nationkey": 16, "n_name": "MOZAMBIQUE", "n_regionkey": 0, "n_comment": ""},
+        {"_id": 17, "n_nationkey": 17, "n_name": "PERU", "n_regionkey": 1, "n_comment": ""},
+        {"_id": 18, "n_nationkey": 18, "n_name": "CHINA", "n_regionkey": 2, "n_comment": ""},
+        {"_id": 19, "n_nationkey": 19, "n_name": "ROMANIA", "n_regionkey": 3, "n_comment": ""},
+        {"_id": 20, "n_nationkey": 20, "n_name": "SAUDI ARABIA", "n_regionkey": 4, "n_comment": ""},
+        {"_id": 21, "n_nationkey": 21, "n_name": "VIETNAM", "n_regionkey": 2, "n_comment": ""},
+        {"_id": 22, "n_nationkey": 22, "n_name": "RUSSIA", "n_regionkey": 3, "n_comment": ""},
+        {"_id": 23, "n_nationkey": 23, "n_name": "UNITED KINGDOM", "n_regionkey": 3, "n_comment": ""},
+        {"_id": 24, "n_nationkey": 24, "n_name": "UNITED STATES", "n_regionkey": 1, "n_comment": ""}
+      ]}
 
   - name: populate_supplier
     type: exec_batch
     count: 10000
+    size: batch_size
     args:
-      - gen('number:1,10000')
-      - gen('string:15,25')
-      - gen('string:15,40')
+      - iter()
+      - regex('[a-zA-Z]{15,25}')
+      - regex('[a-zA-Z]{15,40}')
       - gen('number:0,24')
-      - gen('string:15,15')
-      - gen('float:-1000.00,9000.00')
-      - gen('string:10,30')
+      - regex('[a-zA-Z]{15,15}')
+      - uniform_f(-1000.00, 9000.00, 2)
+      - regex('[a-zA-Z]{10,30}')
     query: |-
       {"insert": "supplier", "documents": [{"_id": $1, "su_suppkey": $1, "su_name": "$2", "su_address": "$3", "su_nationkey": $4, "su_phone": "$5", "su_acctbal": $6, "su_comment": "$7"}]}
 
   - name: populate_item
     type: exec_batch
     count: items
+    size: batch_size
     args:
-      - gen('number:1,100000')
+      - iter()
       - gen('number:1,10000')
-      - gen('string:6,24')
-      - gen('float:1.00,100.00')
-      - gen('string:26,50')
+      - regex('[a-zA-Z]{6,24}')
+      - uniform_f(1.00, 100.00, 2)
+      - regex('[a-zA-Z]{26,50}')
     query: |-
       {"insert": "item", "documents": [{"_id": $1, "i_id": $1, "i_im_id": $2, "i_name": "$3", "i_price": $4, "i_data": "$5"}]}
 
   - name: populate_warehouse
     type: exec_batch
     count: warehouses
+    size: batch_size
     args:
-      - gen('number:1,1000')
-      - gen('string:6,10')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:2,2')
-      - gen('string:9,9')
-      - gen('float:0.0000,0.2000')
+      - iter()
+      - regex('[a-zA-Z]{6,10}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{2,2}')
+      - regex('[a-zA-Z]{9,9}')
+      - uniform_f(0.0000, 0.2000, 4)
     query: |-
       {"insert": "warehouse", "documents": [{"_id": $1, "w_id": $1, "w_name": "$2", "w_street_1": "$3", "w_street_2": "$4", "w_city": "$5", "w_state": "$6", "w_zip": "$7", "w_tax": $8, "w_ytd": 300000}]}
 
@@ -196,58 +222,62 @@ seed:
   - name: populate_district
     type: exec_batch
     count: districts
+    size: batch_size
     args:
       - ref_rand('fetch_warehouses').w_id
-      - gen('number:1,10')
-      - gen('string:6,10')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:2,2')
-      - gen('string:9,9')
-      - gen('float:0.0000,0.2000')
+      - iter()
+      - regex('[a-zA-Z]{6,10}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{2,2}')
+      - regex('[a-zA-Z]{9,9}')
+      - uniform_f(0.0000, 0.2000, 4)
     query: |-
       {"insert": "district", "documents": [{"d_w_id": $1, "d_id": $2, "d_name": "$3", "d_street_1": "$4", "d_street_2": "$5", "d_city": "$6", "d_state": "$7", "d_zip": "$8", "d_tax": $9, "d_ytd": 30000, "d_next_o_id": 3001}]}
 
   - name: populate_customer
     type: exec_batch
     count: customers
+    size: batch_size
     args:
       - ref_rand('fetch_warehouses').w_id
       - gen('number:1,10')
-      - gen('number:1,3000')
-      - gen('string:6,16')
-      - gen('string:6,16')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:2,2')
-      - gen('string:9,9')
-      - gen('string:16,16')
-      - gen('float:0.0000,0.5000')
-      - gen('string:300,500')
+      - iter()
+      - regex('[a-zA-Z]{6,16}')
+      - regex('[a-zA-Z]{6,16}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{2,2}')
+      - regex('[a-zA-Z]{9,9}')
+      - regex('[a-zA-Z]{16,16}')
+      - uniform_f(0.0000, 0.5000, 4)
+      - regex('[a-zA-Z]{300,500}')
     query: |-
       {"insert": "customer", "documents": [{"c_w_id": $1, "c_d_id": $2, "c_id": $3, "c_first": "$4", "c_middle": "OE", "c_last": "$5", "c_street_1": "$6", "c_street_2": "$7", "c_city": "$8", "c_state": "$9", "c_zip": "$10", "c_phone": "$11", "c_since": {"$date": "2024-01-01T00:00:00Z"}, "c_credit": "GC", "c_credit_lim": 50000, "c_discount": $12, "c_balance": -10, "c_ytd_payment": 10, "c_payment_cnt": 1, "c_delivery_cnt": 0, "c_data": "$13"}]}
 
   - name: populate_history
     type: exec_batch
     count: customers
+    size: batch_size
     args:
       - gen('uuid')
-      - gen('number:1,3000')
+      - iter()
       - gen('number:1,10')
       - ref_rand('fetch_warehouses').w_id
-      - gen('string:12,24')
+      - regex('[a-zA-Z]{12,24}')
     query: |-
       {"insert": "history", "documents": [{"_id": "$1", "h_c_id": $2, "h_c_d_id": $3, "h_c_w_id": $4, "h_d_id": $3, "h_w_id": $4, "h_date": {"$date": "2024-01-01T00:00:00Z"}, "h_amount": 10, "h_data": "$5"}]}
 
   - name: populate_oorder
     type: exec_batch
     count: orders
+    size: batch_size
     args:
       - ref_rand('fetch_warehouses').w_id
       - gen('number:1,10')
-      - gen('number:1,3000')
+      - iter()
       - gen('number:1,3000')
       - gen('number:5,15')
     query: |-
@@ -256,45 +286,48 @@ seed:
   - name: populate_new_order
     type: exec_batch
     count: districts
+    size: batch_size
     args:
       - ref_rand('fetch_warehouses').w_id
       - gen('number:1,10')
-      - gen('number:2101,3000')
+      - iter()
     query: |-
       {"insert": "new_order", "documents": [{"no_w_id": $1, "no_d_id": $2, "no_o_id": $3}]}
 
   - name: populate_order_line
     type: exec_batch
     count: orders
+    size: batch_size
     args:
       - ref_rand('fetch_warehouses').w_id
       - gen('number:1,10')
       - gen('number:1,3000')
       - gen('number:1,15')
       - gen('number:1,100000')
-      - gen('float:0.00,9999.99')
-      - gen('string:24,24')
+      - uniform_f(0.00, 9999.99, 2)
+      - regex('[a-zA-Z]{24,24}')
     query: |-
       {"insert": "order_line", "documents": [{"ol_w_id": $1, "ol_d_id": $2, "ol_o_id": $3, "ol_number": $4, "ol_i_id": $5, "ol_supply_w_id": $1, "ol_delivery_d": {"$date": "2024-01-01T00:00:00Z"}, "ol_quantity": 5, "ol_amount": $6, "ol_dist_info": "$7"}]}
 
   - name: populate_stock
     type: exec_batch
     count: stock
+    size: batch_size
     args:
       - ref_rand('fetch_warehouses').w_id
-      - gen('number:1,100000')
+      - iter()
       - gen('number:10,100')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:26,50')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{26,50}')
     query: |-
       {"insert": "stock", "documents": [{"s_w_id": $1, "s_i_id": $2, "s_quantity": $3, "s_dist_01": "$4", "s_dist_02": "$5", "s_dist_03": "$6", "s_dist_04": "$7", "s_dist_05": "$8", "s_dist_06": "$9", "s_dist_07": "$10", "s_dist_08": "$11", "s_dist_09": "$12", "s_dist_10": "$13", "s_ytd": 0, "s_order_cnt": 0, "s_remote_cnt": 0, "s_data": "$14"}]}
 

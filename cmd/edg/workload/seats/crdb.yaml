@@ -23,14 +23,14 @@
 # the same flights, and from seat count updates.
 
 globals:
-  countries: 50
-  airports: 200
-  airlines: 20
-  customers: 100000
-  flights: 50000
-  seats_per_flight: 150
-  reservations_per_flight: 120
-  batch_size: 10000
+  countries: int(coalesce(env_nil('COUNTRIES'), 50))
+  airports: int(coalesce(env_nil('AIRPORTS'), 200))
+  airlines: int(coalesce(env_nil('AIRLINES'), 20))
+  customers: int(coalesce(env_nil('CUSTOMERS'), 1000))
+  flights: int(coalesce(env_nil('FLIGHTS'), 500))
+  seats_per_flight: int(coalesce(env_nil('SEATS_PER_FLIGHT'), 150))
+  reservations_per_flight: int(coalesce(env_nil('RESERVATIONS_PER_FLIGHT'), 120))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 
@@ -118,35 +118,40 @@ up:
 seed:
 
   - name: populate_country
+    type: exec_batch
+    count: countries
+    size: batch_size
     args:
-      - countries
+      - iter()
     query: |-
       INSERT INTO country (co_id, co_name)
-      SELECT s, 'Country_' || lpad(s::TEXT, 3, '0')
-      FROM generate_series(1, $1) AS s
+      VALUES ($1::INT, 'Country_' || lpad($1::TEXT, 3, '0'))
 
   - name: populate_airport
+    type: exec_batch
+    count: airports
+    size: batch_size
     args:
-      - airports
+      - iter()
+      - gen_uniq("regex('[A-Z]{3}')")
       - countries
     query: |-
       INSERT INTO airport (ap_id, ap_code, ap_name, ap_city, ap_co_id)
-      SELECT s,
-        substr(md5(s::TEXT), 1, 3),
-        'Airport_' || lpad(s::TEXT, 4, '0'),
-        'City_' || lpad(s::TEXT, 4, '0'),
-        ((s - 1) % $2) + 1
-      FROM generate_series(1, $1) AS s
+      VALUES ($1::INT, $2,
+        'Airport_' || lpad($1::TEXT, 4, '0'),
+        'City_' || lpad($1::TEXT, 4, '0'),
+        (($1::INT - 1) % $3::INT) + 1)
 
   - name: populate_airline
+    type: exec_batch
+    count: airlines
+    size: batch_size
     args:
-      - airlines
+      - iter()
+      - gen_uniq("regex('[A-Z]{2}')")
     query: |-
       INSERT INTO airline (al_id, al_iata_code, al_name)
-      SELECT s,
-        chr(65 + (s - 1) / 26) || chr(65 + (s - 1) % 26),
-        'Airline_' || lpad(s::TEXT, 3, '0')
-      FROM generate_series(1, $1) AS s
+      VALUES ($1::INT, $2, 'Airline_' || lpad($1::TEXT, 3, '0'))
 
   - name: populate_customer
     args:
@@ -182,8 +187,8 @@ seed:
         floor(random()::FLOAT8 * $4 + 1)::INT,
         floor(random()::FLOAT8 * $3 + 1)::INT,
         floor(random()::FLOAT8 * $3 + 1)::INT,
-        now() + (random()::FLOAT8 * 30 || ' days')::INTERVAL,
-        now() + (random()::FLOAT8 * 30 || ' days')::INTERVAL + '2 hours'::INTERVAL,
+        now() + ((random() * 30 * 86400)::INT::TEXT || ' seconds')::INTERVAL,
+        now() + ((random() * 30 * 86400)::INT::TEXT || ' seconds')::INTERVAL + '2 hours'::INTERVAL,
         $5,
         $5,
         (random()::FLOAT8 * 900 + 100)::DECIMAL(12,2)

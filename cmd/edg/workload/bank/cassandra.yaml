@@ -4,8 +4,9 @@
 # Operations include balance checks, credits, and transfers.
 
 globals:
-  customers: 100000
-  initial_balance: 10000
+  customers: int(coalesce(env_nil('CUSTOMERS'), 1000))
+  initial_balance: int(coalesce(env_nil('INITIAL_BALANCE'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 
@@ -37,6 +38,7 @@ seed:
   - name: populate_customer
     type: exec_batch
     count: customers
+    size: 50
     args:
       - gen('uuid')
       - gen('email')
@@ -51,6 +53,7 @@ seed:
   - name: populate_account
     type: exec_batch
     count: customers
+    size: 50
     args:
       - gen('uuid')
       - ref_rand('fetch_customers').id
@@ -103,13 +106,24 @@ run:
     query: |-
       SELECT balance FROM edg.account WHERE id = $1
 
-  - name: credit_account
-    type: exec
-    args:
-      - ref_rand('fetch_accounts').id
-      - gen('number:1,1000')
-    query: |-
-      UPDATE edg.account SET balance = balance + $2 WHERE id = $1
+  - transaction: credit_account
+    locals:
+      amount: gen('number:1,1000')
+    queries:
+      - name: read_account
+        type: query
+        args:
+          - ref_rand('fetch_accounts').id
+        query: |-
+          SELECT id, balance FROM edg.account WHERE id = $1
+
+      - name: update_account
+        type: exec
+        args:
+          - ref_same('read_account').id
+          - ref_same('read_account').balance + local('amount')
+        query: |-
+          UPDATE edg.account SET balance = $2 WHERE id = $1
 
   - transaction: make_transfer
     locals:
@@ -135,14 +149,14 @@ run:
         type: exec
         args:
           - ref_same('read_source').id
-          - local('amount')
+          - ref_same('read_source').balance - local('amount')
         query: |-
-          UPDATE edg.account SET balance = balance - $2 WHERE id = $1
+          UPDATE edg.account SET balance = $2 WHERE id = $1
 
       - name: credit_target
         type: exec
         args:
           - ref_same('read_target').id
-          - local('amount')
+          - ref_same('read_target').balance + local('amount')
         query: |-
-          UPDATE edg.account SET balance = balance + $2 WHERE id = $1
+          UPDATE edg.account SET balance = $2 WHERE id = $1

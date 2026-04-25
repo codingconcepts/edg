@@ -38,6 +38,7 @@ func findBatchGroups(query string) [][2]int {
 				}
 				continue
 			}
+
 			if inSingle || inDouble {
 				continue
 			}
@@ -95,7 +96,10 @@ func ExpandBatchQuery(query string) []string {
 	groups := make([][]string, len(matches))
 	rowCount := 0
 	for i, m := range matches {
-		groups[i] = strings.Split(query[m[0]:m[1]], batchSep)
+		raw := query[m[0]:m[1]]
+		parts := strings.Split(raw, batchSep)
+
+		groups[i] = parts
 		if i == 0 {
 			rowCount = len(groups[i])
 		}

@@ -18,13 +18,14 @@
 #   - Seat count tracking is approximate in this model
 
 globals:
-  countries: 50
-  airports: 200
-  airlines: 20
-  customers: 100000
-  flights: 50000
-  seats_per_flight: 150
-  reservations_per_flight: 120
+  countries: int(coalesce(env_nil('COUNTRIES'), 50))
+  airports: int(coalesce(env_nil('AIRPORTS'), 200))
+  airlines: int(coalesce(env_nil('AIRLINES'), 20))
+  customers: int(coalesce(env_nil('CUSTOMERS'), 1000))
+  flights: int(coalesce(env_nil('FLIGHTS'), 500))
+  seats_per_flight: int(coalesce(env_nil('SEATS_PER_FLIGHT'), 150))
+  reservations_per_flight: int(coalesce(env_nil('RESERVATIONS_PER_FLIGHT'), 120))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 
@@ -124,8 +125,9 @@ seed:
   - name: populate_country
     type: exec_batch
     count: countries
+    size: 50
     args:
-      - gen('number:1,50')
+      - iter()
       - regex('Country_[0-9]{3}')
     query: |-
       INSERT INTO edg.country (co_id, co_name)
@@ -134,8 +136,9 @@ seed:
   - name: populate_airport
     type: exec_batch
     count: airports
+    size: 50
     args:
-      - gen('number:1,200')
+      - iter()
       - regex('[A-Z]{3}')
       - regex('Airport_[0-9]{4}')
       - regex('City_[0-9]{4}')
@@ -151,8 +154,9 @@ seed:
   - name: populate_airline
     type: exec_batch
     count: airlines
+    size: 50
     args:
-      - gen('number:1,20')
+      - iter()
       - regex('[A-Z]{2}')
       - regex('Airline_[0-9]{3}')
     query: |-
@@ -162,8 +166,9 @@ seed:
   - name: populate_customer
     type: exec_batch
     count: customers
+    size: 50
     args:
-      - gen('number:1,100000')
+      - iter()
       - ref_rand('fetch_airports_seed').ap_id
       - regex('[a-z]{16}')
       - regex('[a-z]{16}')
@@ -177,13 +182,14 @@ seed:
   - name: populate_flight
     type: exec_batch
     count: flights
+    size: 50
     args:
-      - gen('number:1,50000')
+      - iter()
       - gen('number:1,20')
       - ref_rand('fetch_airports_seed').ap_id
       - ref_rand('fetch_airports_seed').ap_id
-      - gen('timestamp')
-      - gen('timestamp')
+      - timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
+      - timestamp('2020-01-01T00:00:00Z', '2025-01-01T00:00:00Z')
       - gen('number:100,999')
     query: |-
       INSERT INTO edg.flight (f_id, f_al_id, f_depart_ap_id, f_arrive_ap_id,
@@ -193,8 +199,9 @@ seed:
   - name: populate_flight_by_id
     type: exec_batch
     count: flights
+    size: 50
     args:
-      - gen('number:1,50000')
+      - iter()
       - ref_rand('fetch_airports_seed').ap_id
       - gen('number:100,999')
     query: |-
@@ -213,6 +220,7 @@ seed:
   - name: populate_reservation
     type: exec_batch
     count: flights
+    size: 50
     args:
       - gen('uuid')
       - ref_rand('fetch_customers_seed').c_id

@@ -8,9 +8,9 @@
 #     --url "sqlserver://sa:Password123!@localhost:1433?database=bank&encrypt=disable"
 
 globals:
-  customers: 100000
-  initial_balance: 10000
-  batch_size: 10000
+  customers: int(coalesce(env_nil('CUSTOMERS'), 1000))
+  initial_balance: int(coalesce(env_nil('INITIAL_BALANCE'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 

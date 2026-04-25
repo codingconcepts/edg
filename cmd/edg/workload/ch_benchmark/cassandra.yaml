@@ -26,12 +26,14 @@
 #   q12_shipping_modes     - Scan oorder (5%)
 
 globals:
-  warehouses: 1
-  districts: 10
-  customers: 30000
-  orders: 30000
-  stock: 100000
-  items: 100000
+  warehouses: int(coalesce(env_nil('WAREHOUSES'), 1))
+  districts: int(coalesce(env_nil('DISTRICTS'), 10))
+  customers: int(coalesce(env_nil('CUSTOMERS'), 300))
+  orders: int(coalesce(env_nil('ORDERS'), 300))
+  stock: int(coalesce(env_nil('STOCK'), 1000))
+  items: int(coalesce(env_nil('ITEMS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
+  ol_batch: int(coalesce(env_nil('OL_BATCH'), 100))
 
 up:
 
@@ -234,40 +236,65 @@ up:
 
 seed:
 
-  - name: populate_region
-    type: exec_batch
-    count: 5
-    args:
-      - gen('number:0,4')
-      - set_seq(['AFRICA','AMERICA','ASIA','EUROPE','MIDDLE EAST'], [])
-      - gen('string:10,30')
-    query: |-
-      INSERT INTO edg.region (r_regionkey, r_name, r_comment)
-      VALUES ($1, $2, $3)
+  - name: populate_region_0
+    type: exec
+    query: INSERT INTO edg.region (r_regionkey, r_name, r_comment) VALUES (0, 'AFRICA', 'ref')
+  - name: populate_region_1
+    type: exec
+    query: INSERT INTO edg.region (r_regionkey, r_name, r_comment) VALUES (1, 'AMERICA', 'ref')
+  - name: populate_region_2
+    type: exec
+    query: INSERT INTO edg.region (r_regionkey, r_name, r_comment) VALUES (2, 'ASIA', 'ref')
+  - name: populate_region_3
+    type: exec
+    query: INSERT INTO edg.region (r_regionkey, r_name, r_comment) VALUES (3, 'EUROPE', 'ref')
+  - name: populate_region_4
+    type: exec
+    query: INSERT INTO edg.region (r_regionkey, r_name, r_comment) VALUES (4, 'MIDDLE EAST', 'ref')
 
   - name: populate_nation
-    type: exec_batch
-    count: 25
-    args:
-      - gen('number:0,24')
-      - set_seq(['ALGERIA','ARGENTINA','BRAZIL','CANADA','EGYPT','ETHIOPIA','FRANCE','GERMANY','INDIA','INDONESIA','IRAN','IRAQ','JAPAN','JORDAN','KENYA','MOROCCO','MOZAMBIQUE','PERU','CHINA','ROMANIA','SAUDI ARABIA','VIETNAM','RUSSIA','UNITED KINGDOM','UNITED STATES'], [])
-      - gen('number:0,4')
-      - gen('string:10,30')
+    type: exec
     query: |-
-      INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment)
-      VALUES ($1, $2, $3, $4)
+      BEGIN BATCH
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (0,'ALGERIA',0,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (1,'ARGENTINA',1,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (2,'BRAZIL',1,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (3,'CANADA',1,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (4,'EGYPT',4,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (5,'ETHIOPIA',0,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (6,'FRANCE',3,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (7,'GERMANY',3,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (8,'INDIA',2,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (9,'INDONESIA',2,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (10,'IRAN',4,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (11,'IRAQ',4,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (12,'JAPAN',2,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (13,'JORDAN',4,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (14,'KENYA',0,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (15,'MOROCCO',0,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (16,'MOZAMBIQUE',0,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (17,'PERU',1,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (18,'CHINA',2,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (19,'ROMANIA',3,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (20,'SAUDI ARABIA',4,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (21,'VIETNAM',2,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (22,'RUSSIA',3,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (23,'UNITED KINGDOM',3,'')
+        INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment) VALUES (24,'UNITED STATES',1,'')
+      APPLY BATCH
 
   - name: populate_supplier
     type: exec_batch
     count: 10000
+    size: 50
     args:
-      - gen('number:1,10000')
-      - gen('string:15,25')
-      - gen('string:15,40')
+      - iter()
+      - regex('[a-zA-Z]{15,25}')
+      - regex('[a-zA-Z]{15,40}')
       - gen('number:0,24')
-      - gen('string:15,15')
-      - gen('float:-1000.00,9000.00')
-      - gen('string:10,30')
+      - regex('[a-zA-Z]{15,15}')
+      - uniform_f(-1000.00, 9000.00, 2)
+      - regex('[a-zA-Z]{10,30}')
     query: |-
       INSERT INTO edg.supplier (su_suppkey, su_name, su_address,
         su_nationkey, su_phone, su_acctbal, su_comment)
@@ -276,12 +303,13 @@ seed:
   - name: populate_item
     type: exec_batch
     count: items
+    size: 50
     args:
-      - gen('number:1,100000')
+      - iter()
       - gen('number:1,10000')
-      - gen('string:6,24')
-      - gen('float:1.00,100.00')
-      - gen('string:26,50')
+      - regex('[a-zA-Z]{6,24}')
+      - uniform_f(1.00, 100.00, 2)
+      - regex('[a-zA-Z]{26,50}')
     query: |-
       INSERT INTO edg.item (i_id, i_im_id, i_name, i_price, i_data)
       VALUES ($1, $2, $3, $4, $5)
@@ -289,15 +317,16 @@ seed:
   - name: populate_warehouse
     type: exec_batch
     count: warehouses
+    size: 50
     args:
-      - gen('number:1,1000')
-      - gen('string:6,10')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:2,2')
-      - gen('string:9,9')
-      - gen('float:0.0000,0.2000')
+      - iter()
+      - regex('[a-zA-Z]{6,10}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{2,2}')
+      - regex('[a-zA-Z]{9,9}')
+      - uniform_f(0.0000, 0.2000, 4)
     query: |-
       INSERT INTO edg.warehouse (w_id, w_name, w_street_1, w_street_2,
         w_city, w_state, w_zip, w_tax, w_ytd)
@@ -310,16 +339,17 @@ seed:
   - name: populate_district
     type: exec_batch
     count: districts
+    size: 50
     args:
       - ref_rand('fetch_warehouses').w_id
-      - gen('number:1,10')
-      - gen('string:6,10')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:2,2')
-      - gen('string:9,9')
-      - gen('float:0.0000,0.2000')
+      - iter()
+      - regex('[a-zA-Z]{6,10}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{2,2}')
+      - regex('[a-zA-Z]{9,9}')
+      - uniform_f(0.0000, 0.2000, 4)
     query: |-
       INSERT INTO edg.district (d_w_id, d_id, d_name, d_street_1,
         d_street_2, d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id)
@@ -328,20 +358,21 @@ seed:
   - name: populate_customer
     type: exec_batch
     count: customers
+    size: 50
     args:
       - ref_rand('fetch_warehouses').w_id
       - gen('number:1,10')
-      - gen('number:1,3000')
-      - gen('string:6,16')
-      - gen('string:6,16')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:10,20')
-      - gen('string:2,2')
-      - gen('string:9,9')
-      - gen('string:16,16')
-      - gen('float:0.0000,0.5000')
-      - gen('string:300,500')
+      - iter()
+      - regex('[a-zA-Z]{6,16}')
+      - regex('[a-zA-Z]{6,16}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{10,20}')
+      - regex('[a-zA-Z]{2,2}')
+      - regex('[a-zA-Z]{9,9}')
+      - regex('[a-zA-Z]{16,16}')
+      - uniform_f(0.0000, 0.5000, 4)
+      - regex('[a-zA-Z]{300,500}')
     query: |-
       INSERT INTO edg.customer (c_w_id, c_d_id, c_id, c_first, c_middle,
         c_last, c_street_1, c_street_2, c_city, c_state, c_zip, c_phone,
@@ -353,12 +384,13 @@ seed:
   - name: populate_history
     type: exec_batch
     count: customers
+    size: 50
     args:
       - gen('uuid')
-      - gen('number:1,3000')
+      - iter()
       - gen('number:1,10')
       - ref_rand('fetch_warehouses').w_id
-      - gen('string:12,24')
+      - regex('[a-zA-Z]{12,24}')
     query: |-
       INSERT INTO edg.history (h_id, h_c_id, h_c_d_id, h_c_w_id,
         h_d_id, h_w_id, h_date, h_amount, h_data)
@@ -367,10 +399,11 @@ seed:
   - name: populate_oorder
     type: exec_batch
     count: orders
+    size: 50
     args:
       - ref_rand('fetch_warehouses').w_id
       - gen('number:1,10')
-      - gen('number:1,3000')
+      - iter()
       - gen('number:1,3000')
       - gen('number:5,15')
     query: |-
@@ -381,10 +414,11 @@ seed:
   - name: populate_new_order
     type: exec_batch
     count: districts
+    size: 50
     args:
       - ref_rand('fetch_warehouses').w_id
       - gen('number:1,10')
-      - gen('number:2101,3000')
+      - iter()
     query: |-
       INSERT INTO edg.new_order (no_w_id, no_d_id, no_o_id)
       VALUES ($1, $2, $3)
@@ -392,14 +426,15 @@ seed:
   - name: populate_order_line
     type: exec_batch
     count: orders
+    size: 50
     args:
       - ref_rand('fetch_warehouses').w_id
       - gen('number:1,10')
       - gen('number:1,3000')
       - gen('number:1,15')
       - gen('number:1,100000')
-      - gen('float:0.00,9999.99')
-      - gen('string:24,24')
+      - uniform_f(0.00, 9999.99, 2)
+      - regex('[a-zA-Z]{24,24}')
     query: |-
       INSERT INTO edg.order_line (ol_w_id, ol_d_id, ol_o_id, ol_number,
         ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount,
@@ -409,21 +444,22 @@ seed:
   - name: populate_stock
     type: exec_batch
     count: stock
+    size: 50
     args:
       - ref_rand('fetch_warehouses').w_id
-      - gen('number:1,100000')
+      - iter()
       - gen('number:10,100')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:24,24')
-      - gen('string:26,50')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{24,24}')
+      - regex('[a-zA-Z]{26,50}')
     query: |-
       INSERT INTO edg.stock (s_w_id, s_i_id, s_quantity,
         s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05,

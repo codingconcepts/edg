@@ -7,7 +7,7 @@ A dating app workload with user profiles, location-based discovery, swipes, matc
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run

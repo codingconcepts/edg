@@ -28,12 +28,14 @@
 #   - All order line items sourced from home warehouse (no 1% remote supply)
 
 globals:
-  warehouses: 1    # W
-  districts: 10    # W * 10
-  customers: 30000 # W * 10 * 3000
-  orders: 30000    # W * 10 * 3000
-  stock: 100000    # W * 100,000
-  items: 100000    # 100,000
+  warehouses: int(coalesce(env_nil('WAREHOUSES'), 1))
+  districts: int(coalesce(env_nil('DISTRICTS'), 10))
+  customers: int(coalesce(env_nil('CUSTOMERS'), 300))
+  orders: int(coalesce(env_nil('ORDERS'), 300))
+  stock: int(coalesce(env_nil('STOCK'), 1000))
+  items: int(coalesce(env_nil('ITEMS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
+  ol_batch: int(coalesce(env_nil('OL_BATCH'), 100))
 
 up:
 
@@ -481,7 +483,7 @@ run:
   # Args: w_id, d_id, c_id, item_ids (comma-separated)
   - name: new_order
     type: query
-    wait: 18s
+    wait: 180ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')
@@ -562,7 +564,7 @@ run:
   # Args: w_id, d_id, c_id, amount_cents
   - name: payment
     type: query
-    wait: 3s
+    wait: 30ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')
@@ -651,7 +653,7 @@ run:
   # Args: w_id, d_id, c_id
   - name: order_status
     type: query
-    wait: 2s
+    wait: 20ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')
@@ -698,7 +700,7 @@ run:
   # Args: w_id, carrier_id
   - name: delivery
     type: exec
-    wait: 2s
+    wait: 20ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')
@@ -757,7 +759,7 @@ run:
   # Args: w_id, d_id, threshold
   - name: stock_level
     type: query
-    wait: 2s
+    wait: 20ms
     args:
       - ref_perm('fetch_warehouses').w_id
       - gen('number:1,10')

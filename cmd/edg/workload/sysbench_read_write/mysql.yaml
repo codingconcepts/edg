@@ -13,8 +13,8 @@
 #     --url "root:password@tcp(localhost:3306)/defaultdb?parseTime=true"
 
 globals:
-  records: 10000
-  batch_size: 1000
+  records: int(coalesce(env_nil('RECORDS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 

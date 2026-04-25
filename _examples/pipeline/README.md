@@ -7,7 +7,7 @@ A minimal example demonstrating chained run queries where each step's results fe
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run
@@ -46,7 +46,7 @@ go run ./cmd/edg down \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_mysql.yml up -d
+docker compose -f cmd/harness/compose/compose_mysql.yml up -d
 ```
 
 ### Run
@@ -85,7 +85,7 @@ go run ./cmd/edg down \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_oracle.yml up -d
+docker compose -f cmd/harness/compose/compose_oracle.yml up -d
 ```
 
 ### Run
@@ -124,7 +124,7 @@ go run ./cmd/edg down \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_mssql.yml up -d
+docker compose -f cmd/harness/compose/compose_mssql.yml up -d
 ```
 
 ### Run

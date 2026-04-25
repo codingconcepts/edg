@@ -19,7 +19,7 @@ Two strategies are shown:
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run
@@ -82,7 +82,7 @@ go run ./cmd/edg down \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_mysql.yml up -d
+docker compose -f cmd/harness/compose/compose_mysql.yml up -d
 ```
 
 ### Run

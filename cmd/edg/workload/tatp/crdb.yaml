@@ -20,8 +20,8 @@
 #   delete_call_forwarding - Remove a forwarding rule (2%)
 
 globals:
-  subscribers: 100000
-  batch_size: 10000
+  subscribers: int(coalesce(env_nil('SUBSCRIBERS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 
@@ -169,8 +169,6 @@ seed:
       CROSS JOIN generate_series(1, floor(random()::FLOAT8 * 4 + 1)::INT) AS t
 
   - name: populate_call_forwarding
-    args:
-      - subscribers
     query: |-
       INSERT INTO call_forwarding (s_id, sf_type, start_time,
         end_time, numberx)

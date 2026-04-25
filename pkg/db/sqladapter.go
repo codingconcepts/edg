@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
 
 type SQDB struct {
@@ -20,6 +21,14 @@ func (s *SQDB) QueryContext(ctx context.Context, query string, args ...any) (Row
 }
 
 func (s *SQDB) ExecContext(ctx context.Context, query string, args ...any) error {
+	if strings.Contains(query, batchSep) {
+		for _, q := range ExpandBatchQuery(query) {
+			if _, err := s.DB.ExecContext(ctx, q, args...); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	_, err := s.DB.ExecContext(ctx, query, args...)
 	return err
 }
@@ -82,6 +91,14 @@ func (t *sqlTransaction) QueryContext(ctx context.Context, query string, args ..
 }
 
 func (t *sqlTransaction) ExecContext(ctx context.Context, query string, args ...any) error {
+	if strings.Contains(query, batchSep) {
+		for _, q := range ExpandBatchQuery(query) {
+			if _, err := t.tx.ExecContext(ctx, q, args...); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	_, err := t.tx.ExecContext(ctx, query, args...)
 	return err
 }

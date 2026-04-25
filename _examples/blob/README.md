@@ -12,7 +12,7 @@ A binary data workload demonstrating `blob()` and `bytes()` for inserting and re
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run
@@ -31,7 +31,7 @@ go run ./cmd/edg all \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_mysql.yml up -d
+docker compose -f cmd/harness/compose/compose_mysql.yml up -d
 ```
 
 ### Run
@@ -50,7 +50,7 @@ go run ./cmd/edg all \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_oracle.yml up -d
+docker compose -f cmd/harness/compose/compose_oracle.yml up -d
 ```
 
 ### Run
@@ -69,7 +69,7 @@ go run ./cmd/edg run \
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_mssql.yml up -d
+docker compose -f cmd/harness/compose/compose_mssql.yml up -d
 ```
 
 ### Run

@@ -23,8 +23,8 @@
 #   user:password@tcp(host:port)/database?parseTime=true
 
 globals:
-  subscribers: 100000
-  batch_size: 10000
+  subscribers: int(coalesce(env_nil('SUBSCRIBERS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 

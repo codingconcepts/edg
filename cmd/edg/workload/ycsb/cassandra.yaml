@@ -29,8 +29,9 @@
 #     Cassandra has no RETURNING or findAndModify equivalent.
 
 globals:
-  records: 10000
-  zipf_s: 1.2
+  records: int(coalesce(env_nil('RECORDS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
+  zipf_s: float(coalesce(env_nil('ZIPF_S'), 1.2))
 
 up:
 
@@ -62,8 +63,9 @@ seed:
   - name: populate_usertable
     type: exec_batch
     count: records
+    size: 5
     args:
-      - seq()
+      - template('%d', seq(1, 1))
       - regex('[a-zA-Z0-9]{100}')
       - regex('[a-zA-Z0-9]{100}')
       - regex('[a-zA-Z0-9]{100}')

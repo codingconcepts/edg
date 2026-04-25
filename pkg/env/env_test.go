@@ -16,6 +16,7 @@ import (
 	"github.com/codingconcepts/edg/pkg/test"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/expr-lang/expr/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -283,6 +284,74 @@ func TestResetUniqIndex(t *testing.T) {
 	env.resetUniqIndex()
 
 	assert.Equal(t, 0, env.uniqIndex)
+}
+
+func TestIter(t *testing.T) {
+	env := testEnv(nil)
+
+	assert.Equal(t, 1, env.iter())
+	assert.Equal(t, 2, env.iter())
+	assert.Equal(t, 3, env.iter())
+
+	env.resetUniqIndex()
+	assert.Equal(t, 1, env.iter())
+}
+
+func TestUniq(t *testing.T) {
+	env := testEnv(nil)
+	env.env["regex"] = func(pattern string) (string, error) {
+		return "ABC", nil
+	}
+	env.uniqSeen = map[string]map[any]struct{}{}
+	env.uniqProg = map[string]*vm.Program{}
+
+	v, err := env.uniq("regex('[A-Z]{3}')")
+	require.NoError(t, err)
+	assert.Equal(t, "ABC", v)
+
+	_, err = env.uniq("regex('[A-Z]{3}')", 5)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to generate unique value after 5 attempts")
+}
+
+func TestUniq_MultipleValues(t *testing.T) {
+	env := testEnv(nil)
+	counter := 0
+	env.env["const"] = func(v any) any { return v }
+	env.env["gen"] = func(pattern string) string {
+		counter++
+		return fmt.Sprintf("val_%d", counter)
+	}
+	env.uniqSeen = map[string]map[any]struct{}{}
+	env.uniqProg = map[string]*vm.Program{}
+
+	seen := map[any]bool{}
+	for range 10 {
+		v, err := env.uniq("gen('word')")
+		require.NoError(t, err)
+		assert.False(t, seen[v], "duplicate value: %v", v)
+		seen[v] = true
+	}
+}
+
+func TestUniq_ResetBetweenQueries(t *testing.T) {
+	env := testEnv(nil)
+	env.env["const"] = func(v any) any { return v }
+	env.env["regex"] = func(pattern string) (string, error) {
+		return "FIXED", nil
+	}
+	env.uniqSeen = map[string]map[any]struct{}{}
+	env.uniqProg = map[string]*vm.Program{}
+
+	v, err := env.uniq("regex('[A-Z]{5}')")
+	require.NoError(t, err)
+	assert.Equal(t, "FIXED", v)
+
+	env.resetUniqIndex()
+
+	v, err = env.uniq("regex('[A-Z]{5}')")
+	require.NoError(t, err)
+	assert.Equal(t, "FIXED", v)
 }
 
 func TestRunIteration_NoWeights(t *testing.T) {
@@ -725,7 +794,9 @@ func TestRunSection_SeedCapturesBatchArgs(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	mock.ExpectExec("INSERT INTO employees").WillReturnResult(driver.ResultNoRows)
+	for range 3 {
+		mock.ExpectExec("INSERT INTO employees").WillReturnResult(driver.ResultNoRows)
+	}
 
 	env := &Env{
 		db:        edgdb.NewSQDB(db),
@@ -765,7 +836,9 @@ func TestRunSection_SeedCaptureHierarchical(t *testing.T) {
 	defer db.Close()
 
 	mock.ExpectExec("INSERT INTO employees").WillReturnResult(driver.ResultNoRows)
-	mock.ExpectExec("INSERT INTO employees").WillReturnResult(driver.ResultNoRows)
+	for range 3 {
+		mock.ExpectExec("INSERT INTO employees").WillReturnResult(driver.ResultNoRows)
+	}
 
 	env := &Env{
 		db:        edgdb.NewSQDB(db),

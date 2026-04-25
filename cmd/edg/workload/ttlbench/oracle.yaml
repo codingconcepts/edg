@@ -8,7 +8,7 @@
 #   oracle://user:password@host:port/service
 
 globals:
-  payload_size: 256
+  payload_size: int(coalesce(env_nil('PAYLOAD_SIZE'), 256))
 
 up:
 

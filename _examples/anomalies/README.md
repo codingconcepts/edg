@@ -50,7 +50,7 @@ Generates traffic patterns that provoke classic read/write anomalies under weak 
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run

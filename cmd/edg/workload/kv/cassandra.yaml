@@ -10,9 +10,9 @@
 # Tune globals to control table size and value width.
 
 globals:
-  keys: 10000
-  batch_size: 1000
-  value_size: 256
+  keys: int(coalesce(env_nil('KEYS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
+  value_size: int(coalesce(env_nil('VALUE_SIZE'), 256))
 
 up:
 
@@ -35,8 +35,9 @@ seed:
   - name: populate_kv
     type: exec_batch
     count: keys
+    size: 50
     args:
-      - seq()
+      - seq(1, 1)
       - blob(value_size)
     query: |-
       INSERT INTO edg.kv (k, v) VALUES ($1, $2)

@@ -20,7 +20,7 @@ The `seq` section defines named sequences with a start value and step. `seq_glob
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run

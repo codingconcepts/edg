@@ -25,9 +25,9 @@
 #   user:password@tcp(host:port)/database?parseTime=true
 
 globals:
-  records: 10000
-  batch_size: 1000
-  zipf_s: 1.2
+  records: int(coalesce(env_nil('RECORDS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
+  zipf_s: float(coalesce(env_nil('ZIPF_S'), 1.2))
 
 up:
 

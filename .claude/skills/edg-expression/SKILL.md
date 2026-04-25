@@ -132,6 +132,13 @@ You help users compose, debug, and understand edg expressions. edg uses [expr-la
 |---|---|
 | `batch(n)` | Sequential indices [0, n) |
 | `gen_batch(total, size, pattern)` | Batched gofakeit values |
+| `iter()` | 1-based row counter for batch queries (resets per query) |
+
+### Uniqueness
+| Function | Description |
+|---|---|
+| `gen_uniq(expression)` | Retry expression until unique value found (100 attempts default) |
+| `gen_uniq(expression, maxRetries)` | Same, with custom retry limit |
 
 ### PII & Masking
 | Function | Description |
@@ -249,6 +256,20 @@ args:
   masked_name: mask(arg('full_name'))                # hex token
   masked_email: mask(arg('email'), 'email', 4)       # ****@example.com
   redacted_phone: mask(arg('phone'), 'redact')       # [REDACTED]
+```
+
+### Unique codes in batch inserts
+```yaml
+# 200 airports each with a unique 3-char IATA code
+- name: populate_airport
+  type: exec_batch
+  count: 200
+  size: 100
+  args:
+    - iter()
+    - gen_uniq("gen('airlineairportiata')")
+  query: |-
+    INSERT INTO airport (id, code) VALUES ($1::INT, $2)
 ```
 
 ### Error handling with fail/fatal

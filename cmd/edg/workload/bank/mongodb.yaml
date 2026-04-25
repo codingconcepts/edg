@@ -4,8 +4,9 @@
 # Operations include balance checks, credits, and transfers.
 
 globals:
-  customers: 100000
-  initial_balance: 10000
+  customers: int(coalesce(env_nil('CUSTOMERS'), 1000))
+  initial_balance: int(coalesce(env_nil('INITIAL_BALANCE'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 
@@ -24,6 +25,7 @@ seed:
   - name: populate_customer
     type: exec_batch
     count: customers
+    size: batch_size
     args:
       - gen('uuid')
       - gen('email')
@@ -38,6 +40,7 @@ seed:
   - name: populate_account
     type: exec_batch
     count: customers
+    size: batch_size
     args:
       - gen('uuid')
       - ref_rand('fetch_customers')._id

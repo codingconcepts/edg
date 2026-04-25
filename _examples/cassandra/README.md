@@ -5,7 +5,7 @@ A basic Cassandra example demonstrating keyspace and table creation, inserts wit
 ## Setup
 
 ```sh
-docker compose -f _examples/compose_cassandra.yml up -d
+docker compose -f cmd/harness/compose/compose_cassandra.yml up -d
 ```
 
 Cassandra takes ~30 seconds to become ready:

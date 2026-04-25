@@ -15,7 +15,7 @@ Seed queries with named args automatically store their generated rows as dataset
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run

@@ -7,14 +7,14 @@
 #   projects/PROJECT/instances/INSTANCE/databases/DATABASE
 
 globals:
-  scale_factor: 1
-  regions: 5
-  nations: 25
-  suppliers: 1000
-  parts: 10000
-  customers: 15000
-  orders: 10000
-  batch_size: 10000
+  scale_factor: int(coalesce(env_nil('SCALE_FACTOR'), 1))
+  regions: int(coalesce(env_nil('REGIONS'), 5))
+  nations: int(coalesce(env_nil('NATIONS'), 25))
+  suppliers: int(coalesce(env_nil('SUPPLIERS'), 100))
+  parts: int(coalesce(env_nil('PARTS'), 200))
+  customers: int(coalesce(env_nil('CUSTOMERS'), 150))
+  orders: int(coalesce(env_nil('ORDERS'), 1000))
+  batch_size: int(coalesce(env_nil('BATCH_SIZE'), 100))
 
 up:
 

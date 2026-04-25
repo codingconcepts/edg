@@ -15,7 +15,7 @@ Demonstrates map lookup with `fail()` to validate environment variables at runti
 ### Setup
 
 ```sh
-docker compose -f _examples/compose_crdb.yml up -d
+docker compose -f cmd/harness/compose/compose_crdb.yml up -d
 ```
 
 ### Run (success)
