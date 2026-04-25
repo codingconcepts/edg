@@ -1,0 +1,163 @@
+# YCSB Benchmark Workload (Cassandra)
+# ====================================
+# Yahoo! Cloud Serving Benchmark adapted for edg.
+#
+# Single table (usertable) with a primary key and 10 fields of
+# 100 bytes each. Keys follow the format user{0000000000}.
+#
+# Workload profiles: change run_weights to switch:
+#
+#   A - Update heavy:       read: 50,  update: 50
+#   B - Read mostly:        read: 95,  update: 5
+#   C - Read only:          read: 100
+#   D - Read latest:        read: 95,  insert: 5
+#   E - Short ranges:       scan: 95,  insert: 5
+#   F - Read-modify-write:  read: 50,  read_modify_write: 50
+#
+# Key access uses Zipfian distribution. The zipf_s parameter
+# controls skew (must be > 1.0; higher = more skewed). Tune
+# to control hot-key contention.
+#
+# Known limitations:
+#   - Workload D's "latest" distribution (bias toward recently
+#     inserted keys) is not supported; Zipfian is used instead.
+#   - Updates modify field0 only (standard YCSB updates a random
+#     field; this simplification has negligible benchmark impact).
+#   - Scan is simplified to a point select with LIMIT since
+#     Cassandra does not support range scans on partition keys.
+#   - Read-modify-write is split into a read and an update since
+#     Cassandra has no RETURNING or findAndModify equivalent.
+
+globals:
+  records: 10000
+  zipf_s: 1.2
+
+up:
+
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_usertable
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.usertable (
+        ycsb_key TEXT PRIMARY KEY,
+        field0 TEXT,
+        field1 TEXT,
+        field2 TEXT,
+        field3 TEXT,
+        field4 TEXT,
+        field5 TEXT,
+        field6 TEXT,
+        field7 TEXT,
+        field8 TEXT,
+        field9 TEXT
+      )
+
+seed:
+
+  - name: populate_usertable
+    type: exec_batch
+    count: records
+    args:
+      - seq()
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+    query: |-
+      INSERT INTO edg.usertable (ycsb_key, field0, field1, field2, field3,
+        field4, field5, field6, field7, field8, field9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+
+deseed:
+
+  - name: truncate_usertable
+    type: exec
+    query: TRUNCATE edg.usertable
+
+down:
+
+  - name: drop_usertable
+    type: exec
+    query: DROP TABLE IF EXISTS edg.usertable
+
+  - name: drop_keyspace
+    type: exec
+    query: DROP KEYSPACE IF EXISTS edg
+
+# Workload A - Update heavy (default)
+run_weights:
+  read: 50
+  update: 50
+
+run:
+
+  # Point read by Zipfian-distributed key.
+  - name: read
+    type: query
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+    query: |-
+      SELECT * FROM edg.usertable WHERE ycsb_key = $1
+
+  # Update a single field by Zipfian-distributed key.
+  - name: update
+    type: exec
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+      - regex('[a-zA-Z0-9]{100}')
+    query: |-
+      UPDATE edg.usertable SET field0 = $2 WHERE ycsb_key = $1
+
+  # Insert a new record with a unique key.
+  # Used by workloads D and E.
+  - name: insert
+    type: exec
+    args:
+      - uuid_v7()
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+    query: |-
+      INSERT INTO edg.usertable (ycsb_key, field0, field1, field2, field3,
+        field4, field5, field6, field7, field8, field9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+
+  # Point select with LIMIT (simplified from range scan since
+  # Cassandra does not support range scans on partition keys).
+  # Used by workload E.
+  - name: scan
+    type: query
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+      - gen('number:1,100')
+    query: |-
+      SELECT * FROM edg.usertable WHERE ycsb_key = $1 LIMIT $2
+
+  # Read-modify-write: update field0 then read the row back.
+  # Cassandra has no RETURNING equivalent, so this is just an update.
+  # Used by workload F.
+  - name: read_modify_write
+    type: exec
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+      - regex('[a-zA-Z0-9]{100}')
+    query: |-
+      UPDATE edg.usertable SET field0 = $2 WHERE ycsb_key = $1

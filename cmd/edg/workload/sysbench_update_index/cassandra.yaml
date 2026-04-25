@@ -1,0 +1,78 @@
+# Sysbench oltp_update_index Workload (Cassandra)
+# =================================================
+# Pure indexed-column update micro-benchmark. Every operation
+# updates column k (which has a secondary index), causing
+# both primary and index writes. Useful for measuring write
+# amplification and secondary index maintenance overhead.
+#
+# Note: Cassandra does not support server-side arithmetic
+# (k = k + 1) on non-counter columns, so k is set to a new
+# random value instead.
+#
+# Schema matches standard sysbench sbtest1 table.
+
+globals:
+  records: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_sbtest1
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.sbtest1 (
+        id INT PRIMARY KEY,
+        k INT,
+        c TEXT,
+        pad TEXT
+      )
+
+  - name: create_idx_k
+    type: exec
+    query: |-
+      CREATE INDEX IF NOT EXISTS k_1 ON edg.sbtest1(k)
+
+seed:
+
+  - name: populate_sbtest1
+    type: exec_batch
+    count: records
+    args:
+      - seq()
+      - gen('number:0,10000')
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      INSERT INTO edg.sbtest1 (id, k, c, pad) VALUES ($1, $2, $3, $4)
+
+deseed:
+
+  - name: truncate_sbtest1
+    type: exec
+    query: TRUNCATE edg.sbtest1
+
+down:
+
+  - name: drop_sbtest1
+    type: exec
+    query: DROP TABLE IF EXISTS edg.sbtest1
+
+  - name: drop_keyspace
+    type: exec
+    query: DROP KEYSPACE IF EXISTS edg
+
+run:
+
+  - name: update_index
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+      - gen('number:0,10000')
+    query: |-
+      UPDATE edg.sbtest1 SET k = $2 WHERE id = $1

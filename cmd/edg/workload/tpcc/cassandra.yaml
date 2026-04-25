@@ -1,0 +1,533 @@
+# TPC-C Benchmark Workload (Cassandra)
+# ======================================
+# Cassandra adaptation of the TPC-C benchmark. Complex multi-table
+# transactions are simplified to single-table operations, as Cassandra
+# does not support JOINs, CTEs, or multi-table transactions.
+#
+# Primary key design follows Cassandra best practices:
+#   - Partition keys chosen for even data distribution
+#   - Clustering keys enable efficient range queries
+#   - Denormalized where needed for query patterns
+#
+# Data cardinalities per TPC-C spec (rev 5.11):
+#   item:       100,000 (fixed)
+#   warehouse:  W (configurable)
+#   district:   10 x W
+#   customer:   3,000 x 10 x W
+#   history:    1 per customer (initial)
+#   oorder:     3,000 x 10 x W
+#   new_order:  900 x 10 x W (orders 2101-3000)
+#   order_line: ~10 x 3,000 x 10 x W (5-15 per order)
+#   stock:      100,000 x W
+#
+# Run queries implement simplified versions of the 5 TPC-C
+# transaction profiles:
+#   - New-Order  (INSERT into oorder)
+#   - Payment    (UPDATE warehouse w_ytd)
+#   - Order-Status (SELECT from oorder)
+#   - Delivery   (DELETE from new_order)
+#   - Stock-Level (SELECT from stock with ALLOW FILTERING)
+
+globals:
+  warehouses: 1    # W
+  districts: 10    # W * 10
+  customers: 30000 # W * 10 * 3000
+  orders: 30000    # W * 10 * 3000
+  stock: 100000    # W * 100,000
+  items: 100000    # 100,000
+
+up:
+
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_warehouse
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.warehouse (
+        w_id INT,
+        w_name TEXT,
+        w_street_1 TEXT,
+        w_street_2 TEXT,
+        w_city TEXT,
+        w_state TEXT,
+        w_zip TEXT,
+        w_tax DOUBLE,
+        w_ytd DOUBLE,
+        PRIMARY KEY (w_id)
+      )
+
+  - name: create_district
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.district (
+        d_w_id INT,
+        d_id INT,
+        d_name TEXT,
+        d_street_1 TEXT,
+        d_street_2 TEXT,
+        d_city TEXT,
+        d_state TEXT,
+        d_zip TEXT,
+        d_tax DOUBLE,
+        d_ytd DOUBLE,
+        d_next_o_id INT,
+        PRIMARY KEY ((d_w_id, d_id))
+      )
+
+  - name: create_customer
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.customer (
+        c_w_id INT,
+        c_d_id INT,
+        c_id INT,
+        c_first TEXT,
+        c_middle TEXT,
+        c_last TEXT,
+        c_street_1 TEXT,
+        c_street_2 TEXT,
+        c_city TEXT,
+        c_state TEXT,
+        c_zip TEXT,
+        c_phone TEXT,
+        c_since TIMESTAMP,
+        c_credit TEXT,
+        c_credit_lim DOUBLE,
+        c_discount DOUBLE,
+        c_balance DOUBLE,
+        c_ytd_payment DOUBLE,
+        c_payment_cnt INT,
+        c_delivery_cnt INT,
+        c_data TEXT,
+        PRIMARY KEY ((c_w_id, c_d_id), c_id)
+      )
+
+  - name: create_history
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.history (
+        h_id UUID,
+        h_c_id INT,
+        h_c_d_id INT,
+        h_c_w_id INT,
+        h_d_id INT,
+        h_w_id INT,
+        h_date TIMESTAMP,
+        h_amount DOUBLE,
+        h_data TEXT,
+        PRIMARY KEY (h_id)
+      )
+
+  - name: create_oorder
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.oorder (
+        o_w_id INT,
+        o_d_id INT,
+        o_id INT,
+        o_c_id INT,
+        o_entry_d TIMESTAMP,
+        o_carrier_id INT,
+        o_ol_cnt INT,
+        o_all_local INT,
+        PRIMARY KEY ((o_w_id, o_d_id), o_id)
+      ) WITH CLUSTERING ORDER BY (o_id DESC)
+
+  - name: create_new_order
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.new_order (
+        no_w_id INT,
+        no_d_id INT,
+        no_o_id INT,
+        PRIMARY KEY ((no_w_id, no_d_id), no_o_id)
+      )
+
+  - name: create_order_line
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.order_line (
+        ol_w_id INT,
+        ol_d_id INT,
+        ol_o_id INT,
+        ol_number INT,
+        ol_i_id INT,
+        ol_supply_w_id INT,
+        ol_delivery_d TIMESTAMP,
+        ol_quantity INT,
+        ol_amount DOUBLE,
+        ol_dist_info TEXT,
+        PRIMARY KEY ((ol_w_id, ol_d_id, ol_o_id), ol_number)
+      )
+
+  - name: create_item
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.item (
+        i_id INT,
+        i_im_id INT,
+        i_name TEXT,
+        i_price DOUBLE,
+        i_data TEXT,
+        PRIMARY KEY (i_id)
+      )
+
+  - name: create_stock
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.stock (
+        s_w_id INT,
+        s_i_id INT,
+        s_quantity INT,
+        s_dist_01 TEXT,
+        s_dist_02 TEXT,
+        s_dist_03 TEXT,
+        s_dist_04 TEXT,
+        s_dist_05 TEXT,
+        s_dist_06 TEXT,
+        s_dist_07 TEXT,
+        s_dist_08 TEXT,
+        s_dist_09 TEXT,
+        s_dist_10 TEXT,
+        s_ytd INT,
+        s_order_cnt INT,
+        s_remote_cnt INT,
+        s_data TEXT,
+        PRIMARY KEY ((s_w_id), s_i_id)
+      )
+
+seed:
+
+  - name: populate_item
+    type: exec_batch
+    count: items
+    args:
+      - gen('number:1,100000')
+      - gen('number:1,10000')
+      - gen('string:6,24')
+      - gen('float:1.00,100.00')
+      - gen('string:26,50')
+    query: |-
+      INSERT INTO edg.item (i_id, i_im_id, i_name, i_price, i_data)
+      VALUES ($1, $2, $3, $4, $5)
+
+  - name: populate_warehouse
+    type: exec_batch
+    count: warehouses
+    args:
+      - gen('number:1,1000')
+      - gen('string:6,10')
+      - gen('string:10,20')
+      - gen('string:10,20')
+      - gen('string:10,20')
+      - gen('string:2,2')
+      - gen('string:9,9')
+      - gen('float:0.0000,0.2000')
+    query: |-
+      INSERT INTO edg.warehouse (w_id, w_name, w_street_1, w_street_2,
+        w_city, w_state, w_zip, w_tax, w_ytd)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 300000)
+
+  - name: fetch_warehouses
+    query: |-
+      SELECT w_id FROM edg.warehouse
+
+  - name: populate_district
+    type: exec_batch
+    count: districts
+    args:
+      - ref_rand('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('string:6,10')
+      - gen('string:10,20')
+      - gen('string:10,20')
+      - gen('string:10,20')
+      - gen('string:2,2')
+      - gen('string:9,9')
+      - gen('float:0.0000,0.2000')
+    query: |-
+      INSERT INTO edg.district (d_w_id, d_id, d_name, d_street_1, d_street_2,
+        d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 30000, 3001)
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    args:
+      - ref_rand('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:1,3000')
+      - gen('string:6,16')
+      - gen('string:6,16')
+      - gen('string:10,20')
+      - gen('string:10,20')
+      - gen('string:10,20')
+      - gen('string:2,2')
+      - gen('string:9,9')
+      - gen('string:16,16')
+      - gen('float:0.0000,0.5000')
+      - gen('string:300,500')
+    query: |-
+      INSERT INTO edg.customer (c_w_id, c_d_id, c_id, c_first, c_middle,
+        c_last, c_street_1, c_street_2, c_city, c_state, c_zip, c_phone,
+        c_since, c_credit, c_credit_lim, c_discount, c_balance,
+        c_ytd_payment, c_payment_cnt, c_delivery_cnt, c_data)
+      VALUES ($1, $2, $3, $4, 'OE', $5, $6, $7, $8, $9, $10, $11,
+        toTimestamp(now()), 'GC', 50000, $12, -10, 10, 1, 0, $13)
+
+  - name: populate_history
+    type: exec_batch
+    count: customers
+    args:
+      - gen('uuid')
+      - gen('number:1,3000')
+      - gen('number:1,10')
+      - ref_rand('fetch_warehouses').w_id
+      - gen('string:12,24')
+    query: |-
+      INSERT INTO edg.history (h_id, h_c_id, h_c_d_id, h_c_w_id,
+        h_d_id, h_w_id, h_date, h_amount, h_data)
+      VALUES ($1, $2, $3, $4, $3, $4, toTimestamp(now()), 10, $5)
+
+  - name: populate_oorder
+    type: exec_batch
+    count: orders
+    args:
+      - ref_rand('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:1,3000')
+      - gen('number:1,3000')
+      - gen('number:5,15')
+    query: |-
+      INSERT INTO edg.oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
+        o_carrier_id, o_ol_cnt, o_all_local)
+      VALUES ($1, $2, $3, $4, toTimestamp(now()), 1, $5, 1)
+
+  - name: populate_new_order
+    type: exec_batch
+    count: districts
+    args:
+      - ref_rand('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:2101,3000')
+    query: |-
+      INSERT INTO edg.new_order (no_w_id, no_d_id, no_o_id)
+      VALUES ($1, $2, $3)
+
+  - name: populate_order_line
+    type: exec_batch
+    count: orders
+    args:
+      - ref_rand('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:1,3000')
+      - gen('number:1,15')
+      - gen('number:1,100000')
+      - gen('float:0.00,9999.99')
+      - gen('string:24,24')
+    query: |-
+      INSERT INTO edg.order_line (ol_w_id, ol_d_id, ol_o_id, ol_number,
+        ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount,
+        ol_dist_info)
+      VALUES ($1, $2, $3, $4, $5, $1, toTimestamp(now()), 5, $6, $7)
+
+  - name: populate_stock
+    type: exec_batch
+    count: stock
+    args:
+      - ref_rand('fetch_warehouses').w_id
+      - gen('number:1,100000')
+      - gen('number:10,100')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:26,50')
+    query: |-
+      INSERT INTO edg.stock (s_w_id, s_i_id, s_quantity,
+        s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05,
+        s_dist_06, s_dist_07, s_dist_08, s_dist_09, s_dist_10,
+        s_ytd, s_order_cnt, s_remote_cnt, s_data)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+        0, 0, 0, $14)
+
+deseed:
+
+  - name: truncate_order_line
+    type: exec
+    query: TRUNCATE edg.order_line
+
+  - name: truncate_new_order
+    type: exec
+    query: TRUNCATE edg.new_order
+
+  - name: truncate_oorder
+    type: exec
+    query: TRUNCATE edg.oorder
+
+  - name: truncate_history
+    type: exec
+    query: TRUNCATE edg.history
+
+  - name: truncate_stock
+    type: exec
+    query: TRUNCATE edg.stock
+
+  - name: truncate_customer
+    type: exec
+    query: TRUNCATE edg.customer
+
+  - name: truncate_district
+    type: exec
+    query: TRUNCATE edg.district
+
+  - name: truncate_warehouse
+    type: exec
+    query: TRUNCATE edg.warehouse
+
+  - name: truncate_item
+    type: exec
+    query: TRUNCATE edg.item
+
+down:
+
+  - name: drop_order_line
+    type: exec
+    query: DROP TABLE IF EXISTS edg.order_line
+
+  - name: drop_new_order
+    type: exec
+    query: DROP TABLE IF EXISTS edg.new_order
+
+  - name: drop_oorder
+    type: exec
+    query: DROP TABLE IF EXISTS edg.oorder
+
+  - name: drop_history
+    type: exec
+    query: DROP TABLE IF EXISTS edg.history
+
+  - name: drop_stock
+    type: exec
+    query: DROP TABLE IF EXISTS edg.stock
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS edg.customer
+
+  - name: drop_district
+    type: exec
+    query: DROP TABLE IF EXISTS edg.district
+
+  - name: drop_warehouse
+    type: exec
+    query: DROP TABLE IF EXISTS edg.warehouse
+
+  - name: drop_item
+    type: exec
+    query: DROP TABLE IF EXISTS edg.item
+
+  - name: drop_keyspace
+    type: exec
+    query: DROP KEYSPACE IF EXISTS edg
+
+init:
+  - name: fetch_warehouses
+    type: query
+    query: SELECT w_id FROM edg.warehouse
+
+run_weights:
+  new_order: 45
+  payment: 43
+  order_status: 4
+  delivery: 4
+  stock_level: 4
+
+run:
+
+  # New-Order transaction (TPC-C 2.4)
+  # Inserts a new order directly. Cassandra cannot atomically
+  # increment non-counter columns, so the full multi-step
+  # transaction is simplified to inserting the order record.
+  - name: new_order
+    type: exec
+    wait: 18s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+      - gen('number:3001,999999')
+      - gen('number:5,15')
+    query: |-
+      INSERT INTO edg.oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
+        o_ol_cnt, o_all_local)
+      VALUES ($1, $2, $4, $3, toTimestamp(now()), $5, 1)
+
+  # Payment transaction (TPC-C 2.5)
+  # Updates warehouse year-to-date total. Cassandra non-counter
+  # columns require overwrite semantics, so we set w_ytd to the
+  # payment amount (acceptable simplification for benchmarking).
+  - name: payment
+    type: exec
+    wait: 3s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+      - gen('number:100,500000')
+    query: |-
+      UPDATE edg.warehouse SET w_ytd = $4 WHERE w_id = $1
+
+  # Order-Status transaction (TPC-C 2.6)
+  # Retrieves the most recent order for a given customer's
+  # warehouse and district. Uses DESC clustering to get latest.
+  - name: order_status
+    type: query
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+    query: |-
+      SELECT * FROM edg.oorder
+      WHERE o_w_id = $1 AND o_d_id = $2
+      LIMIT 1
+
+  # Delivery transaction (TPC-C 2.7)
+  # Deletes the oldest new_order for a given warehouse/district.
+  # Requires all primary key components for Cassandra DELETE.
+  - name: delivery
+    type: exec
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:2101,3000')
+    query: |-
+      DELETE FROM edg.new_order
+      WHERE no_w_id = $1 AND no_d_id = $2 AND no_o_id = $3
+
+  # Stock-Level transaction (TPC-C 2.8)
+  # Scans stock for items below threshold. Requires ALLOW
+  # FILTERING since s_quantity is not part of the primary key.
+  - name: stock_level
+    type: query
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:10,20')
+    query: |-
+      SELECT s_i_id FROM edg.stock
+      WHERE s_w_id = $1 AND s_quantity < $3
+      ALLOW FILTERING

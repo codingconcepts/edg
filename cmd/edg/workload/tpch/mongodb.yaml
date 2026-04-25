@@ -1,0 +1,347 @@
+# TPC-H Workload (MongoDB)
+# ========================
+# MongoDB adaptation of the TPC-H decision-support benchmark.
+# Eight collections with a configurable scale factor.
+#
+# Run queries implement a representative subset of the 22
+# TPC-H query templates using MongoDB aggregation pipelines:
+#   Q1  - Pricing Summary (aggregation with $group)
+#   Q3  - Shipping Priority ($lookup for JOINs + aggregation)
+#   Q6  - Forecasting Revenue (single-collection $match + $group)
+#   Q14 - Promotion Effect ($lookup join + conditional aggregation)
+#
+# Known deviations from TPC-H spec:
+#   - Data is generated with random distributions rather than
+#     the TPC-H dbgen-specified distributions.
+#   - Only 4 of 22 queries are included.
+#   - Scale factor controls row counts but not exact sizes.
+
+globals:
+  scale_factor: 1
+  regions: 5
+  nations: 25
+  suppliers: 1000
+  parts: 20000
+  customers: 15000
+  orders: 150000
+  batch_size: 10000
+
+up:
+
+  - name: create_region
+    type: exec
+    query: |-
+      {"create": "region"}
+
+  - name: create_nation
+    type: exec
+    query: |-
+      {"create": "nation"}
+
+  - name: create_supplier
+    type: exec
+    query: |-
+      {"create": "supplier"}
+
+  - name: create_part
+    type: exec
+    query: |-
+      {"create": "part"}
+
+  - name: create_partsupp
+    type: exec
+    query: |-
+      {"create": "partsupp"}
+
+  - name: create_customer
+    type: exec
+    query: |-
+      {"create": "customer"}
+
+  - name: create_orders
+    type: exec
+    query: |-
+      {"create": "orders"}
+
+  - name: create_lineitem
+    type: exec
+    query: |-
+      {"create": "lineitem"}
+
+  - name: create_idx_lineitem_orderkey
+    type: exec
+    query: |-
+      {"createIndexes": "lineitem", "indexes": [{"key": {"l_orderkey": 1}, "name": "idx_lineitem_orderkey"}]}
+
+  - name: create_idx_lineitem_partkey
+    type: exec
+    query: |-
+      {"createIndexes": "lineitem", "indexes": [{"key": {"l_partkey": 1}, "name": "idx_lineitem_partkey"}]}
+
+  - name: create_idx_lineitem_shipdate
+    type: exec
+    query: |-
+      {"createIndexes": "lineitem", "indexes": [{"key": {"l_shipdate": 1}, "name": "idx_lineitem_shipdate"}]}
+
+  - name: create_idx_orders_custkey
+    type: exec
+    query: |-
+      {"createIndexes": "orders", "indexes": [{"key": {"o_custkey": 1}, "name": "idx_orders_custkey"}]}
+
+  - name: create_idx_customer_mktsegment
+    type: exec
+    query: |-
+      {"createIndexes": "customer", "indexes": [{"key": {"c_mktsegment": 1}, "name": "idx_customer_mktsegment"}]}
+
+seed:
+
+  - name: populate_region
+    type: exec_batch
+    count: regions
+    args:
+      - gen('number:0,4')
+      - set_seq(['AFRICA','AMERICA','ASIA','EUROPE','MIDDLE EAST'], [])
+      - gen('string:10,30')
+    query: |-
+      {"insert": "region", "documents": [{"_id": $1, "r_regionkey": $1, "r_name": "$2", "r_comment": "$3"}]}
+
+  - name: populate_nation
+    type: exec_batch
+    count: nations
+    args:
+      - gen('number:0,24')
+      - set_seq(['ALGERIA','ARGENTINA','BRAZIL','CANADA','EGYPT','ETHIOPIA','FRANCE','GERMANY','INDIA','INDONESIA','IRAN','IRAQ','JAPAN','JORDAN','KENYA','MOROCCO','MOZAMBIQUE','PERU','CHINA','ROMANIA','SAUDI ARABIA','VIETNAM','RUSSIA','UNITED KINGDOM','UNITED STATES'], [])
+      - gen('number:0,4')
+      - gen('string:10,30')
+    query: |-
+      {"insert": "nation", "documents": [{"_id": $1, "n_nationkey": $1, "n_name": "$2", "n_regionkey": $3, "n_comment": "$4"}]}
+
+  - name: populate_supplier
+    type: exec_batch
+    count: suppliers
+    args:
+      - gen('number:1,1000')
+      - gen('string:15,25')
+      - gen('string:15,40')
+      - gen('number:0,24')
+      - gen('string:15,15')
+      - gen('float:-1000.00,9000.00')
+      - gen('string:10,30')
+    query: |-
+      {"insert": "supplier", "documents": [{"_id": $1, "s_suppkey": $1, "s_name": "$2", "s_address": "$3", "s_nationkey": $4, "s_phone": "$5", "s_acctbal": $6, "s_comment": "$7"}]}
+
+  - name: populate_part
+    type: exec_batch
+    count: parts
+    args:
+      - gen('number:1,20000')
+      - gen('string:20,55')
+      - gen('string:10,25')
+      - gen('string:5,10')
+      - gen('string:10,25')
+      - gen('number:1,50')
+      - gen('string:5,10')
+      - gen('float:900.00,2000.00')
+      - gen('string:5,23')
+    query: |-
+      {"insert": "part", "documents": [{"_id": $1, "p_partkey": $1, "p_name": "$2", "p_mfgr": "$3", "p_brand": "$4", "p_type": "$5", "p_size": $6, "p_container": "$7", "p_retailprice": $8, "p_comment": "$9"}]}
+
+  - name: populate_partsupp
+    type: exec_batch
+    count: parts
+    args:
+      - gen('number:1,20000')
+      - gen('number:1,1000')
+      - gen('number:1,9999')
+      - gen('float:1.00,1000.00')
+      - gen('string:10,40')
+    query: |-
+      {"insert": "partsupp", "documents": [{"ps_partkey": $1, "ps_suppkey": $2, "ps_availqty": $3, "ps_supplycost": $4, "ps_comment": "$5"}]}
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    args:
+      - gen('number:1,15000')
+      - gen('string:10,25')
+      - gen('string:15,40')
+      - gen('number:0,24')
+      - gen('string:15,15')
+      - gen('float:-1000.00,9000.00')
+      - set_rand(['AUTOMOBILE','BUILDING','FURNITURE','MACHINERY','HOUSEHOLD'], [])
+      - gen('string:10,40')
+    query: |-
+      {"insert": "customer", "documents": [{"_id": $1, "c_custkey": $1, "c_name": "$2", "c_address": "$3", "c_nationkey": $4, "c_phone": "$5", "c_acctbal": $6, "c_mktsegment": "$7", "c_comment": "$8"}]}
+
+  - name: populate_orders
+    type: exec_batch
+    count: orders
+    args:
+      - gen('number:1,150000')
+      - gen('number:1,15000')
+      - set_rand(['O','F','P'], [])
+      - gen('float:1000.00,401000.00')
+      - gen('date:1992-01-01,1998-12-31')
+      - set_rand(['1-URGENT','2-HIGH','3-MEDIUM','4-NOT SPECIFIED','5-LOW'], [])
+      - gen('string:10,15')
+      - gen('string:10,30')
+    query: |-
+      {"insert": "orders", "documents": [{"_id": $1, "o_orderkey": $1, "o_custkey": $2, "o_orderstatus": "$3", "o_totalprice": $4, "o_orderdate": "$5", "o_orderpriority": "$6", "o_clerk": "$7", "o_shippriority": 0, "o_comment": "$8"}]}
+
+  - name: populate_lineitem
+    type: exec_batch
+    count: orders
+    args:
+      - gen('number:1,150000')
+      - gen('number:1,20000')
+      - gen('number:1,1000')
+      - gen('number:1,4')
+      - gen('float:1.00,50.00')
+      - gen('float:100.00,50000.00')
+      - gen('float:0.00,0.10')
+      - gen('float:0.00,0.08')
+      - set_rand(['R','A','N'], [])
+      - set_rand(['O','F'], [])
+      - gen('date:1992-01-01,1998-12-31')
+      - gen('date:1992-01-01,1998-12-31')
+      - gen('date:1992-01-01,1998-12-31')
+      - set_rand(['DELIVER IN PERSON','COLLECT COD','NONE','TAKE BACK RETURN'], [])
+      - set_rand(['REG AIR','AIR','RAIL','SHIP','TRUCK','MAIL','FOB'], [])
+      - gen('string:10,20')
+    query: |-
+      {"insert": "lineitem", "documents": [{"l_orderkey": $1, "l_partkey": $2, "l_suppkey": $3, "l_linenumber": $4, "l_quantity": $5, "l_extendedprice": $6, "l_discount": $7, "l_tax": $8, "l_returnflag": "$9", "l_linestatus": "$10", "l_shipdate": "$11", "l_commitdate": "$12", "l_receiptdate": "$13", "l_shipinstruct": "$14", "l_shipmode": "$15", "l_comment": "$16"}]}
+
+deseed:
+
+  - name: delete_lineitem
+    type: exec
+    query: |-
+      {"delete": "lineitem", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_orders
+    type: exec
+    query: |-
+      {"delete": "orders", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_partsupp
+    type: exec
+    query: |-
+      {"delete": "partsupp", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_customer
+    type: exec
+    query: |-
+      {"delete": "customer", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_part
+    type: exec
+    query: |-
+      {"delete": "part", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_supplier
+    type: exec
+    query: |-
+      {"delete": "supplier", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_nation
+    type: exec
+    query: |-
+      {"delete": "nation", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_region
+    type: exec
+    query: |-
+      {"delete": "region", "deletes": [{"q": {}, "limit": 0}]}
+
+down:
+
+  - name: drop_lineitem
+    type: exec
+    query: |-
+      {"drop": "lineitem"}
+
+  - name: drop_orders
+    type: exec
+    query: |-
+      {"drop": "orders"}
+
+  - name: drop_partsupp
+    type: exec
+    query: |-
+      {"drop": "partsupp"}
+
+  - name: drop_customer
+    type: exec
+    query: |-
+      {"drop": "customer"}
+
+  - name: drop_part
+    type: exec
+    query: |-
+      {"drop": "part"}
+
+  - name: drop_supplier
+    type: exec
+    query: |-
+      {"drop": "supplier"}
+
+  - name: drop_nation
+    type: exec
+    query: |-
+      {"drop": "nation"}
+
+  - name: drop_region
+    type: exec
+    query: |-
+      {"drop": "region"}
+
+run_weights:
+  q1_pricing_summary: 25
+  q3_shipping_priority: 25
+  q6_forecasting_revenue: 25
+  q14_promotion_effect: 25
+
+run:
+
+  # TPC-H Q1: Pricing Summary Report
+  # Aggregates lineitem by return flag and line status.
+  # Exercises full collection scan with heavy aggregation.
+  - name: q1_pricing_summary
+    type: query
+    args:
+      - gen('number:60,120')
+    query: |-
+      {"aggregate": "lineitem", "pipeline": [{"$match": {"l_shipdate": {"$lte": "1998-09-01"}}}, {"$group": {"_id": {"l_returnflag": "$l_returnflag", "l_linestatus": "$l_linestatus"}, "sum_qty": {"$sum": "$l_quantity"}, "sum_base_price": {"$sum": "$l_extendedprice"}, "sum_disc_price": {"$sum": {"$multiply": ["$l_extendedprice", {"$subtract": [1, "$l_discount"]}]}}, "sum_charge": {"$sum": {"$multiply": ["$l_extendedprice", {"$subtract": [1, "$l_discount"]}, {"$add": [1, "$l_tax"]}]}}, "avg_qty": {"$avg": "$l_quantity"}, "avg_price": {"$avg": "$l_extendedprice"}, "avg_disc": {"$avg": "$l_discount"}, "count_order": {"$sum": 1}}}, {"$sort": {"_id.l_returnflag": 1, "_id.l_linestatus": 1}}], "cursor": {}}
+
+  # TPC-H Q3: Shipping Priority
+  # Retrieves top unshipped orders by revenue for a market segment.
+  # Uses $lookup to join customer -> orders -> lineitem.
+  - name: q3_shipping_priority
+    type: query
+    args:
+      - set_rand(['AUTOMOBILE','BUILDING','FURNITURE','MACHINERY','HOUSEHOLD'], [])
+      - gen('number:1,31')
+    query: |-
+      {"aggregate": "customer", "pipeline": [{"$match": {"c_mktsegment": "$1"}}, {"$lookup": {"from": "orders", "localField": "c_custkey", "foreignField": "o_custkey", "as": "order_docs"}}, {"$unwind": "$order_docs"}, {"$match": {"order_docs.o_orderdate": {"$lt": "1995-03-15"}}}, {"$lookup": {"from": "lineitem", "localField": "order_docs.o_orderkey", "foreignField": "l_orderkey", "as": "line_docs"}}, {"$unwind": "$line_docs"}, {"$match": {"line_docs.l_shipdate": {"$gt": "1995-03-15"}}}, {"$group": {"_id": {"l_orderkey": "$line_docs.l_orderkey", "o_orderdate": "$order_docs.o_orderdate", "o_shippriority": "$order_docs.o_shippriority"}, "revenue": {"$sum": {"$multiply": ["$line_docs.l_extendedprice", {"$subtract": [1, "$line_docs.l_discount"]}]}}}}, {"$sort": {"revenue": -1, "_id.o_orderdate": 1}}, {"$limit": 10}], "cursor": {}}
+
+  # TPC-H Q6: Forecasting Revenue Change
+  # Single-collection scan with range predicates and aggregation.
+  - name: q6_forecasting_revenue
+    type: query
+    args:
+      - gen('number:1993,1997')
+      - uniform_f(0.02, 0.09, 2)
+      - gen('number:24,25')
+    query: |-
+      {"aggregate": "lineitem", "pipeline": [{"$match": {"l_shipdate": {"$gte": "$1-01-01", "$lt": "$1-12-31"}, "l_discount": {"$gte": $2, "$lte": $2}, "l_quantity": {"$lt": $3}}}, {"$group": {"_id": null, "revenue": {"$sum": {"$multiply": ["$l_extendedprice", "$l_discount"]}}}}], "cursor": {}}
+
+  # TPC-H Q14: Promotion Effect
+  # Measures fraction of revenue from promotional parts.
+  # Uses $lookup to join lineitem with part.
+  - name: q14_promotion_effect
+    type: query
+    args:
+      - gen('number:1993,1997')
+      - gen('number:1,12')
+    query: |-
+      {"aggregate": "lineitem", "pipeline": [{"$match": {"l_shipdate": {"$gte": "$1-01-01", "$lte": "$1-12-31"}}}, {"$lookup": {"from": "part", "localField": "l_partkey", "foreignField": "p_partkey", "as": "part_doc"}}, {"$unwind": "$part_doc"}, {"$group": {"_id": null, "promo_revenue": {"$sum": {"$cond": [{"$regexMatch": {"input": "$part_doc.p_type", "regex": "^PROMO"}}, {"$multiply": ["$l_extendedprice", {"$subtract": [1, "$l_discount"]}]}, 0]}}, "total_revenue": {"$sum": {"$multiply": ["$l_extendedprice", {"$subtract": [1, "$l_discount"]}]}}}}, {"$project": {"promo_revenue": {"$multiply": [100, {"$divide": ["$promo_revenue", "$total_revenue"]}]}}}], "cursor": {}}

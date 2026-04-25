@@ -1,0 +1,323 @@
+# SEATS Benchmark Workload — MongoDB
+# ====================================
+# Airline reservation system benchmark. Models flights, customers,
+# and reservations with contention on seat availability.
+#
+# Collections:
+#   country     - Reference collection of countries
+#   airport     - Airports with country reference
+#   airline     - Airlines
+#   customer    - Customers with home airport
+#   flight      - Flights between airports with seat counts
+#   reservation - Seat reservations on flights
+#
+# Transaction profiles:
+#   find_flights       - Look up flights from an airport (10%)
+#   find_open_seats    - Check available seats on a flight (35%)
+#   new_reservation    - Book a seat via findAndModify + insert (15%)
+#   update_customer    - Update customer info (10%)
+#   update_reservation - Change a reservation (10%)
+#   delete_reservation - Cancel a reservation (20%)
+
+globals:
+  countries: 50
+  airports: 200
+  airlines: 20
+  customers: 100000
+  flights: 50000
+  seats_per_flight: 150
+  reservations_per_flight: 120
+
+up:
+
+  - name: create_country
+    type: exec
+    query: |-
+      {"create": "country"}
+
+  - name: create_airport
+    type: exec
+    query: |-
+      {"create": "airport"}
+
+  - name: create_airline
+    type: exec
+    query: |-
+      {"create": "airline"}
+
+  - name: create_customer
+    type: exec
+    query: |-
+      {"create": "customer"}
+
+  - name: create_flight
+    type: exec
+    query: |-
+      {"create": "flight"}
+
+  - name: create_reservation
+    type: exec
+    query: |-
+      {"create": "reservation"}
+
+  # Index for flight departure lookups.
+  - name: create_idx_flight_depart
+    type: exec
+    query: |-
+      {"createIndexes": "flight", "indexes": [{"key": {"f_depart_ap_id": 1, "f_depart_time": 1}, "name": "idx_flight_depart"}]}
+
+  # Index for reservation lookups by flight.
+  - name: create_idx_reservation_flight
+    type: exec
+    query: |-
+      {"createIndexes": "reservation", "indexes": [{"key": {"r_f_id": 1}, "name": "idx_reservation_flight"}]}
+
+  # Index for reservation lookups by customer.
+  - name: create_idx_reservation_customer
+    type: exec
+    query: |-
+      {"createIndexes": "reservation", "indexes": [{"key": {"r_c_id": 1}, "name": "idx_reservation_customer"}]}
+
+seed:
+
+  - name: populate_country
+    type: exec_batch
+    count: countries
+    args:
+      - gen('number:1,50')
+      - regex('Country_[0-9]{3}')
+    query: |-
+      {"insert": "country", "documents": [{"_id": $1, "co_name": "$2"}]}
+
+  - name: populate_airport
+    type: exec_batch
+    count: airports
+    args:
+      - gen('number:1,200')
+      - regex('[A-Z]{3}')
+      - regex('Airport_[0-9]{4}')
+      - regex('City_[0-9]{4}')
+      - gen('number:1,50')
+    query: |-
+      {"insert": "airport", "documents": [{"_id": $1, "ap_code": "$2", "ap_name": "$3", "ap_city": "$4", "ap_co_id": $5}]}
+
+  - name: fetch_airports_seed
+    query: |-
+      {"find": "airport", "filter": {}, "projection": {"_id": 1}}
+
+  - name: populate_airline
+    type: exec_batch
+    count: airlines
+    args:
+      - gen('number:1,20')
+      - regex('[A-Z]{2}')
+      - regex('Airline_[0-9]{3}')
+    query: |-
+      {"insert": "airline", "documents": [{"_id": $1, "al_iata_code": "$2", "al_name": "$3"}]}
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    args:
+      - gen('number:1,100000')
+      - ref_rand('fetch_airports_seed')._id
+      - regex('[a-z]{16}')
+      - regex('[a-z]{16}')
+      - gen('number:0,999')
+      - gen('number:0,999')
+    query: |-
+      {"insert": "customer", "documents": [{"_id": $1, "c_base_ap_id": $2, "c_balance": 0, "c_sattr00": "$3", "c_sattr01": "$4", "c_iattr00": $5, "c_iattr01": $6}]}
+
+  - name: populate_flight
+    type: exec_batch
+    count: flights
+    args:
+      - gen('number:1,50000')
+      - gen('number:1,20')
+      - ref_rand('fetch_airports_seed')._id
+      - ref_rand('fetch_airports_seed')._id
+      - gen('timestamp')
+      - gen('timestamp')
+      - gen('number:100,999')
+    query: |-
+      {"insert": "flight", "documents": [{"_id": $1, "f_al_id": $2, "f_depart_ap_id": $3, "f_arrive_ap_id": $4, "f_depart_time": "$5", "f_arrive_time": "$6", "f_seats_total": 150, "f_seats_left": 150, "f_base_price": $7}]}
+
+  - name: fetch_flights_seed
+    query: |-
+      {"find": "flight", "filter": {}, "projection": {"_id": 1}}
+
+  - name: fetch_customers_seed
+    query: |-
+      {"find": "customer", "filter": {}, "projection": {"_id": 1}}
+
+  - name: populate_reservation
+    type: exec_batch
+    count: flights
+    args:
+      - gen('uuid')
+      - ref_rand('fetch_customers_seed')._id
+      - ref_rand('fetch_flights_seed')._id
+      - gen('number:1,150')
+      - gen('number:50,1000')
+      - gen('number:0,99')
+      - gen('number:0,99')
+    query: |-
+      {"insert": "reservation", "documents": [{"_id": "$1", "r_c_id": $2, "r_f_id": $3, "r_seat": $4, "r_price": $5, "r_iattr00": $6, "r_iattr01": $7}]}
+
+  # Decrement f_seats_left for each seeded reservation.
+  # In a real setup you would run an aggregation pipeline, but for
+  # benchmark seeding this is acceptable as an approximation.
+
+deseed:
+
+  - name: delete_reservation
+    type: exec
+    query: |-
+      {"delete": "reservation", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_flight
+    type: exec
+    query: |-
+      {"delete": "flight", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_customer
+    type: exec
+    query: |-
+      {"delete": "customer", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_airline
+    type: exec
+    query: |-
+      {"delete": "airline", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_airport
+    type: exec
+    query: |-
+      {"delete": "airport", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_country
+    type: exec
+    query: |-
+      {"delete": "country", "deletes": [{"q": {}, "limit": 0}]}
+
+down:
+
+  - name: drop_reservation
+    type: exec
+    query: |-
+      {"drop": "reservation"}
+
+  - name: drop_flight
+    type: exec
+    query: |-
+      {"drop": "flight"}
+
+  - name: drop_customer
+    type: exec
+    query: |-
+      {"drop": "customer"}
+
+  - name: drop_airline
+    type: exec
+    query: |-
+      {"drop": "airline"}
+
+  - name: drop_airport
+    type: exec
+    query: |-
+      {"drop": "airport"}
+
+  - name: drop_country
+    type: exec
+    query: |-
+      {"drop": "country"}
+
+init:
+
+  - name: fetch_flights
+    type: query
+    query: |-
+      {"find": "flight", "filter": {}, "projection": {"_id": 1, "f_depart_ap_id": 1, "f_seats_left": 1}}
+
+  - name: fetch_customers
+    type: query
+    query: |-
+      {"find": "customer", "filter": {}, "projection": {"_id": 1}}
+
+  - name: fetch_reservations
+    type: query
+    query: |-
+      {"find": "reservation", "filter": {}, "projection": {"_id": 1, "r_c_id": 1, "r_f_id": 1}}
+
+  - name: fetch_airports
+    type: query
+    query: |-
+      {"find": "airport", "filter": {}, "projection": {"_id": 1}}
+
+run_weights:
+  find_flights: 10
+  find_open_seats: 35
+  new_reservation: 15
+  update_customer: 10
+  update_reservation: 10
+  delete_reservation: 20
+
+run:
+
+  # Look up flights departing from an airport.
+  - name: find_flights
+    type: query
+    args:
+      - ref_rand('fetch_airports')._id
+    query: |-
+      {"find": "flight", "filter": {"f_depart_ap_id": $1}, "sort": {"f_depart_time": 1}, "limit": 10}
+
+  # Check how many seats are left on a flight.
+  - name: find_open_seats
+    type: query
+    args:
+      - ref_rand('fetch_flights')._id
+    query: |-
+      {"find": "flight", "filter": {"_id": $1}, "projection": {"f_seats_left": 1}, "limit": 1}
+
+  # Book a seat: atomically decrement seats_left using
+  # findAndModify, then insert reservation.
+  - name: new_reservation
+    type: exec
+    args:
+      - ref_rand('fetch_customers')._id
+      - ref_rand('fetch_flights')._id
+      - gen('number:1,150')
+      - gen('number:50,1000')
+      - gen('uuid')
+    query: |-
+      {"findAndModify": "flight", "query": {"_id": $2, "f_seats_left": {"$gt": 0}}, "update": {"$inc": {"f_seats_left": -1}}, "new": true}
+
+  # Update customer attributes.
+  - name: update_customer
+    type: exec
+    args:
+      - ref_rand('fetch_customers')._id
+      - gen('number:0,1000')
+      - gen('number:0,1000')
+    query: |-
+      {"update": "customer", "updates": [{"q": {"_id": $1}, "u": {"$set": {"c_iattr00": $2, "c_iattr01": $3}}}]}
+
+  # Change reservation attributes.
+  - name: update_reservation
+    type: exec
+    args:
+      - ref_rand('fetch_reservations')._id
+      - gen('number:0,100')
+    query: |-
+      {"update": "reservation", "updates": [{"q": {"_id": "$1"}, "u": {"$set": {"r_iattr00": $2}}}]}
+
+  # Cancel a reservation and release the seat.
+  # Delete the reservation, then increment seats on the flight.
+  - name: delete_reservation
+    type: exec
+    args:
+      - ref_rand('fetch_reservations')._id
+      - ref_rand('fetch_reservations').r_f_id
+    query: |-
+      {"delete": "reservation", "deletes": [{"q": {"_id": "$1"}, "limit": 1}]}

@@ -1,0 +1,60 @@
+# Sysbench oltp_update_index Workload (MongoDB)
+# ===============================================
+# Pure indexed-field update micro-benchmark. Every operation
+# increments field k (which has a secondary index), causing
+# both primary and index writes. Useful for measuring write
+# amplification and secondary index maintenance overhead.
+#
+# Schema matches standard sysbench sbtest1 collection.
+
+globals:
+  records: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_sbtest1
+    type: exec
+    query: |-
+      {"create": "sbtest1"}
+
+seed:
+
+  - name: populate_sbtest1
+    type: exec_batch
+    count: records
+    args:
+      - seq()
+      - gen('number:0,10000')
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      {"insert": "sbtest1", "documents": [{"_id": $1, "k": $2, "c": "$3", "pad": "$4"}]}
+
+  - name: create_idx_k
+    type: exec
+    query: |-
+      {"createIndexes": "sbtest1", "indexes": [{"key": {"k": 1}, "name": "k_1"}]}
+
+deseed:
+
+  - name: delete_sbtest1
+    type: exec
+    query: |-
+      {"delete": "sbtest1", "deletes": [{"q": {}, "limit": 0}]}
+
+down:
+
+  - name: drop_sbtest1
+    type: exec
+    query: |-
+      {"drop": "sbtest1"}
+
+run:
+
+  - name: update_index
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      {"update": "sbtest1", "updates": [{"q": {"_id": $1}, "u": {"$inc": {"k": 1}}}]}

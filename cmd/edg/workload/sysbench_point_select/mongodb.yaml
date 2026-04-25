@@ -1,0 +1,54 @@
+# Sysbench oltp_point_select Workload (MongoDB)
+# ===============================================
+# Pure point-select micro-benchmark. Every operation is a single
+# primary-key lookup. Useful for measuring read latency floor and
+# connection overhead.
+#
+# Schema matches standard sysbench sbtest1 collection.
+
+globals:
+  records: 10000
+  batch_size: 1000
+
+up:
+
+  - name: create_sbtest1
+    type: exec
+    query: |-
+      {"create": "sbtest1"}
+
+seed:
+
+  - name: populate_sbtest1
+    type: exec_batch
+    count: records
+    args:
+      - seq()
+      - gen('number:0,10000')
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      {"insert": "sbtest1", "documents": [{"_id": $1, "k": $2, "c": "$3", "pad": "$4"}]}
+
+deseed:
+
+  - name: delete_sbtest1
+    type: exec
+    query: |-
+      {"delete": "sbtest1", "deletes": [{"q": {}, "limit": 0}]}
+
+down:
+
+  - name: drop_sbtest1
+    type: exec
+    query: |-
+      {"drop": "sbtest1"}
+
+run:
+
+  - name: point_select
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      {"find": "sbtest1", "filter": {"_id": $1}}

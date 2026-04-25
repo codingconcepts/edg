@@ -1,0 +1,420 @@
+# TPC-C Benchmark Workload (MongoDB)
+# ===================================
+# MongoDB adaptation of the TPC-C benchmark. Complex multi-table
+# transactions are simplified to their most critical single-document
+# operations, as MongoDB does not support writable CTEs.
+#
+# Data cardinalities per TPC-C spec (rev 5.11):
+#   item:       100,000 (fixed)
+#   warehouse:  W (configurable)
+#   district:   10 x W
+#   customer:   3,000 x 10 x W
+#   history:    1 per customer (initial)
+#   oorder:     3,000 x 10 x W
+#   new_order:  900 x 10 x W (orders 2101-3000)
+#   order_line: ~10 x 3,000 x 10 x W (5-15 per order)
+#   stock:      100,000 x W
+#
+# Run queries implement simplified versions of the 5 TPC-C
+# transaction profiles:
+#   - New-Order  (findAndModify on district for next order ID)
+#   - Payment    (findAndModify on customer for balance update)
+#   - Order-Status (find latest order by customer)
+#   - Delivery   (findAndModify to remove oldest new_order)
+#   - Stock-Level (aggregation pipeline on stock)
+
+globals:
+  warehouses: 1    # W
+  districts: 10    # W * 10
+  customers: 30000 # W * 10 * 3000
+  orders: 30000    # W * 10 * 3000
+  stock: 100000    # W * 100,000
+  items: 100000    # 100,000
+
+up:
+
+  - name: create_warehouse
+    type: exec
+    query: |-
+      {"create": "warehouse"}
+
+  - name: create_district
+    type: exec
+    query: |-
+      {"create": "district"}
+
+  - name: create_customer
+    type: exec
+    query: |-
+      {"create": "customer"}
+
+  - name: create_history
+    type: exec
+    query: |-
+      {"create": "history"}
+
+  - name: create_oorder
+    type: exec
+    query: |-
+      {"create": "oorder"}
+
+  - name: create_new_order
+    type: exec
+    query: |-
+      {"create": "new_order"}
+
+  - name: create_order_line
+    type: exec
+    query: |-
+      {"create": "order_line"}
+
+  - name: create_item
+    type: exec
+    query: |-
+      {"create": "item"}
+
+  - name: create_stock
+    type: exec
+    query: |-
+      {"create": "stock"}
+
+  - name: create_idx_customer_name
+    type: exec
+    query: |-
+      {"createIndexes": "customer", "indexes": [{"key": {"c_w_id": 1, "c_d_id": 1, "c_last": 1, "c_first": 1}, "name": "idx_customer_name"}]}
+
+  - name: create_idx_oorder_customer
+    type: exec
+    query: |-
+      {"createIndexes": "oorder", "indexes": [{"key": {"o_w_id": 1, "o_d_id": 1, "o_c_id": 1, "o_id": -1}, "name": "idx_oorder_customer"}]}
+
+  - name: create_idx_district_pk
+    type: exec
+    query: |-
+      {"createIndexes": "district", "indexes": [{"key": {"d_w_id": 1, "d_id": 1}, "name": "idx_district_pk", "unique": true}]}
+
+  - name: create_idx_new_order_pk
+    type: exec
+    query: |-
+      {"createIndexes": "new_order", "indexes": [{"key": {"no_w_id": 1, "no_d_id": 1, "no_o_id": 1}, "name": "idx_new_order_pk", "unique": true}]}
+
+  - name: create_idx_stock_pk
+    type: exec
+    query: |-
+      {"createIndexes": "stock", "indexes": [{"key": {"s_w_id": 1, "s_i_id": 1}, "name": "idx_stock_pk", "unique": true}]}
+
+seed:
+
+  - name: populate_item
+    type: exec_batch
+    count: items
+    args:
+      - gen('number:1,100000')
+      - gen('number:1,10000')
+      - gen('string:6,24')
+      - gen('float:1.00,100.00')
+      - gen('string:26,50')
+    query: |-
+      {"insert": "item", "documents": [{"_id": $1, "i_id": $1, "i_im_id": $2, "i_name": "$3", "i_price": $4, "i_data": "$5"}]}
+
+  - name: populate_warehouse
+    type: exec_batch
+    count: warehouses
+    args:
+      - gen('number:1,1000')
+      - gen('string:6,10')
+      - gen('string:10,20')
+      - gen('string:10,20')
+      - gen('string:10,20')
+      - gen('string:2,2')
+      - gen('string:9,9')
+      - gen('float:0.0000,0.2000')
+    query: |-
+      {"insert": "warehouse", "documents": [{"_id": $1, "w_id": $1, "w_name": "$2", "w_street_1": "$3", "w_street_2": "$4", "w_city": "$5", "w_state": "$6", "w_zip": "$7", "w_tax": $8, "w_ytd": 300000}]}
+
+  - name: fetch_warehouses
+    query: |-
+      {"find": "warehouse", "filter": {}, "projection": {"w_id": 1}}
+
+  - name: populate_district
+    type: exec_batch
+    count: districts
+    args:
+      - ref_rand('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('string:6,10')
+      - gen('string:10,20')
+      - gen('string:10,20')
+      - gen('string:10,20')
+      - gen('string:2,2')
+      - gen('string:9,9')
+      - gen('float:0.0000,0.2000')
+    query: |-
+      {"insert": "district", "documents": [{"d_w_id": $1, "d_id": $2, "d_name": "$3", "d_street_1": "$4", "d_street_2": "$5", "d_city": "$6", "d_state": "$7", "d_zip": "$8", "d_tax": $9, "d_ytd": 30000, "d_next_o_id": 3001}]}
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    args:
+      - ref_rand('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:1,3000')
+      - gen('string:6,16')
+      - gen('string:6,16')
+      - gen('string:10,20')
+      - gen('string:10,20')
+      - gen('string:10,20')
+      - gen('string:2,2')
+      - gen('string:9,9')
+      - gen('string:16,16')
+      - gen('float:0.0000,0.5000')
+      - gen('string:300,500')
+    query: |-
+      {"insert": "customer", "documents": [{"c_w_id": $1, "c_d_id": $2, "c_id": $3, "c_first": "$4", "c_middle": "OE", "c_last": "$5", "c_street_1": "$6", "c_street_2": "$7", "c_city": "$8", "c_state": "$9", "c_zip": "$10", "c_phone": "$11", "c_since": {"$date": "2024-01-01T00:00:00Z"}, "c_credit": "GC", "c_credit_lim": 50000, "c_discount": $12, "c_balance": -10, "c_ytd_payment": 10, "c_payment_cnt": 1, "c_delivery_cnt": 0, "c_data": "$13"}]}
+
+  - name: populate_history
+    type: exec_batch
+    count: customers
+    args:
+      - gen('uuid')
+      - gen('number:1,3000')
+      - gen('number:1,10')
+      - ref_rand('fetch_warehouses').w_id
+      - gen('string:12,24')
+    query: |-
+      {"insert": "history", "documents": [{"_id": "$1", "h_c_id": $2, "h_c_d_id": $3, "h_c_w_id": $4, "h_d_id": $3, "h_w_id": $4, "h_date": {"$date": "2024-01-01T00:00:00Z"}, "h_amount": 10, "h_data": "$5"}]}
+
+  - name: populate_oorder
+    type: exec_batch
+    count: orders
+    args:
+      - ref_rand('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:1,3000')
+      - gen('number:1,3000')
+      - gen('number:5,15')
+    query: |-
+      {"insert": "oorder", "documents": [{"o_w_id": $1, "o_d_id": $2, "o_id": $3, "o_c_id": $4, "o_entry_d": {"$date": "2024-01-01T00:00:00Z"}, "o_carrier_id": 1, "o_ol_cnt": $5, "o_all_local": 1}]}
+
+  - name: populate_new_order
+    type: exec_batch
+    count: districts
+    args:
+      - ref_rand('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:2101,3000')
+    query: |-
+      {"insert": "new_order", "documents": [{"no_w_id": $1, "no_d_id": $2, "no_o_id": $3}]}
+
+  - name: populate_order_line
+    type: exec_batch
+    count: orders
+    args:
+      - ref_rand('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:1,3000')
+      - gen('number:1,15')
+      - gen('number:1,100000')
+      - gen('float:0.00,9999.99')
+      - gen('string:24,24')
+    query: |-
+      {"insert": "order_line", "documents": [{"ol_w_id": $1, "ol_d_id": $2, "ol_o_id": $3, "ol_number": $4, "ol_i_id": $5, "ol_supply_w_id": $1, "ol_delivery_d": {"$date": "2024-01-01T00:00:00Z"}, "ol_quantity": 5, "ol_amount": $6, "ol_dist_info": "$7"}]}
+
+  - name: populate_stock
+    type: exec_batch
+    count: stock
+    args:
+      - ref_rand('fetch_warehouses').w_id
+      - gen('number:1,100000')
+      - gen('number:10,100')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:24,24')
+      - gen('string:26,50')
+    query: |-
+      {"insert": "stock", "documents": [{"s_w_id": $1, "s_i_id": $2, "s_quantity": $3, "s_dist_01": "$4", "s_dist_02": "$5", "s_dist_03": "$6", "s_dist_04": "$7", "s_dist_05": "$8", "s_dist_06": "$9", "s_dist_07": "$10", "s_dist_08": "$11", "s_dist_09": "$12", "s_dist_10": "$13", "s_ytd": 0, "s_order_cnt": 0, "s_remote_cnt": 0, "s_data": "$14"}]}
+
+deseed:
+
+  - name: delete_order_line
+    type: exec
+    query: |-
+      {"delete": "order_line", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_new_order
+    type: exec
+    query: |-
+      {"delete": "new_order", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_oorder
+    type: exec
+    query: |-
+      {"delete": "oorder", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_history
+    type: exec
+    query: |-
+      {"delete": "history", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_stock
+    type: exec
+    query: |-
+      {"delete": "stock", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_customer
+    type: exec
+    query: |-
+      {"delete": "customer", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_district
+    type: exec
+    query: |-
+      {"delete": "district", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_warehouse
+    type: exec
+    query: |-
+      {"delete": "warehouse", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_item
+    type: exec
+    query: |-
+      {"delete": "item", "deletes": [{"q": {}, "limit": 0}]}
+
+down:
+
+  - name: drop_order_line
+    type: exec
+    query: |-
+      {"drop": "order_line"}
+
+  - name: drop_new_order
+    type: exec
+    query: |-
+      {"drop": "new_order"}
+
+  - name: drop_oorder
+    type: exec
+    query: |-
+      {"drop": "oorder"}
+
+  - name: drop_history
+    type: exec
+    query: |-
+      {"drop": "history"}
+
+  - name: drop_stock
+    type: exec
+    query: |-
+      {"drop": "stock"}
+
+  - name: drop_customer
+    type: exec
+    query: |-
+      {"drop": "customer"}
+
+  - name: drop_district
+    type: exec
+    query: |-
+      {"drop": "district"}
+
+  - name: drop_warehouse
+    type: exec
+    query: |-
+      {"drop": "warehouse"}
+
+  - name: drop_item
+    type: exec
+    query: |-
+      {"drop": "item"}
+
+init:
+  - name: fetch_warehouses
+    type: query
+    query: |-
+      {"find": "warehouse", "filter": {}, "projection": {"w_id": 1}}
+
+run_weights:
+  new_order: 45
+  payment: 43
+  order_status: 4
+  delivery: 4
+  stock_level: 4
+
+run:
+
+  # New-Order transaction (TPC-C 2.4)
+  # Atomically increments district next_o_id and returns the new order ID.
+  # The full multi-step transaction (insert order, update stock, insert
+  # order lines) is simplified to the critical findAndModify on district.
+  - name: new_order
+    type: query
+    wait: 18s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+      - nurand_n(8191, 1, items, 5, 15)
+    query: |-
+      {"findAndModify": "district", "query": {"d_w_id": $1, "d_id": $2}, "update": {"$inc": {"d_next_o_id": 1}}, "new": true}
+
+  # Payment transaction (TPC-C 2.5)
+  # Updates customer balance atomically. The full transaction
+  # (update warehouse ytd, district ytd, customer balance, insert
+  # history) is simplified to the customer findAndModify.
+  - name: payment
+    type: query
+    wait: 3s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+      - gen('number:100,500000')
+    query: |-
+      {"findAndModify": "customer", "query": {"c_w_id": $1, "c_d_id": $2, "c_id": $3}, "update": {"$inc": {"c_balance": $4, "c_ytd_payment": $4, "c_payment_cnt": 1}}, "new": true}
+
+  # Order-Status transaction (TPC-C 2.6)
+  # Finds the most recent order for a customer.
+  - name: order_status
+    type: query
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - nurand(1023, 1, customers / districts)
+    query: |-
+      {"find": "oorder", "filter": {"o_w_id": $1, "o_d_id": $2, "o_c_id": $3}, "sort": {"o_id": -1}, "limit": 1}
+
+  # Delivery transaction (TPC-C 2.7)
+  # Removes the oldest new_order atomically. The full transaction
+  # (update oorder carrier, update order_line delivery date, update
+  # customer balance) is simplified to the new_order findAndModify.
+  - name: delivery
+    type: exec
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+    query: |-
+      {"findAndModify": "new_order", "query": {"no_w_id": $1}, "sort": {"no_d_id": 1, "no_o_id": 1}, "remove": true}
+
+  # Stock-Level transaction (TPC-C 2.8)
+  # Counts items with stock below threshold. The SQL version joins
+  # district, order_line, and stock; simplified here to a direct
+  # aggregation on the stock collection.
+  - name: stock_level
+    type: query
+    wait: 2s
+    args:
+      - ref_perm('fetch_warehouses').w_id
+      - gen('number:1,10')
+      - gen('number:10,20')
+    query: |-
+      {"aggregate": "stock", "pipeline": [{"$match": {"s_w_id": $1, "s_quantity": {"$lt": $3}}}, {"$count": "low_stock"}], "cursor": {}}

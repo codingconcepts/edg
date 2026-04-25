@@ -1,0 +1,430 @@
+# TPC-H Workload (Cassandra)
+# ==========================
+# Cassandra adaptation of the TPC-H decision-support benchmark.
+# Eight tables with a configurable scale factor.
+#
+# Cassandra cannot perform complex aggregations or JOINs natively.
+# Run queries are simplified to single-table scans and point reads
+# that exercise Cassandra's strengths while keeping the benchmark
+# meaningful.
+#
+# Run queries implement simplified versions of 4 TPC-H templates:
+#   Q1  - Pricing Summary (full table scan with ALLOW FILTERING)
+#   Q3  - Shipping Priority (single-table scan on orders)
+#   Q6  - Forecasting Revenue (single-table scan on lineitem)
+#   Q14 - Promotion Effect (single-table scan on part)
+#
+# Known deviations from TPC-H spec:
+#   - No JOINs; each query operates on a single table
+#   - Aggregations simplified to scans (Cassandra lacks GROUP BY
+#     with complex expressions in older versions)
+#   - Scale factor controls row counts but not exact sizes
+
+globals:
+  scale_factor: 1
+  regions: 5
+  nations: 25
+  suppliers: 1000
+  parts: 20000
+  customers: 15000
+  orders: 150000
+  batch_size: 10000
+
+up:
+
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_region
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.region (
+        r_regionkey INT,
+        r_name TEXT,
+        r_comment TEXT,
+        PRIMARY KEY (r_regionkey)
+      )
+
+  - name: create_nation
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.nation (
+        n_nationkey INT,
+        n_name TEXT,
+        n_regionkey INT,
+        n_comment TEXT,
+        PRIMARY KEY (n_nationkey)
+      )
+
+  - name: create_supplier
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.supplier (
+        s_suppkey INT,
+        s_name TEXT,
+        s_address TEXT,
+        s_nationkey INT,
+        s_phone TEXT,
+        s_acctbal DOUBLE,
+        s_comment TEXT,
+        PRIMARY KEY (s_suppkey)
+      )
+
+  - name: create_part
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.part (
+        p_partkey INT,
+        p_name TEXT,
+        p_mfgr TEXT,
+        p_brand TEXT,
+        p_type TEXT,
+        p_size INT,
+        p_container TEXT,
+        p_retailprice DOUBLE,
+        p_comment TEXT,
+        PRIMARY KEY (p_partkey)
+      )
+
+  - name: create_partsupp
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.partsupp (
+        ps_partkey INT,
+        ps_suppkey INT,
+        ps_availqty INT,
+        ps_supplycost DOUBLE,
+        ps_comment TEXT,
+        PRIMARY KEY (ps_partkey, ps_suppkey)
+      )
+
+  - name: create_customer
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.customer (
+        c_custkey INT,
+        c_name TEXT,
+        c_address TEXT,
+        c_nationkey INT,
+        c_phone TEXT,
+        c_acctbal DOUBLE,
+        c_mktsegment TEXT,
+        c_comment TEXT,
+        PRIMARY KEY (c_custkey)
+      )
+
+  - name: create_orders
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.orders (
+        o_orderkey INT,
+        o_custkey INT,
+        o_orderstatus TEXT,
+        o_totalprice DOUBLE,
+        o_orderdate TEXT,
+        o_orderpriority TEXT,
+        o_clerk TEXT,
+        o_shippriority INT,
+        o_comment TEXT,
+        PRIMARY KEY (o_orderkey)
+      )
+
+  - name: create_lineitem
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.lineitem (
+        l_orderkey INT,
+        l_linenumber INT,
+        l_partkey INT,
+        l_suppkey INT,
+        l_quantity DOUBLE,
+        l_extendedprice DOUBLE,
+        l_discount DOUBLE,
+        l_tax DOUBLE,
+        l_returnflag TEXT,
+        l_linestatus TEXT,
+        l_shipdate TEXT,
+        l_commitdate TEXT,
+        l_receiptdate TEXT,
+        l_shipinstruct TEXT,
+        l_shipmode TEXT,
+        l_comment TEXT,
+        PRIMARY KEY (l_orderkey, l_linenumber)
+      )
+
+seed:
+
+  - name: populate_region
+    type: exec_batch
+    count: regions
+    args:
+      - gen('number:0,4')
+      - set_seq(['AFRICA','AMERICA','ASIA','EUROPE','MIDDLE EAST'], [])
+      - gen('string:10,30')
+    query: |-
+      INSERT INTO edg.region (r_regionkey, r_name, r_comment)
+      VALUES ($1, $2, $3)
+
+  - name: populate_nation
+    type: exec_batch
+    count: nations
+    args:
+      - gen('number:0,24')
+      - set_seq(['ALGERIA','ARGENTINA','BRAZIL','CANADA','EGYPT','ETHIOPIA','FRANCE','GERMANY','INDIA','INDONESIA','IRAN','IRAQ','JAPAN','JORDAN','KENYA','MOROCCO','MOZAMBIQUE','PERU','CHINA','ROMANIA','SAUDI ARABIA','VIETNAM','RUSSIA','UNITED KINGDOM','UNITED STATES'], [])
+      - gen('number:0,4')
+      - gen('string:10,30')
+    query: |-
+      INSERT INTO edg.nation (n_nationkey, n_name, n_regionkey, n_comment)
+      VALUES ($1, $2, $3, $4)
+
+  - name: populate_supplier
+    type: exec_batch
+    count: suppliers
+    args:
+      - gen('number:1,1000')
+      - gen('string:15,25')
+      - gen('string:15,40')
+      - gen('number:0,24')
+      - gen('string:15,15')
+      - gen('float:-1000.00,9000.00')
+      - gen('string:10,30')
+    query: |-
+      INSERT INTO edg.supplier (s_suppkey, s_name, s_address, s_nationkey,
+        s_phone, s_acctbal, s_comment)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+
+  - name: populate_part
+    type: exec_batch
+    count: parts
+    args:
+      - gen('number:1,20000')
+      - gen('string:20,55')
+      - gen('string:10,25')
+      - gen('string:5,10')
+      - gen('string:10,25')
+      - gen('number:1,50')
+      - gen('string:5,10')
+      - gen('float:900.00,2000.00')
+      - gen('string:5,23')
+    query: |-
+      INSERT INTO edg.part (p_partkey, p_name, p_mfgr, p_brand, p_type,
+        p_size, p_container, p_retailprice, p_comment)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+
+  - name: populate_partsupp
+    type: exec_batch
+    count: parts
+    args:
+      - gen('number:1,20000')
+      - gen('number:1,1000')
+      - gen('number:1,9999')
+      - gen('float:1.00,1000.00')
+      - gen('string:10,40')
+    query: |-
+      INSERT INTO edg.partsupp (ps_partkey, ps_suppkey, ps_availqty,
+        ps_supplycost, ps_comment)
+      VALUES ($1, $2, $3, $4, $5)
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    args:
+      - gen('number:1,15000')
+      - gen('string:10,25')
+      - gen('string:15,40')
+      - gen('number:0,24')
+      - gen('string:15,15')
+      - gen('float:-1000.00,9000.00')
+      - set_rand(['AUTOMOBILE','BUILDING','FURNITURE','MACHINERY','HOUSEHOLD'], [])
+      - gen('string:10,40')
+    query: |-
+      INSERT INTO edg.customer (c_custkey, c_name, c_address, c_nationkey,
+        c_phone, c_acctbal, c_mktsegment, c_comment)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+
+  - name: populate_orders
+    type: exec_batch
+    count: orders
+    args:
+      - gen('number:1,150000')
+      - gen('number:1,15000')
+      - set_rand(['O','F','P'], [])
+      - gen('float:1000.00,401000.00')
+      - gen('date:1992-01-01,1998-12-31')
+      - set_rand(['1-URGENT','2-HIGH','3-MEDIUM','4-NOT SPECIFIED','5-LOW'], [])
+      - gen('string:10,15')
+      - gen('string:10,30')
+    query: |-
+      INSERT INTO edg.orders (o_orderkey, o_custkey, o_orderstatus,
+        o_totalprice, o_orderdate, o_orderpriority, o_clerk,
+        o_shippriority, o_comment)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8)
+
+  - name: populate_lineitem
+    type: exec_batch
+    count: orders
+    args:
+      - gen('number:1,150000')
+      - gen('number:1,20000')
+      - gen('number:1,1000')
+      - gen('number:1,4')
+      - gen('float:1.00,50.00')
+      - gen('float:100.00,50000.00')
+      - gen('float:0.00,0.10')
+      - gen('float:0.00,0.08')
+      - set_rand(['R','A','N'], [])
+      - set_rand(['O','F'], [])
+      - gen('date:1992-01-01,1998-12-31')
+      - gen('date:1992-01-01,1998-12-31')
+      - gen('date:1992-01-01,1998-12-31')
+      - set_rand(['DELIVER IN PERSON','COLLECT COD','NONE','TAKE BACK RETURN'], [])
+      - set_rand(['REG AIR','AIR','RAIL','SHIP','TRUCK','MAIL','FOB'], [])
+      - gen('string:10,20')
+    query: |-
+      INSERT INTO edg.lineitem (l_orderkey, l_partkey, l_suppkey,
+        l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax,
+        l_returnflag, l_linestatus, l_shipdate, l_commitdate,
+        l_receiptdate, l_shipinstruct, l_shipmode, l_comment)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+        $13, $14, $15, $16)
+
+deseed:
+
+  - name: truncate_lineitem
+    type: exec
+    query: TRUNCATE edg.lineitem
+
+  - name: truncate_orders
+    type: exec
+    query: TRUNCATE edg.orders
+
+  - name: truncate_partsupp
+    type: exec
+    query: TRUNCATE edg.partsupp
+
+  - name: truncate_customer
+    type: exec
+    query: TRUNCATE edg.customer
+
+  - name: truncate_part
+    type: exec
+    query: TRUNCATE edg.part
+
+  - name: truncate_supplier
+    type: exec
+    query: TRUNCATE edg.supplier
+
+  - name: truncate_nation
+    type: exec
+    query: TRUNCATE edg.nation
+
+  - name: truncate_region
+    type: exec
+    query: TRUNCATE edg.region
+
+down:
+
+  - name: drop_lineitem
+    type: exec
+    query: DROP TABLE IF EXISTS edg.lineitem
+
+  - name: drop_orders
+    type: exec
+    query: DROP TABLE IF EXISTS edg.orders
+
+  - name: drop_partsupp
+    type: exec
+    query: DROP TABLE IF EXISTS edg.partsupp
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS edg.customer
+
+  - name: drop_part
+    type: exec
+    query: DROP TABLE IF EXISTS edg.part
+
+  - name: drop_supplier
+    type: exec
+    query: DROP TABLE IF EXISTS edg.supplier
+
+  - name: drop_nation
+    type: exec
+    query: DROP TABLE IF EXISTS edg.nation
+
+  - name: drop_region
+    type: exec
+    query: DROP TABLE IF EXISTS edg.region
+
+  - name: drop_keyspace
+    type: exec
+    query: DROP KEYSPACE IF EXISTS edg
+
+run_weights:
+  q1_pricing_summary: 25
+  q3_shipping_priority: 25
+  q6_forecasting_revenue: 25
+  q14_promotion_effect: 25
+
+run:
+
+  # TPC-H Q1: Pricing Summary Report
+  # Scans lineitem for shipped items. Cassandra cannot perform
+  # GROUP BY with complex aggregations, so this returns raw rows
+  # for client-side aggregation.
+  - name: q1_pricing_summary
+    type: query
+    args:
+      - gen('number:60,120')
+    query: |-
+      SELECT l_returnflag, l_linestatus, l_quantity, l_extendedprice,
+        l_discount, l_tax
+      FROM edg.lineitem
+      WHERE l_shipdate <= '1998-09-01'
+      ALLOW FILTERING
+
+  # TPC-H Q3: Shipping Priority
+  # Scans orders for unshipped orders. Cannot JOIN with customer
+  # or lineitem in Cassandra; simplified to order table scan.
+  - name: q3_shipping_priority
+    type: query
+    args:
+      - set_rand(['AUTOMOBILE','BUILDING','FURNITURE','MACHINERY','HOUSEHOLD'], [])
+      - gen('number:1,31')
+    query: |-
+      SELECT o_orderkey, o_totalprice, o_orderdate, o_shippriority
+      FROM edg.orders
+      WHERE o_orderstatus = 'O'
+      ALLOW FILTERING
+
+  # TPC-H Q6: Forecasting Revenue Change
+  # Single-table scan on lineitem with range predicates.
+  # Cassandra cannot compute SUM natively; returns matching rows.
+  - name: q6_forecasting_revenue
+    type: query
+    args:
+      - gen('number:1993,1997')
+      - uniform_f(0.02, 0.09, 2)
+      - gen('number:24,25')
+    query: |-
+      SELECT l_extendedprice, l_discount
+      FROM edg.lineitem
+      WHERE l_shipdate >= '$1-01-01' AND l_shipdate < '$1-12-31'
+        AND l_quantity < $3
+      ALLOW FILTERING
+
+  # TPC-H Q14: Promotion Effect
+  # Reads part records. Cannot JOIN with lineitem in Cassandra;
+  # simplified to scanning parts with a type prefix filter.
+  - name: q14_promotion_effect
+    type: query
+    args:
+      - gen('number:1993,1997')
+      - gen('number:1,12')
+    query: |-
+      SELECT p_partkey, p_type, p_retailprice
+      FROM edg.part
+      ALLOW FILTERING

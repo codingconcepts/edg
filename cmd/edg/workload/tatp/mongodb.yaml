@@ -1,0 +1,267 @@
+# TATP Benchmark Workload — MongoDB
+# ==================================
+# Telecom Application Transaction Processing benchmark.
+# Models a mobile phone subscriber database with 80% reads
+# and 20% writes. Simple schema, high throughput.
+#
+# Collections:
+#   subscriber       - Phone subscribers with data fields
+#   access_info      - Access records per subscriber
+#   special_facility - Special facility flags per subscriber
+#   call_forwarding  - Call forwarding rules
+#
+# Transaction profiles (per TATP spec):
+#   get_subscriber_data    - Point lookup by subscriber ID (35%)
+#   get_new_destination    - Call forwarding lookup (10%)
+#   get_access_data        - Access info lookup (35%)
+#   update_subscriber_data - Toggle a subscriber bit (2%)
+#   update_location        - Update subscriber location (14%)
+#   insert_call_forwarding - Add a forwarding rule (2%)
+#   delete_call_forwarding - Remove a forwarding rule (2%)
+
+globals:
+  subscribers: 100000
+
+up:
+
+  - name: create_subscriber
+    type: exec
+    query: |-
+      {"create": "subscriber"}
+
+  - name: create_access_info
+    type: exec
+    query: |-
+      {"create": "access_info"}
+
+  - name: create_special_facility
+    type: exec
+    query: |-
+      {"create": "special_facility"}
+
+  - name: create_call_forwarding
+    type: exec
+    query: |-
+      {"create": "call_forwarding"}
+
+seed:
+
+  - name: populate_subscriber
+    type: exec_batch
+    count: subscribers
+    args:
+      - gen('number:1,100000')
+      - regex('[0-9]{15}')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,65535')
+      - gen('number:0,65535')
+    query: |-
+      {"insert": "subscriber", "documents": [{"_id": $1, "sub_nbr": "$2", "bit_1": $3, "bit_2": $4, "bit_3": $5, "bit_4": $6, "bit_5": $7, "bit_6": $8, "bit_7": $9, "bit_8": $10, "bit_9": $11, "bit_10": $12, "hex_1": $13, "hex_2": $14, "hex_3": $15, "hex_4": $16, "hex_5": $17, "hex_6": $18, "hex_7": $19, "hex_8": $20, "hex_9": $21, "hex_10": $22, "byte2_1": $23, "byte2_2": $24, "byte2_3": $25, "byte2_4": $26, "byte2_5": $27, "byte2_6": $28, "byte2_7": $29, "byte2_8": $30, "byte2_9": $31, "byte2_10": $32, "msc_location": $33, "vlr_location": $34}]}
+
+  - name: fetch_subscriber_ids
+    query: |-
+      {"find": "subscriber", "filter": {}, "projection": {"_id": 1}}
+
+  - name: populate_access_info
+    type: exec_batch
+    count: subscribers
+    args:
+      - ref_rand('fetch_subscriber_ids')._id
+      - gen('number:1,4')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - regex('[a-z]{3}')
+      - regex('[a-z]{5}')
+    query: |-
+      {"insert": "access_info", "documents": [{"s_id": $1, "ai_type": $2, "data1": $3, "data2": $4, "data3": "$5", "data4": "$6"}]}
+
+  - name: populate_special_facility
+    type: exec_batch
+    count: subscribers
+    args:
+      - ref_rand('fetch_subscriber_ids')._id
+      - gen('number:1,4')
+      - gen('number:0,1')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - regex('[a-z]{5}')
+    query: |-
+      {"insert": "special_facility", "documents": [{"s_id": $1, "sf_type": $2, "is_active": $3, "error_cntrl": $4, "data_a": $5, "data_b": "$6"}]}
+
+  - name: fetch_special_facilities
+    query: |-
+      {"find": "special_facility", "filter": {}, "projection": {"s_id": 1, "sf_type": 1}}
+
+  - name: populate_call_forwarding
+    type: exec_batch
+    count: subscribers
+    args:
+      - ref_rand('fetch_special_facilities').s_id
+      - ref_rand('fetch_special_facilities').sf_type
+      - gen('number:0,23')
+      - gen('number:1,24')
+      - regex('[0-9]{15}')
+    query: |-
+      {"insert": "call_forwarding", "documents": [{"s_id": $1, "sf_type": $2, "start_time": $3, "end_time": $4, "numberx": "$5"}]}
+
+deseed:
+
+  - name: delete_call_forwarding
+    type: exec
+    query: |-
+      {"delete": "call_forwarding", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_special_facility
+    type: exec
+    query: |-
+      {"delete": "special_facility", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_access_info
+    type: exec
+    query: |-
+      {"delete": "access_info", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_subscriber
+    type: exec
+    query: |-
+      {"delete": "subscriber", "deletes": [{"q": {}, "limit": 0}]}
+
+down:
+
+  - name: drop_call_forwarding
+    type: exec
+    query: |-
+      {"drop": "call_forwarding"}
+
+  - name: drop_special_facility
+    type: exec
+    query: |-
+      {"drop": "special_facility"}
+
+  - name: drop_access_info
+    type: exec
+    query: |-
+      {"drop": "access_info"}
+
+  - name: drop_subscriber
+    type: exec
+    query: |-
+      {"drop": "subscriber"}
+
+init:
+
+  - name: fetch_subscribers
+    type: query
+    query: |-
+      {"find": "subscriber", "filter": {}, "projection": {"_id": 1, "sub_nbr": 1}}
+
+run_weights:
+  get_subscriber_data: 35
+  get_new_destination: 10
+  get_access_data: 35
+  update_subscriber_data: 2
+  update_location: 14
+  insert_call_forwarding: 2
+  delete_call_forwarding: 2
+
+run:
+
+  # Point lookup by subscriber ID.
+  - name: get_subscriber_data
+    type: query
+    args:
+      - ref_rand('fetch_subscribers')._id
+    query: |-
+      {"find": "subscriber", "filter": {"_id": $1}, "limit": 1}
+
+  # Look up call forwarding rules for a subscriber.
+  # No JOINs in MongoDB, so we query special_facility first
+  # then call_forwarding. Here we query call_forwarding directly
+  # with all filter criteria for benchmark simplicity.
+  - name: get_new_destination
+    type: query
+    args:
+      - ref_rand('fetch_subscribers')._id
+      - gen('number:1,4')
+      - gen('number:0,23')
+      - gen('number:1,24')
+    query: |-
+      {"find": "call_forwarding", "filter": {"s_id": $1, "sf_type": $2, "start_time": {"$lte": $3}, "end_time": {"$gt": $4}}}
+
+  # Look up access info for a subscriber.
+  - name: get_access_data
+    type: query
+    args:
+      - ref_rand('fetch_subscribers')._id
+      - gen('number:1,4')
+    query: |-
+      {"find": "access_info", "filter": {"s_id": $1, "ai_type": $2}, "projection": {"data1": 1, "data2": 1, "data3": 1, "data4": 1}}
+
+  # Toggle a bit field on a subscriber.
+  - name: update_subscriber_data
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers')._id
+      - gen('number:0,1')
+    query: |-
+      {"update": "subscriber", "updates": [{"q": {"_id": $1}, "u": {"$set": {"bit_1": $2}}}]}
+
+  # Update subscriber location.
+  - name: update_location
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').sub_nbr
+      - gen('number:0,65535')
+    query: |-
+      {"update": "subscriber", "updates": [{"q": {"sub_nbr": "$1"}, "u": {"$set": {"vlr_location": $2}}}]}
+
+  # Insert a new call forwarding rule.
+  - name: insert_call_forwarding
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers')._id
+      - gen('number:1,4')
+      - gen('number:0,23')
+      - gen('number:1,24')
+      - regex('[0-9]{15}')
+    query: |-
+      {"insert": "call_forwarding", "documents": [{"s_id": $1, "sf_type": $2, "start_time": $3, "end_time": $4, "numberx": "$5"}]}
+
+  # Remove a call forwarding rule.
+  - name: delete_call_forwarding
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers')._id
+      - gen('number:1,4')
+      - gen('number:0,23')
+    query: |-
+      {"delete": "call_forwarding", "deletes": [{"q": {"s_id": $1, "sf_type": $2, "start_time": $3}, "limit": 1}]}

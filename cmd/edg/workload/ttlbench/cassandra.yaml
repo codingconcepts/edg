@@ -1,0 +1,70 @@
+# TTL Bench Workload (Cassandra)
+# ==============================
+# Insert-heavy benchmark that measures write throughput under
+# TTL garbage collection pressure. Rows are inserted with a
+# TTL of 30 minutes and automatically expire.
+#
+# Cassandra natively supports per-row TTL via USING TTL on
+# INSERT, so no separate TTL job is needed.
+#
+# Use this to test how TTL affects insert throughput and tail
+# latency under sustained write load.
+
+globals:
+  payload_size: 256
+
+up:
+
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_ttlbench
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.ttlbench (
+        id UUID PRIMARY KEY,
+        payload BLOB,
+        inserted_at TIMESTAMP
+      )
+
+seed: []
+
+deseed:
+
+  - name: truncate_ttlbench
+    type: exec
+    query: TRUNCATE edg.ttlbench
+
+down:
+
+  - name: drop_ttlbench
+    type: exec
+    query: DROP TABLE IF EXISTS edg.ttlbench
+
+  - name: drop_keyspace
+    type: exec
+    query: DROP KEYSPACE IF EXISTS edg
+
+run_weights:
+  insert_row: 80
+  read_recent: 20
+
+run:
+
+  - name: insert_row
+    type: exec
+    args:
+      - gen('uuid')
+      - blob(payload_size)
+    query: |-
+      INSERT INTO edg.ttlbench (id, payload, inserted_at)
+      VALUES ($1, $2, toTimestamp(now()))
+      USING TTL 1800
+
+  - name: read_recent
+    type: query
+    query: |-
+      SELECT id, inserted_at FROM edg.ttlbench LIMIT 10

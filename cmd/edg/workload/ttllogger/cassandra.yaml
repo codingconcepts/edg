@@ -1,0 +1,95 @@
+# TTL Logger Workload (Cassandra)
+# ===============================
+# Log-ingestion benchmark that measures write and read
+# throughput with Cassandra's native TTL expiring old log
+# entries.
+#
+# Simulates a structured logging pipeline: events are written
+# continuously, recent events are queried by level, and older
+# entries are automatically expired via per-row TTL.
+#
+# The table is partitioned by level for efficient queries by
+# log level, with created_at as a clustering column for
+# time-ordered reads.
+
+globals:
+  message_size: 256
+
+up:
+
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_events
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.events (
+        id UUID,
+        level TEXT,
+        source TEXT,
+        message TEXT,
+        created_at TIMESTAMP,
+        PRIMARY KEY (level, created_at, id)
+      ) WITH CLUSTERING ORDER BY (created_at DESC, id ASC)
+
+seed: []
+
+deseed:
+
+  - name: truncate_events
+    type: exec
+    query: TRUNCATE edg.events
+
+down:
+
+  - name: drop_events
+    type: exec
+    query: DROP TABLE IF EXISTS edg.events
+
+  - name: drop_keyspace
+    type: exec
+    query: DROP KEYSPACE IF EXISTS edg
+
+run_weights:
+  write_log: 70
+  read_recent: 15
+  read_by_level: 15
+
+run:
+
+  - name: write_log
+    type: exec
+    args:
+      - gen('uuid')
+      - set_rand(['DEBUG','INFO','WARN','ERROR','FATAL'], [10,50,25,12,3])
+      - set_rand(['api','worker','scheduler','auth','billing'], [])
+      - regex('[a-zA-Z0-9 ]{64,256}')
+    query: |-
+      INSERT INTO edg.events (id, level, source, message, created_at)
+      VALUES ($1, $2, $3, $4, toTimestamp(now()))
+      USING TTL 600
+
+  - name: read_recent
+    type: query
+    args:
+      - set_rand(['DEBUG','INFO','WARN','ERROR','FATAL'], [10,50,25,12,3])
+    query: |-
+      SELECT id, level, source, message, created_at
+      FROM edg.events
+      WHERE level = $1
+      ORDER BY created_at DESC
+      LIMIT 20
+
+  - name: read_by_level
+    type: query
+    args:
+      - set_rand(['ERROR','WARN','FATAL'], [60,30,10])
+    query: |-
+      SELECT id, source, message, created_at
+      FROM edg.events
+      WHERE level = $1
+      ORDER BY created_at DESC
+      LIMIT 20

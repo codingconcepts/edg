@@ -1,0 +1,78 @@
+# TTL Logger Workload (MongoDB)
+# =============================
+# Log-ingestion benchmark that measures write and read
+# throughput with MongoDB's TTL index expiring old log entries.
+#
+# Simulates a structured logging pipeline: events are written
+# continuously, recent events are queried by level, and older
+# entries are automatically expired by the TTL index.
+
+globals:
+  message_size: 256
+
+up:
+
+  - name: create_events
+    type: exec
+    query: |-
+      {"create": "events"}
+
+  - name: create_ttl_index
+    type: exec
+    query: |-
+      {"createIndexes": "events", "indexes": [{"key": {"created_at": 1}, "name": "ttl_idx", "expireAfterSeconds": 600}]}
+
+  - name: create_level_index
+    type: exec
+    query: |-
+      {"createIndexes": "events", "indexes": [{"key": {"level": 1, "created_at": -1}, "name": "idx_events_level_created"}]}
+
+  - name: create_created_index
+    type: exec
+    query: |-
+      {"createIndexes": "events", "indexes": [{"key": {"created_at": -1}, "name": "idx_events_created"}]}
+
+seed: []
+
+deseed:
+
+  - name: delete_events
+    type: exec
+    query: |-
+      {"delete": "events", "deletes": [{"q": {}, "limit": 0}]}
+
+down:
+
+  - name: drop_events
+    type: exec
+    query: |-
+      {"drop": "events"}
+
+run_weights:
+  write_log: 70
+  read_recent: 15
+  read_by_level: 15
+
+run:
+
+  - name: write_log
+    type: exec
+    args:
+      - gen('uuid')
+      - set_rand(['DEBUG','INFO','WARN','ERROR','FATAL'], [10,50,25,12,3])
+      - set_rand(['api','worker','scheduler','auth','billing'], [])
+      - regex('[a-zA-Z0-9 ]{64,256}')
+    query: |-
+      {"insert": "events", "documents": [{"_id": "$1", "level": "$2", "source": "$3", "message": "$4", "created_at": {"$date": {"$numberLong": "now()"}}}]}
+
+  - name: read_recent
+    type: query
+    query: |-
+      {"find": "events", "filter": {}, "sort": {"created_at": -1}, "limit": 20}
+
+  - name: read_by_level
+    type: query
+    args:
+      - set_rand(['ERROR','WARN','FATAL'], [60,30,10])
+    query: |-
+      {"find": "events", "filter": {"level": "$1", "created_at": {"$gte": {"$date": {"$numberLong": "now(-5m)"}}}}, "sort": {"created_at": -1}, "limit": 20}

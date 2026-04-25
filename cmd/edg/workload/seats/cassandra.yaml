@@ -1,0 +1,391 @@
+# SEATS Benchmark Workload — Cassandra
+# ======================================
+# Airline reservation system benchmark. Models flights, customers,
+# and reservations with contention on seat availability.
+#
+# Tables:
+#   country     - Reference table of countries
+#   airport     - Airports with country reference
+#   airline     - Airlines
+#   customer    - Customers with home airport
+#   flight      - Flights between airports with seat counts
+#   reservation - Seat reservations on flights
+#
+# Simplifications for Cassandra:
+#   - No JOINs: flight table queried directly for find_flights
+#   - new_reservation: simple INSERT (no atomic seat decrement)
+#   - delete_reservation: simple DELETE (no atomic seat increment)
+#   - Seat count tracking is approximate in this model
+
+globals:
+  countries: 50
+  airports: 200
+  airlines: 20
+  customers: 100000
+  flights: 50000
+  seats_per_flight: 150
+  reservations_per_flight: 120
+
+up:
+
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_country
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.country (
+        co_id INT PRIMARY KEY,
+        co_name TEXT
+      )
+
+  - name: create_airport
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.airport (
+        ap_id INT PRIMARY KEY,
+        ap_code TEXT,
+        ap_name TEXT,
+        ap_city TEXT,
+        ap_co_id INT
+      )
+
+  - name: create_airline
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.airline (
+        al_id INT PRIMARY KEY,
+        al_iata_code TEXT,
+        al_name TEXT
+      )
+
+  - name: create_customer
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.customer (
+        c_id INT PRIMARY KEY,
+        c_base_ap_id INT,
+        c_balance DECIMAL,
+        c_sattr00 TEXT,
+        c_sattr01 TEXT,
+        c_iattr00 INT,
+        c_iattr01 INT
+      )
+
+  # Flight table partitioned by f_depart_ap_id for efficient
+  # departure airport lookups.
+  - name: create_flight
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.flight (
+        f_id INT,
+        f_al_id INT,
+        f_depart_ap_id INT,
+        f_arrive_ap_id INT,
+        f_depart_time TIMESTAMP,
+        f_arrive_time TIMESTAMP,
+        f_seats_total INT,
+        f_seats_left INT,
+        f_base_price DECIMAL,
+        PRIMARY KEY ((f_depart_ap_id), f_id)
+      )
+
+  # Lookup table for flight by f_id (for point lookups).
+  - name: create_flight_by_id
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.flight_by_id (
+        f_id INT PRIMARY KEY,
+        f_depart_ap_id INT,
+        f_seats_total INT,
+        f_seats_left INT,
+        f_base_price DECIMAL
+      )
+
+  - name: create_reservation
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.reservation (
+        r_id UUID,
+        r_c_id INT,
+        r_f_id INT,
+        r_seat INT,
+        r_price DECIMAL,
+        r_iattr00 INT,
+        r_iattr01 INT,
+        PRIMARY KEY ((r_f_id), r_id)
+      )
+
+seed:
+
+  - name: populate_country
+    type: exec_batch
+    count: countries
+    args:
+      - gen('number:1,50')
+      - regex('Country_[0-9]{3}')
+    query: |-
+      INSERT INTO edg.country (co_id, co_name)
+      VALUES ($1, $2)
+
+  - name: populate_airport
+    type: exec_batch
+    count: airports
+    args:
+      - gen('number:1,200')
+      - regex('[A-Z]{3}')
+      - regex('Airport_[0-9]{4}')
+      - regex('City_[0-9]{4}')
+      - gen('number:1,50')
+    query: |-
+      INSERT INTO edg.airport (ap_id, ap_code, ap_name, ap_city, ap_co_id)
+      VALUES ($1, $2, $3, $4, $5)
+
+  - name: fetch_airports_seed
+    query: |-
+      SELECT ap_id FROM edg.airport
+
+  - name: populate_airline
+    type: exec_batch
+    count: airlines
+    args:
+      - gen('number:1,20')
+      - regex('[A-Z]{2}')
+      - regex('Airline_[0-9]{3}')
+    query: |-
+      INSERT INTO edg.airline (al_id, al_iata_code, al_name)
+      VALUES ($1, $2, $3)
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    args:
+      - gen('number:1,100000')
+      - ref_rand('fetch_airports_seed').ap_id
+      - regex('[a-z]{16}')
+      - regex('[a-z]{16}')
+      - gen('number:0,999')
+      - gen('number:0,999')
+    query: |-
+      INSERT INTO edg.customer (c_id, c_base_ap_id, c_balance,
+        c_sattr00, c_sattr01, c_iattr00, c_iattr01)
+      VALUES ($1, $2, 0, $3, $4, $5, $6)
+
+  - name: populate_flight
+    type: exec_batch
+    count: flights
+    args:
+      - gen('number:1,50000')
+      - gen('number:1,20')
+      - ref_rand('fetch_airports_seed').ap_id
+      - ref_rand('fetch_airports_seed').ap_id
+      - gen('timestamp')
+      - gen('timestamp')
+      - gen('number:100,999')
+    query: |-
+      INSERT INTO edg.flight (f_id, f_al_id, f_depart_ap_id, f_arrive_ap_id,
+        f_depart_time, f_arrive_time, f_seats_total, f_seats_left, f_base_price)
+      VALUES ($1, $2, $3, $4, $5, $6, 150, 150, $7)
+
+  - name: populate_flight_by_id
+    type: exec_batch
+    count: flights
+    args:
+      - gen('number:1,50000')
+      - ref_rand('fetch_airports_seed').ap_id
+      - gen('number:100,999')
+    query: |-
+      INSERT INTO edg.flight_by_id (f_id, f_depart_ap_id,
+        f_seats_total, f_seats_left, f_base_price)
+      VALUES ($1, $2, 150, 150, $3)
+
+  - name: fetch_flights_seed
+    query: |-
+      SELECT f_id, f_depart_ap_id FROM edg.flight_by_id
+
+  - name: fetch_customers_seed
+    query: |-
+      SELECT c_id FROM edg.customer
+
+  - name: populate_reservation
+    type: exec_batch
+    count: flights
+    args:
+      - gen('uuid')
+      - ref_rand('fetch_customers_seed').c_id
+      - ref_rand('fetch_flights_seed').f_id
+      - gen('number:1,150')
+      - gen('number:50,1000')
+      - gen('number:0,99')
+      - gen('number:0,99')
+    query: |-
+      INSERT INTO edg.reservation (r_id, r_c_id, r_f_id, r_seat,
+        r_price, r_iattr00, r_iattr01)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+
+deseed:
+
+  - name: truncate_reservation
+    type: exec
+    query: TRUNCATE edg.reservation
+
+  - name: truncate_flight_by_id
+    type: exec
+    query: TRUNCATE edg.flight_by_id
+
+  - name: truncate_flight
+    type: exec
+    query: TRUNCATE edg.flight
+
+  - name: truncate_customer
+    type: exec
+    query: TRUNCATE edg.customer
+
+  - name: truncate_airline
+    type: exec
+    query: TRUNCATE edg.airline
+
+  - name: truncate_airport
+    type: exec
+    query: TRUNCATE edg.airport
+
+  - name: truncate_country
+    type: exec
+    query: TRUNCATE edg.country
+
+down:
+
+  - name: drop_reservation
+    type: exec
+    query: DROP TABLE IF EXISTS edg.reservation
+
+  - name: drop_flight_by_id
+    type: exec
+    query: DROP TABLE IF EXISTS edg.flight_by_id
+
+  - name: drop_flight
+    type: exec
+    query: DROP TABLE IF EXISTS edg.flight
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS edg.customer
+
+  - name: drop_airline
+    type: exec
+    query: DROP TABLE IF EXISTS edg.airline
+
+  - name: drop_airport
+    type: exec
+    query: DROP TABLE IF EXISTS edg.airport
+
+  - name: drop_country
+    type: exec
+    query: DROP TABLE IF EXISTS edg.country
+
+  - name: drop_keyspace
+    type: exec
+    query: DROP KEYSPACE IF EXISTS edg
+
+init:
+
+  - name: fetch_flights
+    type: query
+    query: SELECT f_id, f_depart_ap_id, f_seats_left FROM edg.flight_by_id
+
+  - name: fetch_customers
+    type: query
+    query: SELECT c_id FROM edg.customer
+
+  - name: fetch_reservations
+    type: query
+    query: SELECT r_id, r_c_id, r_f_id FROM edg.reservation
+
+  - name: fetch_airports
+    type: query
+    query: SELECT ap_id FROM edg.airport
+
+run_weights:
+  find_flights: 10
+  find_open_seats: 35
+  new_reservation: 15
+  update_customer: 10
+  update_reservation: 10
+  delete_reservation: 20
+
+run:
+
+  # Look up flights departing from an airport.
+  # Flight table is partitioned by f_depart_ap_id for this query.
+  - name: find_flights
+    type: query
+    args:
+      - ref_rand('fetch_airports').ap_id
+    query: |-
+      SELECT f_id, f_al_id, f_depart_ap_id, f_arrive_ap_id,
+        f_depart_time, f_arrive_time, f_seats_left, f_base_price
+      FROM edg.flight
+      WHERE f_depart_ap_id = $1
+      LIMIT 10
+
+  # Check how many seats are left on a flight.
+  - name: find_open_seats
+    type: query
+    args:
+      - ref_rand('fetch_flights').f_id
+    query: |-
+      SELECT f_seats_left FROM edg.flight_by_id
+      WHERE f_id = $1
+
+  # Book a seat: simple INSERT into reservation.
+  # Cassandra does not support multi-table atomics, so seat
+  # count decrement is not performed here.
+  - name: new_reservation
+    type: exec
+    args:
+      - gen('uuid')
+      - ref_rand('fetch_customers').c_id
+      - ref_rand('fetch_flights').f_id
+      - gen('number:1,150')
+      - gen('number:50,1000')
+    query: |-
+      INSERT INTO edg.reservation (r_id, r_c_id, r_f_id, r_seat,
+        r_price, r_iattr00, r_iattr01)
+      VALUES ($1, $2, $3, $4, $5, 0, 0)
+
+  # Update customer attributes.
+  - name: update_customer
+    type: exec
+    args:
+      - ref_rand('fetch_customers').c_id
+      - gen('number:0,1000')
+      - gen('number:0,1000')
+    query: |-
+      UPDATE edg.customer SET c_iattr00 = $2, c_iattr01 = $3
+      WHERE c_id = $1
+
+  # Change reservation attributes.
+  - name: update_reservation
+    type: exec
+    args:
+      - ref_rand('fetch_reservations').r_id
+      - ref_rand('fetch_reservations').r_f_id
+      - gen('number:0,100')
+    query: |-
+      UPDATE edg.reservation SET r_iattr00 = $3
+      WHERE r_f_id = $2 AND r_id = $1
+
+  # Cancel a reservation: simple DELETE.
+  # Cassandra does not support multi-table atomics, so seat
+  # count increment is not performed here.
+  - name: delete_reservation
+    type: exec
+    args:
+      - ref_rand('fetch_reservations').r_id
+      - ref_rand('fetch_reservations').r_f_id
+    query: |-
+      DELETE FROM edg.reservation
+      WHERE r_f_id = $2 AND r_id = $1

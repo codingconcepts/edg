@@ -1,0 +1,108 @@
+# Bank Workload (MongoDB)
+# =======================
+# Simulates a banking workload with customers and accounts.
+# Operations include balance checks, credits, and transfers.
+
+globals:
+  customers: 100000
+  initial_balance: 10000
+
+up:
+
+  - name: create_customer
+    type: exec
+    query: |-
+      {"create": "customer"}
+
+  - name: create_account
+    type: exec
+    query: |-
+      {"create": "account"}
+
+seed:
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    args:
+      - gen('uuid')
+      - gen('email')
+    query: |-
+      {"insert": "customer", "documents": [{"_id": "$1", "email": "$2"}]}
+
+  - name: fetch_customers
+    type: query
+    query: |-
+      {"find": "customer", "filter": {}}
+
+  - name: populate_account
+    type: exec_batch
+    count: customers
+    args:
+      - gen('uuid')
+      - ref_rand('fetch_customers')._id
+      - initial_balance
+    query: |-
+      {"insert": "account", "documents": [{"_id": "$1", "customer_id": "$2", "balance": $3}]}
+
+deseed:
+
+  - name: delete_accounts
+    type: exec
+    query: |-
+      {"delete": "account", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_customers
+    type: exec
+    query: |-
+      {"delete": "customer", "deletes": [{"q": {}, "limit": 0}]}
+
+down:
+
+  - name: drop_account
+    type: exec
+    query: |-
+      {"drop": "account"}
+
+  - name: drop_customer
+    type: exec
+    query: |-
+      {"drop": "customer"}
+
+init:
+
+  - name: fetch_accounts
+    type: query
+    query: |-
+      {"find": "account", "filter": {}}
+
+run_weights:
+  check_balance: 50
+  credit_account: 5
+  make_transfer: 45
+
+run:
+
+  - name: check_balance
+    type: query
+    args:
+      - ref_rand('fetch_accounts')._id
+    query: |-
+      {"find": "account", "filter": {"_id": "$1"}}
+
+  - name: credit_account
+    type: exec
+    args:
+      - ref_rand('fetch_accounts')._id
+      - gen('number:1,1000')
+    query: |-
+      {"update": "account", "updates": [{"q": {"_id": "$1"}, "u": {"$inc": {"balance": $2}}}]}
+
+  - name: make_transfer
+    type: exec
+    args:
+      - ref_diff('fetch_accounts')._id
+      - ref_diff('fetch_accounts')._id
+      - gen('number:1,100')
+    query: |-
+      {"update": "account", "updates": [{"q": {"_id": "$1"}, "u": {"$inc": {"balance": -$3}}}]}

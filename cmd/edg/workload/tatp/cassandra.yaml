@@ -1,0 +1,355 @@
+# TATP Benchmark Workload — Cassandra
+# =====================================
+# Telecom Application Transaction Processing benchmark.
+# Models a mobile phone subscriber database with 80% reads
+# and 20% writes. Simple schema, high throughput.
+#
+# Tables:
+#   subscriber       - Phone subscribers with data fields
+#   access_info      - Access records per subscriber
+#   special_facility - Special facility flags per subscriber
+#   call_forwarding  - Call forwarding rules
+#
+# All tables partitioned by s_id for efficient subscriber lookups.
+
+globals:
+  subscribers: 100000
+
+up:
+
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_subscriber
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.subscriber (
+        s_id INT PRIMARY KEY,
+        sub_nbr TEXT,
+        bit_1 INT,
+        bit_2 INT,
+        bit_3 INT,
+        bit_4 INT,
+        bit_5 INT,
+        bit_6 INT,
+        bit_7 INT,
+        bit_8 INT,
+        bit_9 INT,
+        bit_10 INT,
+        hex_1 INT,
+        hex_2 INT,
+        hex_3 INT,
+        hex_4 INT,
+        hex_5 INT,
+        hex_6 INT,
+        hex_7 INT,
+        hex_8 INT,
+        hex_9 INT,
+        hex_10 INT,
+        byte2_1 INT,
+        byte2_2 INT,
+        byte2_3 INT,
+        byte2_4 INT,
+        byte2_5 INT,
+        byte2_6 INT,
+        byte2_7 INT,
+        byte2_8 INT,
+        byte2_9 INT,
+        byte2_10 INT,
+        msc_location INT,
+        vlr_location INT
+      )
+
+  # Secondary index on sub_nbr for update_location lookups.
+  - name: create_idx_subscriber_sub_nbr
+    type: exec
+    query: |-
+      CREATE INDEX IF NOT EXISTS idx_subscriber_sub_nbr
+      ON edg.subscriber (sub_nbr)
+
+  - name: create_access_info
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.access_info (
+        s_id INT,
+        ai_type INT,
+        data1 INT,
+        data2 INT,
+        data3 TEXT,
+        data4 TEXT,
+        PRIMARY KEY ((s_id), ai_type)
+      )
+
+  - name: create_special_facility
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.special_facility (
+        s_id INT,
+        sf_type INT,
+        is_active INT,
+        error_cntrl INT,
+        data_a INT,
+        data_b TEXT,
+        PRIMARY KEY ((s_id), sf_type)
+      )
+
+  - name: create_call_forwarding
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.call_forwarding (
+        s_id INT,
+        sf_type INT,
+        start_time INT,
+        end_time INT,
+        numberx TEXT,
+        PRIMARY KEY ((s_id), sf_type, start_time)
+      )
+
+seed:
+
+  - name: populate_subscriber
+    type: exec_batch
+    count: subscribers
+    args:
+      - gen('number:1,100000')
+      - regex('[0-9]{15}')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,1')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,15')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - gen('number:0,65535')
+      - gen('number:0,65535')
+    query: |-
+      INSERT INTO edg.subscriber (s_id, sub_nbr,
+        bit_1, bit_2, bit_3, bit_4, bit_5,
+        bit_6, bit_7, bit_8, bit_9, bit_10,
+        hex_1, hex_2, hex_3, hex_4, hex_5,
+        hex_6, hex_7, hex_8, hex_9, hex_10,
+        byte2_1, byte2_2, byte2_3, byte2_4, byte2_5,
+        byte2_6, byte2_7, byte2_8, byte2_9, byte2_10,
+        msc_location, vlr_location)
+      VALUES ($1, $2,
+        $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12,
+        $13, $14, $15, $16, $17,
+        $18, $19, $20, $21, $22,
+        $23, $24, $25, $26, $27,
+        $28, $29, $30, $31, $32,
+        $33, $34)
+
+  - name: fetch_subscriber_ids
+    query: |-
+      SELECT s_id FROM edg.subscriber
+
+  - name: populate_access_info
+    type: exec_batch
+    count: subscribers
+    args:
+      - ref_rand('fetch_subscriber_ids').s_id
+      - gen('number:1,4')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - regex('[a-z]{3}')
+      - regex('[a-z]{5}')
+    query: |-
+      INSERT INTO edg.access_info (s_id, ai_type, data1, data2, data3, data4)
+      VALUES ($1, $2, $3, $4, $5, $6)
+
+  - name: populate_special_facility
+    type: exec_batch
+    count: subscribers
+    args:
+      - ref_rand('fetch_subscriber_ids').s_id
+      - gen('number:1,4')
+      - gen('number:0,1')
+      - gen('number:0,255')
+      - gen('number:0,255')
+      - regex('[a-z]{5}')
+    query: |-
+      INSERT INTO edg.special_facility (s_id, sf_type, is_active,
+        error_cntrl, data_a, data_b)
+      VALUES ($1, $2, $3, $4, $5, $6)
+
+  - name: fetch_special_facilities
+    query: |-
+      SELECT s_id, sf_type FROM edg.special_facility
+
+  - name: populate_call_forwarding
+    type: exec_batch
+    count: subscribers
+    args:
+      - ref_rand('fetch_special_facilities').s_id
+      - ref_rand('fetch_special_facilities').sf_type
+      - gen('number:0,23')
+      - gen('number:1,24')
+      - regex('[0-9]{15}')
+    query: |-
+      INSERT INTO edg.call_forwarding (s_id, sf_type, start_time,
+        end_time, numberx)
+      VALUES ($1, $2, $3, $4, $5)
+
+deseed:
+
+  - name: truncate_call_forwarding
+    type: exec
+    query: TRUNCATE edg.call_forwarding
+
+  - name: truncate_special_facility
+    type: exec
+    query: TRUNCATE edg.special_facility
+
+  - name: truncate_access_info
+    type: exec
+    query: TRUNCATE edg.access_info
+
+  - name: truncate_subscriber
+    type: exec
+    query: TRUNCATE edg.subscriber
+
+down:
+
+  - name: drop_call_forwarding
+    type: exec
+    query: DROP TABLE IF EXISTS edg.call_forwarding
+
+  - name: drop_special_facility
+    type: exec
+    query: DROP TABLE IF EXISTS edg.special_facility
+
+  - name: drop_access_info
+    type: exec
+    query: DROP TABLE IF EXISTS edg.access_info
+
+  - name: drop_subscriber
+    type: exec
+    query: DROP TABLE IF EXISTS edg.subscriber
+
+  - name: drop_keyspace
+    type: exec
+    query: DROP KEYSPACE IF EXISTS edg
+
+init:
+
+  - name: fetch_subscribers
+    type: query
+    query: SELECT s_id, sub_nbr FROM edg.subscriber
+
+run_weights:
+  get_subscriber_data: 35
+  get_new_destination: 10
+  get_access_data: 35
+  update_subscriber_data: 2
+  update_location: 14
+  insert_call_forwarding: 2
+  delete_call_forwarding: 2
+
+run:
+
+  # Point lookup by subscriber ID.
+  - name: get_subscriber_data
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+    query: |-
+      SELECT * FROM edg.subscriber WHERE s_id = $1
+
+  # Look up call forwarding rules for a subscriber.
+  # Cassandra does not support JOINs, so we query call_forwarding
+  # directly with the subscriber and facility type filters.
+  - name: get_new_destination
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+      - gen('number:1,24')
+    query: |-
+      SELECT numberx FROM edg.call_forwarding
+      WHERE s_id = $1 AND sf_type = $2
+        AND start_time <= $3
+      ALLOW FILTERING
+
+  # Look up access info for a subscriber.
+  - name: get_access_data
+    type: query
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+    query: |-
+      SELECT data1, data2, data3, data4
+      FROM edg.access_info
+      WHERE s_id = $1 AND ai_type = $2
+
+  # Toggle a bit field on a subscriber.
+  - name: update_subscriber_data
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:0,1')
+    query: |-
+      UPDATE edg.subscriber SET bit_1 = $2
+      WHERE s_id = $1
+
+  # Update subscriber location.
+  - name: update_location
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').sub_nbr
+      - gen('number:0,65535')
+    query: |-
+      UPDATE edg.subscriber SET vlr_location = $2
+      WHERE sub_nbr = $1
+
+  # Insert a new call forwarding rule.
+  - name: insert_call_forwarding
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+      - gen('number:1,24')
+      - regex('[0-9]{15}')
+    query: |-
+      INSERT INTO edg.call_forwarding (s_id, sf_type, start_time,
+        end_time, numberx)
+      VALUES ($1, $2, $3, $4, $5)
+
+  # Remove a call forwarding rule.
+  - name: delete_call_forwarding
+    type: exec
+    args:
+      - ref_rand('fetch_subscribers').s_id
+      - gen('number:1,4')
+      - gen('number:0,23')
+    query: |-
+      DELETE FROM edg.call_forwarding
+      WHERE s_id = $1 AND sf_type = $2 AND start_time = $3

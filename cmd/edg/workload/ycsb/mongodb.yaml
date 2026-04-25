@@ -1,0 +1,135 @@
+# YCSB Benchmark Workload (MongoDB)
+# ==================================
+# Yahoo! Cloud Serving Benchmark adapted for edg.
+#
+# Single collection (usertable) with a primary key and 10 fields of
+# 100 bytes each. Keys follow the format user{0000000000}.
+#
+# Workload profiles: change run_weights to switch:
+#
+#   A - Update heavy:       read: 50,  update: 50
+#   B - Read mostly:        read: 95,  update: 5
+#   C - Read only:          read: 100
+#   D - Read latest:        read: 95,  insert: 5
+#   E - Short ranges:       scan: 95,  insert: 5
+#   F - Read-modify-write:  read: 50,  read_modify_write: 50
+#
+# Key access uses Zipfian distribution. The zipf_s parameter
+# controls skew (must be > 1.0; higher = more skewed). Tune
+# to control hot-key contention.
+#
+# Known limitations:
+#   - Workload D's "latest" distribution (bias toward recently
+#     inserted keys) is not supported; Zipfian is used instead.
+#   - Updates modify field0 only (standard YCSB updates a random
+#     field; this simplification has negligible benchmark impact).
+
+globals:
+  records: 10000
+  zipf_s: 1.2
+
+up:
+
+  - name: create_usertable
+    type: exec
+    query: |-
+      {"create": "usertable"}
+
+seed:
+
+  - name: populate_usertable
+    type: exec_batch
+    count: records
+    args:
+      - seq()
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+    query: |-
+      {"insert": "usertable", "documents": [{"_id": $1, "ycsb_key": "$1", "field0": "$2", "field1": "$3", "field2": "$4", "field3": "$5", "field4": "$6", "field5": "$7", "field6": "$8", "field7": "$9", "field8": "$10", "field9": "$11"}]}
+
+deseed:
+
+  - name: delete_usertable
+    type: exec
+    query: |-
+      {"delete": "usertable", "deletes": [{"q": {}, "limit": 0}]}
+
+down:
+
+  - name: drop_usertable
+    type: exec
+    query: |-
+      {"drop": "usertable"}
+
+# Workload A - Update heavy (default)
+run_weights:
+  read: 50
+  update: 50
+
+run:
+
+  # Point read by Zipfian-distributed key.
+  - name: read
+    type: query
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+    query: |-
+      {"find": "usertable", "filter": {"ycsb_key": "$1"}}
+
+  # Update a single field by Zipfian-distributed key.
+  - name: update
+    type: exec
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+      - regex('[a-zA-Z0-9]{100}')
+    query: |-
+      {"update": "usertable", "updates": [{"q": {"ycsb_key": "$1"}, "u": {"$set": {"field0": "$2"}}}]}
+
+  # Insert a new record with a unique key.
+  # Used by workloads D and E.
+  - name: insert
+    type: exec
+    args:
+      - uuid_v7()
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+      - regex('[a-zA-Z0-9]{100}')
+    query: |-
+      {"insert": "usertable", "documents": [{"ycsb_key": "$1", "field0": "$2", "field1": "$3", "field2": "$4", "field3": "$5", "field4": "$6", "field5": "$7", "field6": "$8", "field7": "$9", "field8": "$10", "field9": "$11"}]}
+
+  # Range scan from a Zipfian-distributed start key.
+  # Scan length is uniform random in [1, 100].
+  # Used by workload E.
+  - name: scan
+    type: query
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+      - gen('number:1,100')
+    query: |-
+      {"find": "usertable", "filter": {"ycsb_key": {"$gte": "$1"}}, "sort": {"ycsb_key": 1}, "limit": $2}
+
+  # Atomic read-modify-write: reads the row, updates field0,
+  # and returns the updated document in a single round trip.
+  # Used by workload F.
+  - name: read_modify_write
+    type: query
+    args:
+      - template('user%010d', zipf(zipf_s, 1, records - 1))
+      - regex('[a-zA-Z0-9]{100}')
+    query: |-
+      {"findAndModify": "usertable", "query": {"ycsb_key": "$1"}, "update": {"$set": {"field0": "$2"}}, "new": true}

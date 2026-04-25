@@ -1,0 +1,322 @@
+# MovR Workload — Cassandra
+# =========================
+# Vehicle-sharing application benchmark modelled on
+# cockroach workload run movr.
+#
+# Tables: users, vehicles, rides, vehicle_location_histories,
+# promo_codes, user_promo_codes.
+#
+# Partition keys designed around city for locality.
+
+globals:
+  num_users: 1000
+  num_vehicles: 500
+  num_rides: 2000
+  num_promo_codes: 100
+
+up:
+
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_users
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.users (
+        city TEXT,
+        id UUID,
+        name TEXT,
+        address TEXT,
+        credit_card TEXT,
+        PRIMARY KEY ((city), id)
+      )
+
+  - name: create_vehicles
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.vehicles (
+        city TEXT,
+        id UUID,
+        owner_id UUID,
+        creation_time TIMESTAMP,
+        status TEXT,
+        current_location TEXT,
+        PRIMARY KEY ((city), id)
+      )
+
+  - name: create_rides
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.rides (
+        city TEXT,
+        id UUID,
+        vehicle_city TEXT,
+        rider_id UUID,
+        vehicle_id UUID,
+        start_address TEXT,
+        end_address TEXT,
+        start_time TIMESTAMP,
+        end_time TIMESTAMP,
+        revenue DECIMAL,
+        PRIMARY KEY ((city), id)
+      )
+
+  - name: create_vehicle_location_histories
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.vehicle_location_histories (
+        city TEXT,
+        ride_id UUID,
+        ts TIMESTAMP,
+        lat DOUBLE,
+        long DOUBLE,
+        PRIMARY KEY ((city), ride_id, ts)
+      )
+
+  - name: create_promo_codes
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.promo_codes (
+        code TEXT PRIMARY KEY,
+        description TEXT,
+        creation_time TIMESTAMP,
+        expiration_time TIMESTAMP
+      )
+
+  - name: create_user_promo_codes
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.user_promo_codes (
+        city TEXT,
+        user_id UUID,
+        code TEXT,
+        ts TIMESTAMP,
+        usage_count INT,
+        PRIMARY KEY ((city), user_id, code)
+      )
+
+seed:
+
+  - name: populate_users
+    type: exec_batch
+    count: num_users
+    args:
+      - gen('uuid')
+      - oneof('new york', 'boston', 'washington dc', 'seattle', 'san francisco', 'los angeles', 'chicago', 'detroit', 'minneapolis')
+      - regex('[a-z]{12}')
+      - regex('[A-Z][a-z]{4,12} (St|Ave|Blvd|Rd)')
+      - regex('[0-9]{16}')
+    query: |-
+      INSERT INTO edg.users (id, city, name, address, credit_card)
+      VALUES ($1, $2, $3, $4, $5)
+
+  - name: fetch_users
+    query: |-
+      SELECT id, city FROM edg.users
+
+  - name: populate_vehicles
+    type: exec_batch
+    count: num_vehicles
+    args:
+      - gen('uuid')
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_users').id
+      - gen('timestamp')
+      - regex('[A-Z][a-z]{4,12} Ave')
+    query: |-
+      INSERT INTO edg.vehicles (id, city, owner_id, creation_time, status, current_location)
+      VALUES ($1, $2, $3, $4, 'available', $5)
+
+  - name: fetch_vehicles
+    query: |-
+      SELECT id, city FROM edg.vehicles
+
+  - name: populate_rides
+    type: exec_batch
+    count: num_rides
+    args:
+      - gen('uuid')
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_vehicles').city
+      - ref_rand('fetch_users').id
+      - ref_rand('fetch_vehicles').id
+      - regex('[A-Z][a-z]{4,12} Blvd')
+      - regex('[A-Z][a-z]{4,12} Rd')
+      - gen('timestamp')
+      - gen('timestamp')
+      - gen('number:500,5000')
+    query: |-
+      INSERT INTO edg.rides (id, city, vehicle_city, rider_id, vehicle_id,
+        start_address, end_address, start_time, end_time, revenue)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+
+  - name: populate_promo_codes
+    type: exec_batch
+    count: num_promo_codes
+    args:
+      - regex('[A-Z0-9]{8}')
+      - gen('sentence')
+      - gen('timestamp')
+      - gen('timestamp')
+    query: |-
+      INSERT INTO edg.promo_codes (code, description, creation_time, expiration_time)
+      VALUES ($1, $2, $3, $4)
+
+deseed:
+
+  - name: truncate_user_promo_codes
+    type: exec
+    query: TRUNCATE edg.user_promo_codes
+
+  - name: truncate_vehicle_location_histories
+    type: exec
+    query: TRUNCATE edg.vehicle_location_histories
+
+  - name: truncate_rides
+    type: exec
+    query: TRUNCATE edg.rides
+
+  - name: truncate_vehicles
+    type: exec
+    query: TRUNCATE edg.vehicles
+
+  - name: truncate_promo_codes
+    type: exec
+    query: TRUNCATE edg.promo_codes
+
+  - name: truncate_users
+    type: exec
+    query: TRUNCATE edg.users
+
+down:
+
+  - name: drop_user_promo_codes
+    type: exec
+    query: DROP TABLE IF EXISTS edg.user_promo_codes
+
+  - name: drop_vehicle_location_histories
+    type: exec
+    query: DROP TABLE IF EXISTS edg.vehicle_location_histories
+
+  - name: drop_rides
+    type: exec
+    query: DROP TABLE IF EXISTS edg.rides
+
+  - name: drop_vehicles
+    type: exec
+    query: DROP TABLE IF EXISTS edg.vehicles
+
+  - name: drop_promo_codes
+    type: exec
+    query: DROP TABLE IF EXISTS edg.promo_codes
+
+  - name: drop_users
+    type: exec
+    query: DROP TABLE IF EXISTS edg.users
+
+  - name: drop_keyspace
+    type: exec
+    query: DROP KEYSPACE IF EXISTS edg
+
+init:
+
+  - name: fetch_users
+    type: query
+    query: SELECT id, city FROM edg.users
+
+  - name: fetch_vehicles
+    type: query
+    query: SELECT id, city FROM edg.vehicles
+
+  - name: fetch_rides
+    type: query
+    query: SELECT id, city FROM edg.rides
+
+  - name: fetch_promo_codes
+    type: query
+    query: SELECT code FROM edg.promo_codes
+
+run_weights:
+  read_vehicles: 20
+  read_rides: 20
+  create_ride: 20
+  update_ride: 15
+  add_vehicle_location: 15
+  apply_promo_code: 10
+
+run:
+
+  - name: read_vehicles
+    type: query
+    args:
+      - ref_rand('fetch_vehicles').city
+    query: |-
+      SELECT id, city, owner_id, status, current_location
+      FROM edg.vehicles
+      WHERE city = $1
+      LIMIT 10
+
+  - name: read_rides
+    type: query
+    args:
+      - ref_rand('fetch_users').id
+      - ref_rand('fetch_users').city
+    query: |-
+      SELECT id, vehicle_id, start_address, end_address,
+        start_time, end_time, revenue
+      FROM edg.rides
+      WHERE city = $2 AND rider_id = $1
+      ALLOW FILTERING
+
+  - name: create_ride
+    type: exec
+    args:
+      - gen('uuid')
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_users').id
+      - ref_rand('fetch_vehicles').city
+      - ref_rand('fetch_vehicles').id
+      - regex('[A-Z][a-z]{4,12} (St|Ave|Blvd|Rd)')
+    query: |-
+      INSERT INTO edg.rides (id, city, vehicle_city, rider_id, vehicle_id, start_address)
+      VALUES ($1, $2, $4, $3, $5, $6)
+
+  - name: update_ride
+    type: exec
+    args:
+      - ref_rand('fetch_rides').id
+      - ref_rand('fetch_rides').city
+      - regex('[A-Z][a-z]{4,12} (St|Ave|Blvd|Rd)')
+      - gen('number:500,5000')
+    query: |-
+      UPDATE edg.rides SET end_address = $3, revenue = $4
+      WHERE city = $2 AND id = $1
+
+  - name: add_vehicle_location
+    type: exec
+    args:
+      - ref_rand('fetch_rides').city
+      - ref_rand('fetch_rides').id
+      - gen('timestamp')
+      - uniform(-90, 90)
+      - uniform(-180, 180)
+    query: |-
+      INSERT INTO edg.vehicle_location_histories (city, ride_id, ts, lat, long)
+      VALUES ($1, $2, $3, $4, $5)
+
+  # Cassandra does not support upsert with increment; use INSERT
+  # to create the promo code usage record. Duplicate applies
+  # overwrite the row (last-write-wins).
+  - name: apply_promo_code
+    type: exec
+    args:
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_users').id
+      - ref_rand('fetch_promo_codes').code
+      - gen('timestamp')
+    query: |-
+      INSERT INTO edg.user_promo_codes (city, user_id, code, ts, usage_count)
+      VALUES ($1, $2, $3, $4, 1)

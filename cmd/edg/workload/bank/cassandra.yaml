@@ -1,0 +1,121 @@
+# Bank Workload (Cassandra)
+# =========================
+# Simulates a banking workload with customers and accounts.
+# Operations include balance checks, credits, and transfers.
+
+globals:
+  customers: 100000
+  initial_balance: 10000
+
+up:
+
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_customer
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.customer (
+        id UUID PRIMARY KEY,
+        email TEXT
+      )
+
+  - name: create_account
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.account (
+        id UUID PRIMARY KEY,
+        customer_id UUID,
+        balance DOUBLE
+      )
+
+seed:
+
+  - name: populate_customer
+    type: exec_batch
+    count: customers
+    args:
+      - gen('uuid')
+      - gen('email')
+    query: |-
+      INSERT INTO edg.customer (id, email) VALUES ($1, $2)
+
+  - name: fetch_customers
+    type: query
+    query: |-
+      SELECT id FROM edg.customer
+
+  - name: populate_account
+    type: exec_batch
+    count: customers
+    args:
+      - gen('uuid')
+      - ref_rand('fetch_customers').id
+      - initial_balance
+    query: |-
+      INSERT INTO edg.account (id, customer_id, balance) VALUES ($1, $2, $3)
+
+deseed:
+
+  - name: truncate_account
+    type: exec
+    query: TRUNCATE edg.account
+
+  - name: truncate_customer
+    type: exec
+    query: TRUNCATE edg.customer
+
+down:
+
+  - name: drop_account
+    type: exec
+    query: DROP TABLE IF EXISTS edg.account
+
+  - name: drop_customer
+    type: exec
+    query: DROP TABLE IF EXISTS edg.customer
+
+  - name: drop_keyspace
+    type: exec
+    query: DROP KEYSPACE IF EXISTS edg
+
+init:
+
+  - name: fetch_accounts
+    type: query
+    query: |-
+      SELECT id, balance FROM edg.account
+
+run_weights:
+  check_balance: 50
+  credit_account: 5
+  make_transfer: 45
+
+run:
+
+  - name: check_balance
+    type: query
+    args:
+      - ref_rand('fetch_accounts').id
+    query: |-
+      SELECT balance FROM edg.account WHERE id = $1
+
+  - name: credit_account
+    type: exec
+    args:
+      - ref_rand('fetch_accounts').id
+      - gen('number:1,1000')
+    query: |-
+      UPDATE edg.account SET balance = balance + $2 WHERE id = $1
+
+  - name: make_transfer
+    type: exec
+    args:
+      - ref_diff('fetch_accounts').id
+      - ref_diff('fetch_accounts').id
+      - gen('number:1,100')
+    query: |-
+      UPDATE edg.account SET balance = balance - $3 WHERE id = $1

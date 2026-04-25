@@ -1,0 +1,79 @@
+# KV Workload (Cassandra)
+# =======================
+# Simple key-value read/write benchmark modelled on
+# cockroach workload run kv.
+#
+# Single table with a BIGINT key and a BLOB value column.
+# Operations are point reads and upserts with uniform
+# random key distribution.
+#
+# Tune globals to control table size and value width.
+
+globals:
+  keys: 10000
+  batch_size: 1000
+  value_size: 256
+
+up:
+
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_kv
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.kv (
+        k BIGINT PRIMARY KEY,
+        v BLOB
+      )
+
+seed:
+
+  - name: populate_kv
+    type: exec_batch
+    count: keys
+    args:
+      - seq()
+      - blob(value_size)
+    query: |-
+      INSERT INTO edg.kv (k, v) VALUES ($1, $2)
+
+deseed:
+
+  - name: truncate_kv
+    type: exec
+    query: TRUNCATE edg.kv
+
+down:
+
+  - name: drop_kv
+    type: exec
+    query: DROP TABLE IF EXISTS edg.kv
+
+  - name: drop_keyspace
+    type: exec
+    query: DROP KEYSPACE IF EXISTS edg
+
+run_weights:
+  read: 50
+  write: 50
+
+run:
+
+  - name: read
+    type: query
+    args:
+      - gen('number:1,' + string(keys))
+    query: |-
+      SELECT k, v FROM edg.kv WHERE k = $1
+
+  - name: write
+    type: exec
+    args:
+      - gen('number:1,' + string(keys))
+      - blob(value_size)
+    query: |-
+      INSERT INTO edg.kv (k, v) VALUES ($1, $2)

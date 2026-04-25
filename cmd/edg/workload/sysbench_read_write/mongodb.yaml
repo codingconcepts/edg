@@ -1,0 +1,132 @@
+# Sysbench oltp_read_write Workload (MongoDB)
+# =============================================
+# Mixed read-write micro-benchmark matching sysbench's
+# oltp_read_write profile. Each "transaction" combines point
+# selects, range scans, aggregations, index updates, non-index
+# updates, a delete, and an insert.
+#
+# Schema matches standard sysbench sbtest1 collection.
+
+globals:
+  records: 10000
+
+up:
+
+  - name: create_sbtest1
+    type: exec
+    query: |-
+      {"create": "sbtest1"}
+
+  - name: create_idx_k
+    type: exec
+    query: |-
+      {"createIndexes": "sbtest1", "indexes": [{"key": {"k": 1}, "name": "k_1"}]}
+
+seed:
+
+  - name: populate_sbtest1
+    type: exec_batch
+    count: records
+    args:
+      - seq()
+      - gen('number:0,9999')
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      {"insert": "sbtest1", "documents": [{"_id": $1, "k": $2, "c": "$3", "pad": "$4"}]}
+
+deseed:
+
+  - name: delete_sbtest1
+    type: exec
+    query: |-
+      {"delete": "sbtest1", "deletes": [{"q": {}, "limit": 0}]}
+
+down:
+
+  - name: drop_sbtest1
+    type: exec
+    query: |-
+      {"drop": "sbtest1"}
+
+run_weights:
+  point_select: 50
+  range_select: 5
+  range_sum: 5
+  range_order: 5
+  range_distinct: 5
+  update_index: 10
+  update_non_index: 10
+  delete_insert: 10
+
+run:
+
+  # Point select by primary key.
+  - name: point_select
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      {"find": "sbtest1", "filter": {"_id": $1}}
+
+  # Range select: 100 documents from a random start.
+  - name: range_select
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      {"find": "sbtest1", "filter": {"_id": {"$gte": $1, "$lte": {"$numberInt": "${ $1 + 99 }"}}}}
+
+  # Range sum: aggregate k over 100 documents.
+  - name: range_sum
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+      - gen('number:1,' + string(records)) + 99
+    query: |-
+      {"aggregate": "sbtest1", "pipeline": [{"$match": {"_id": {"$gte": $1, "$lte": $2}}}, {"$group": {"_id": null, "total": {"$sum": "$k"}}}], "cursor": {}}
+
+  # Range order: 100 documents ordered by c.
+  - name: range_order
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+      - gen('number:1,' + string(records)) + 99
+    query: |-
+      {"aggregate": "sbtest1", "pipeline": [{"$match": {"_id": {"$gte": $1, "$lte": $2}}}, {"$sort": {"c": 1}}], "cursor": {}}
+
+  # Range distinct: distinct c values in 100 documents.
+  - name: range_distinct
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+      - gen('number:1,' + string(records)) + 99
+    query: |-
+      {"aggregate": "sbtest1", "pipeline": [{"$match": {"_id": {"$gte": $1, "$lte": $2}}}, {"$group": {"_id": "$c"}}, {"$sort": {"_id": 1}}], "cursor": {}}
+
+  # Update indexed field k.
+  - name: update_index
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      {"update": "sbtest1", "updates": [{"q": {"_id": $1}, "u": {"$inc": {"k": 1}}}]}
+
+  # Update non-indexed field c.
+  - name: update_non_index
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+      - regex('[a-zA-Z0-9]{120}')
+    query: |-
+      {"update": "sbtest1", "updates": [{"q": {"_id": $1}, "u": {"$set": {"c": "$2"}}}]}
+
+  # Delete then insert to maintain document count.
+  - name: delete_insert
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      {"update": "sbtest1", "updates": [{"q": {"_id": $1}, "u": {"$set": {"k": $1, "c": "$2", "pad": "$3"}}, "upsert": true}]}

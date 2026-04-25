@@ -1,0 +1,266 @@
+# MovR Workload — MongoDB
+# =======================
+# Vehicle-sharing application benchmark modelled on
+# cockroach workload run movr.
+#
+# Collections: users, vehicles, rides, vehicle_location_histories,
+# promo_codes, user_promo_codes.
+#
+# Operations model typical ride-sharing patterns: browsing
+# vehicles, starting/ending rides, tracking locations, and
+# applying promo codes.
+
+globals:
+  num_users: 1000
+  num_vehicles: 500
+  num_rides: 2000
+  num_promo_codes: 100
+
+up:
+
+  - name: create_users
+    type: exec
+    query: |-
+      {"create": "users"}
+
+  - name: create_vehicles
+    type: exec
+    query: |-
+      {"create": "vehicles"}
+
+  - name: create_rides
+    type: exec
+    query: |-
+      {"create": "rides"}
+
+  - name: create_vehicle_location_histories
+    type: exec
+    query: |-
+      {"create": "vehicle_location_histories"}
+
+  - name: create_promo_codes
+    type: exec
+    query: |-
+      {"create": "promo_codes"}
+
+  - name: create_user_promo_codes
+    type: exec
+    query: |-
+      {"create": "user_promo_codes"}
+
+seed:
+
+  - name: populate_users
+    type: exec_batch
+    count: num_users
+    args:
+      - gen('uuid')
+      - oneof('new york', 'boston', 'washington dc', 'seattle', 'san francisco', 'los angeles', 'chicago', 'detroit', 'minneapolis')
+      - regex('[a-z]{12}')
+      - regex('[A-Z][a-z]{4,12} (St|Ave|Blvd|Rd)')
+      - regex('[0-9]{16}')
+    query: |-
+      {"insert": "users", "documents": [{"_id": "$1", "city": "$2", "name": "$3", "address": "$4", "credit_card": "$5"}]}
+
+  - name: fetch_users
+    query: |-
+      {"find": "users", "filter": {}}
+
+  - name: populate_vehicles
+    type: exec_batch
+    count: num_vehicles
+    args:
+      - gen('uuid')
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_users')._id
+      - gen('timestamp')
+      - regex('[A-Z][a-z]{4,12} Ave')
+    query: |-
+      {"insert": "vehicles", "documents": [{"_id": "$1", "city": "$2", "owner_id": "$3", "creation_time": "$4", "status": "available", "current_location": "$5", "ext": {}}]}
+
+  - name: fetch_vehicles
+    query: |-
+      {"find": "vehicles", "filter": {}}
+
+  - name: populate_rides
+    type: exec_batch
+    count: num_rides
+    args:
+      - gen('uuid')
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_vehicles').city
+      - ref_rand('fetch_users')._id
+      - ref_rand('fetch_vehicles')._id
+      - regex('[A-Z][a-z]{4,12} Blvd')
+      - regex('[A-Z][a-z]{4,12} Rd')
+      - gen('timestamp')
+      - gen('timestamp')
+      - gen('number:500,5000')
+    query: |-
+      {"insert": "rides", "documents": [{"_id": "$1", "city": "$2", "vehicle_city": "$3", "rider_id": "$4", "vehicle_id": "$5", "start_address": "$6", "end_address": "$7", "start_time": "$8", "end_time": "$9", "revenue": $10}]}
+
+  - name: populate_promo_codes
+    type: exec_batch
+    count: num_promo_codes
+    args:
+      - regex('[A-Z0-9]{8}')
+      - gen('sentence')
+      - gen('timestamp')
+      - gen('timestamp')
+    query: |-
+      {"insert": "promo_codes", "documents": [{"_id": "$1", "description": "$2", "creation_time": "$3", "expiration_time": "$4", "rules": {}}]}
+
+deseed:
+
+  - name: delete_user_promo_codes
+    type: exec
+    query: |-
+      {"delete": "user_promo_codes", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_vehicle_location_histories
+    type: exec
+    query: |-
+      {"delete": "vehicle_location_histories", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_rides
+    type: exec
+    query: |-
+      {"delete": "rides", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_vehicles
+    type: exec
+    query: |-
+      {"delete": "vehicles", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_promo_codes
+    type: exec
+    query: |-
+      {"delete": "promo_codes", "deletes": [{"q": {}, "limit": 0}]}
+
+  - name: delete_users
+    type: exec
+    query: |-
+      {"delete": "users", "deletes": [{"q": {}, "limit": 0}]}
+
+down:
+
+  - name: drop_user_promo_codes
+    type: exec
+    query: |-
+      {"drop": "user_promo_codes"}
+
+  - name: drop_vehicle_location_histories
+    type: exec
+    query: |-
+      {"drop": "vehicle_location_histories"}
+
+  - name: drop_rides
+    type: exec
+    query: |-
+      {"drop": "rides"}
+
+  - name: drop_vehicles
+    type: exec
+    query: |-
+      {"drop": "vehicles"}
+
+  - name: drop_promo_codes
+    type: exec
+    query: |-
+      {"drop": "promo_codes"}
+
+  - name: drop_users
+    type: exec
+    query: |-
+      {"drop": "users"}
+
+init:
+
+  - name: fetch_users
+    type: query
+    query: |-
+      {"find": "users", "filter": {}}
+
+  - name: fetch_vehicles
+    type: query
+    query: |-
+      {"find": "vehicles", "filter": {}}
+
+  - name: fetch_rides
+    type: query
+    query: |-
+      {"find": "rides", "filter": {}}
+
+  - name: fetch_promo_codes
+    type: query
+    query: |-
+      {"find": "promo_codes", "filter": {}, "projection": {"_id": 1}}
+
+run_weights:
+  read_vehicles: 20
+  read_rides: 20
+  create_ride: 20
+  update_ride: 15
+  add_vehicle_location: 15
+  apply_promo_code: 10
+
+run:
+
+  - name: read_vehicles
+    type: query
+    args:
+      - ref_rand('fetch_vehicles').city
+    query: |-
+      {"find": "vehicles", "filter": {"city": "$1"}, "limit": 10}
+
+  - name: read_rides
+    type: query
+    args:
+      - ref_rand('fetch_users')._id
+      - ref_rand('fetch_users').city
+    query: |-
+      {"find": "rides", "filter": {"city": "$2", "rider_id": "$1"}, "sort": {"start_time": -1}, "limit": 10}
+
+  # Insert a ride. MongoDB insert returns the generated _id.
+  - name: create_ride
+    type: exec
+    args:
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_users')._id
+      - ref_rand('fetch_vehicles').city
+      - ref_rand('fetch_vehicles')._id
+      - regex('[A-Z][a-z]{4,12} (St|Ave|Blvd|Rd)')
+    query: |-
+      {"insert": "rides", "documents": [{"city": "$1", "vehicle_city": "$3", "rider_id": "$2", "vehicle_id": "$4", "start_address": "$5"}]}
+
+  - name: update_ride
+    type: exec
+    args:
+      - ref_rand('fetch_rides')._id
+      - ref_rand('fetch_rides').city
+      - regex('[A-Z][a-z]{4,12} (St|Ave|Blvd|Rd)')
+      - gen('number:500,5000')
+    query: |-
+      {"update": "rides", "updates": [{"q": {"_id": "$1", "city": "$2"}, "u": {"$set": {"end_address": "$3", "revenue": $4}}}]}
+
+  - name: add_vehicle_location
+    type: exec
+    args:
+      - gen('uuid')
+      - ref_rand('fetch_rides').city
+      - ref_rand('fetch_rides')._id
+      - gen('timestamp')
+      - uniform(-90, 90)
+      - uniform(-180, 180)
+    query: |-
+      {"insert": "vehicle_location_histories", "documents": [{"_id": "$1", "city": "$2", "ride_id": "$3", "timestamp": "$4", "lat": $5, "long": $6}]}
+
+  # Upsert promo code with $inc on usage_count.
+  - name: apply_promo_code
+    type: exec
+    args:
+      - ref_rand('fetch_users').city
+      - ref_rand('fetch_users')._id
+      - ref_rand('fetch_promo_codes')._id
+    query: |-
+      {"update": "user_promo_codes", "updates": [{"q": {"city": "$1", "user_id": "$2", "code": "$3"}, "u": {"$inc": {"usage_count": 1}, "$setOnInsert": {"city": "$1", "user_id": "$2", "code": "$3"}}, "upsert": true}]}

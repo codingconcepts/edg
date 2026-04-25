@@ -1,0 +1,149 @@
+# Sysbench oltp_read_write Workload (Cassandra)
+# ===============================================
+# Mixed read-write micro-benchmark matching sysbench's
+# oltp_read_write profile. Each "transaction" combines point
+# selects, index updates, non-index updates, and upserts.
+#
+# Schema matches standard sysbench sbtest1 table.
+#
+# Known limitations:
+#   - Range scans on partition keys are not supported in
+#     Cassandra, so range_select, range_sum, range_order, and
+#     range_distinct are simplified to point selects.
+#   - Delete+insert is replaced with an upsert (INSERT in
+#     Cassandra is an upsert by default).
+
+globals:
+  records: 10000
+
+up:
+
+  - name: create_keyspace
+    type: exec
+    query: |-
+      CREATE KEYSPACE IF NOT EXISTS edg
+      WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}
+
+  - name: create_sbtest1
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS edg.sbtest1 (
+        id INT PRIMARY KEY,
+        k INT,
+        c TEXT,
+        pad TEXT
+      )
+
+seed:
+
+  - name: populate_sbtest1
+    type: exec_batch
+    count: records
+    args:
+      - seq()
+      - gen('number:0,9999')
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      INSERT INTO edg.sbtest1 (id, k, c, pad) VALUES ($1, $2, $3, $4)
+
+deseed:
+
+  - name: truncate_sbtest1
+    type: exec
+    query: TRUNCATE edg.sbtest1
+
+down:
+
+  - name: drop_sbtest1
+    type: exec
+    query: DROP TABLE IF EXISTS edg.sbtest1
+
+  - name: drop_keyspace
+    type: exec
+    query: DROP KEYSPACE IF EXISTS edg
+
+run_weights:
+  point_select: 50
+  range_select: 5
+  range_sum: 5
+  range_order: 5
+  range_distinct: 5
+  update_index: 10
+  update_non_index: 10
+  delete_insert: 10
+
+run:
+
+  # Point select by primary key.
+  - name: point_select
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT c FROM edg.sbtest1 WHERE id = $1
+
+  # Range select: simplified to point select since Cassandra
+  # does not support range scans on partition keys.
+  - name: range_select
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT c FROM edg.sbtest1 WHERE id = $1
+
+  # Range sum: simplified to point select since Cassandra
+  # does not support aggregation over partition key ranges.
+  - name: range_sum
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT k FROM edg.sbtest1 WHERE id = $1
+
+  # Range order: simplified to point select.
+  - name: range_order
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT c FROM edg.sbtest1 WHERE id = $1
+
+  # Range distinct: simplified to point select.
+  - name: range_distinct
+    type: query
+    args:
+      - gen('number:1,' + string(records))
+    query: |-
+      SELECT c FROM edg.sbtest1 WHERE id = $1
+
+  # Update indexed column k (Cassandra has no secondary index
+  # update distinction, treated as a normal update).
+  - name: update_index
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+      - gen('number:0,9999')
+    query: |-
+      UPDATE edg.sbtest1 SET k = $2 WHERE id = $1
+
+  # Update non-indexed column c.
+  - name: update_non_index
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+      - regex('[a-zA-Z0-9]{120}')
+    query: |-
+      UPDATE edg.sbtest1 SET c = $2 WHERE id = $1
+
+  # Upsert to maintain row count (Cassandra INSERT is an
+  # upsert by default).
+  - name: delete_insert
+    type: exec
+    args:
+      - gen('number:1,' + string(records))
+      - gen('number:0,9999')
+      - regex('[a-zA-Z0-9]{120}')
+      - regex('[a-zA-Z0-9]{60}')
+    query: |-
+      INSERT INTO edg.sbtest1 (id, k, c, pad) VALUES ($1, $2, $3, $4)
