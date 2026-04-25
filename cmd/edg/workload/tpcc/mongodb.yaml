@@ -351,34 +351,75 @@ run_weights:
 run:
 
   # New-Order transaction (TPC-C 2.4)
-  # Atomically increments district next_o_id and returns the new order ID.
-  # The full multi-step transaction (insert order, update stock, insert
-  # order lines) is simplified to the critical findAndModify on district.
-  - name: new_order
-    type: query
+  # Atomically increments district next_o_id, inserts order and new_order.
+  - transaction: new_order
     wait: 18s
-    args:
-      - ref_perm('fetch_warehouses').w_id
-      - gen('number:1,10')
-      - nurand(1023, 1, customers / districts)
-      - nurand_n(8191, 1, items, 5, 15)
-    query: |-
-      {"findAndModify": "district", "query": {"d_w_id": $1, "d_id": $2}, "update": {"$inc": {"d_next_o_id": 1}}, "new": true}
+    locals:
+      ol_cnt: gen('number:5,15')
+    queries:
+      - name: get_next_order_id
+        type: query
+        args:
+          - ref_perm('fetch_warehouses').w_id
+          - gen('number:1,10')
+        query: |-
+          {"findAndModify": "district", "query": {"d_w_id": $1, "d_id": $2}, "update": {"$inc": {"d_next_o_id": 1}}, "new": true}
+
+      - name: insert_oorder
+        type: exec
+        args:
+          - ref_same('get_next_order_id').d_w_id
+          - ref_same('get_next_order_id').d_id
+          - ref_same('get_next_order_id').d_next_o_id
+          - nurand(1023, 1, customers / districts)
+          - local('ol_cnt')
+        query: |-
+          {"insert": "oorder", "documents": [{"o_w_id": $1, "o_d_id": $2, "o_id": $3, "o_c_id": $4, "o_entry_d": {"$date": "2024-01-01T00:00:00Z"}, "o_carrier_id": null, "o_ol_cnt": $5, "o_all_local": 1}]}
+
+      - name: insert_new_order
+        type: exec
+        args:
+          - ref_same('get_next_order_id').d_w_id
+          - ref_same('get_next_order_id').d_id
+          - ref_same('get_next_order_id').d_next_o_id
+        query: |-
+          {"insert": "new_order", "documents": [{"no_w_id": $1, "no_d_id": $2, "no_o_id": $3}]}
 
   # Payment transaction (TPC-C 2.5)
-  # Updates customer balance atomically. The full transaction
-  # (update warehouse ytd, district ytd, customer balance, insert
-  # history) is simplified to the customer findAndModify.
-  - name: payment
-    type: query
+  # Updates warehouse ytd, customer balance, and inserts history.
+  - transaction: payment
     wait: 3s
-    args:
-      - ref_perm('fetch_warehouses').w_id
-      - gen('number:1,10')
-      - nurand(1023, 1, customers / districts)
-      - gen('number:100,500000')
-    query: |-
-      {"findAndModify": "customer", "query": {"c_w_id": $1, "c_d_id": $2, "c_id": $3}, "update": {"$inc": {"c_balance": $4, "c_ytd_payment": $4, "c_payment_cnt": 1}}, "new": true}
+    locals:
+      amount: gen('number:100,500000')
+    queries:
+      - name: update_warehouse
+        type: exec
+        args:
+          - ref_perm('fetch_warehouses').w_id
+          - local('amount')
+        query: |-
+          {"update": "warehouse", "updates": [{"q": {"w_id": $1}, "u": {"$inc": {"w_ytd": $2}}}]}
+
+      - name: update_customer
+        type: query
+        args:
+          - ref_same('update_warehouse').w_id
+          - gen('number:1,10')
+          - nurand(1023, 1, customers / districts)
+          - local('amount')
+        query: |-
+          {"findAndModify": "customer", "query": {"c_w_id": $1, "c_d_id": $2, "c_id": $3}, "update": {"$inc": {"c_balance": $4, "c_ytd_payment": $4, "c_payment_cnt": 1}}, "new": true}
+
+      - name: insert_history
+        type: exec
+        args:
+          - gen('uuid')
+          - ref_same('update_customer').c_id
+          - ref_same('update_customer').c_d_id
+          - ref_same('update_customer').c_w_id
+          - local('amount')
+        query: |-
+          {"insert": "history", "documents": [{"_id": "$1", "h_c_id": $2, "h_c_d_id": $3, "h_c_w_id": $4, "h_d_id": $3, "h_w_id": $4, "h_date": {"$date": "2024-01-01T00:00:00Z"}, "h_amount": $5, "h_data": "payment"}]}
 
   # Order-Status transaction (TPC-C 2.6)
   # Finds the most recent order for a customer.

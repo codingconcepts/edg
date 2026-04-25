@@ -1,4 +1,4 @@
-# SEATS Benchmark Workload — MongoDB
+# SEATS Benchmark Workload - MongoDB
 # ====================================
 # Airline reservation system benchmark. Models flights, customers,
 # and reservations with contention on seat availability.

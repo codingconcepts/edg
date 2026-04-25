@@ -36,6 +36,8 @@ The `workload` command runs a built-in workload without needing a config file. F
 | `oracle` | Oracle variant |
 | `mssql` | SQL Server variant |
 | `spanner` | Google Cloud Spanner variant (GoogleSQL) |
+| `mongodb` | MongoDB variant (BSON/JSON commands) |
+| `cassandra` | Cassandra variant (CQL) |
 
 ## Examples
 
@@ -105,6 +107,20 @@ edg workload kv all \
 --driver spanner \
 --url "projects/my-project/instances/my-instance/databases/my-db" \
 --license "$EDG_LICENSE" \
+-w 10 \
+-d 5m
+
+# Run bank workload against MongoDB
+edg workload bank all \
+--driver mongodb \
+--url "mongodb://localhost:27017/edg" \
+-w 10 \
+-d 5m
+
+# Run YCSB against Cassandra
+edg workload ycsb all \
+--driver cassandra \
+--url "localhost:9042" \
 -w 10 \
 -d 5m
 ```

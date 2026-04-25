@@ -124,6 +124,7 @@ When migrating SQL configs to MongoDB:
 - Replace `DROP TABLE` with `{"drop": "t"}`
 - MongoDB is schemaless - no column types, no constraints, no foreign keys
 - All placeholders are inlined into JSON command text
+- **Transactions**: edg supports `transaction:` blocks for MongoDB using multi-document sessions. Preserve `transaction:` / `locals` / `rollback_if` syntax when migrating to MongoDB
 
 ### Cassandra-Specific Notes
 
@@ -137,7 +138,7 @@ When migrating SQL configs to Cassandra:
 - Remove foreign key constraints (`REFERENCES`)
 - Remove `CASCADE` from `TRUNCATE`
 - Add `DROP KEYSPACE IF EXISTS ks` at end of `down` section
-- No transactions - convert transaction blocks to standalone queries
+- **Transactions**: edg supports `transaction:` blocks for Cassandra using logged batches. Reads execute immediately; writes are buffered and committed atomically. Preserve `transaction:` / `locals` / `rollback_if` syntax when migrating to Cassandra
 
 ## Process
 

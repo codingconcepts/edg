@@ -8,6 +8,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type MongoDB struct {
@@ -63,8 +64,73 @@ func (m *MongoDB) execBatch(ctx context.Context, query string) error {
 	return nil
 }
 
+func (m *MongoDB) BeginTx(ctx context.Context) (Transaction, error) {
+	session, err := m.database.Client().StartSession()
+	if err != nil {
+		return nil, fmt.Errorf("starting MongoDB session: %w", err)
+	}
+	if err := session.StartTransaction(options.Transaction()); err != nil {
+		session.EndSession(ctx)
+		return nil, fmt.Errorf("starting MongoDB transaction: %w", err)
+	}
+	return &mongoTransaction{database: m.database, session: session}, nil
+}
+
 func (m *MongoDB) Close() error {
 	return m.database.Client().Disconnect(context.Background())
+}
+
+type mongoTransaction struct {
+	database *mongo.Database
+	session  *mongo.Session
+}
+
+func (t *mongoTransaction) QueryContext(ctx context.Context, query string, args ...any) (RowIterator, error) {
+	ctx = mongo.NewSessionContext(ctx, t.session)
+	var cmd bson.D
+	if err := bson.UnmarshalExtJSON([]byte(query), true, &cmd); err != nil {
+		return nil, fmt.Errorf("parsing MongoDB command: %w", err)
+	}
+	result := t.database.RunCommand(ctx, cmd)
+	if err := result.Err(); err != nil {
+		return nil, err
+	}
+	var raw bson.M
+	if err := result.Decode(&raw); err != nil {
+		return nil, fmt.Errorf("decoding MongoDB result: %w", err)
+	}
+	return newMongoRowIterator(raw), nil
+}
+
+func (t *mongoTransaction) ExecContext(ctx context.Context, query string, args ...any) error {
+	ctx = mongo.NewSessionContext(ctx, t.session)
+	if strings.Contains(query, batchSep) {
+		for _, q := range ExpandBatchQuery(query) {
+			var cmd bson.D
+			if err := bson.UnmarshalExtJSON([]byte(q), true, &cmd); err != nil {
+				return fmt.Errorf("parsing MongoDB command: %w", err)
+			}
+			if err := t.database.RunCommand(ctx, cmd).Err(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	var cmd bson.D
+	if err := bson.UnmarshalExtJSON([]byte(query), true, &cmd); err != nil {
+		return fmt.Errorf("parsing MongoDB command: %w", err)
+	}
+	return t.database.RunCommand(ctx, cmd).Err()
+}
+
+func (t *mongoTransaction) Commit() error {
+	defer t.session.EndSession(context.Background())
+	return t.session.CommitTransaction(context.Background())
+}
+
+func (t *mongoTransaction) Rollback() error {
+	defer t.session.EndSession(context.Background())
+	return t.session.AbortTransaction(context.Background())
 }
 
 type mongoRowIterator struct {

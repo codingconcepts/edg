@@ -37,8 +37,38 @@ func (c *CassandraDB) execBatch(ctx context.Context, query string) error {
 	return c.session.ExecuteBatch(batch)
 }
 
+func (c *CassandraDB) BeginTx(ctx context.Context) (Transaction, error) {
+	return &cassandraTransaction{
+		session: c.session,
+		batch:   c.session.NewBatch(gocql.LoggedBatch).WithContext(ctx),
+	}, nil
+}
+
 func (c *CassandraDB) Close() error {
 	c.session.Close()
+	return nil
+}
+
+type cassandraTransaction struct {
+	session *gocql.Session
+	batch   *gocql.Batch
+}
+
+func (t *cassandraTransaction) QueryContext(ctx context.Context, query string, args ...any) (RowIterator, error) {
+	iter := t.session.Query(query, args...).WithContext(ctx).Iter()
+	return newCassandraRowIterator(iter)
+}
+
+func (t *cassandraTransaction) ExecContext(ctx context.Context, query string, args ...any) error {
+	t.batch.Query(query, args...)
+	return nil
+}
+
+func (t *cassandraTransaction) Commit() error {
+	return t.session.ExecuteBatch(t.batch)
+}
+
+func (t *cassandraTransaction) Rollback() error {
 	return nil
 }
 

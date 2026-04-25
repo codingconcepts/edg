@@ -1,4 +1,4 @@
-# MovR Workload — Cassandra
+# MovR Workload - Cassandra
 # =========================
 # Vehicle-sharing application benchmark modelled on
 # cockroach workload run movr.

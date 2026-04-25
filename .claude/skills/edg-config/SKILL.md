@@ -442,6 +442,7 @@ MongoDB uses BSON/JSON command syntax instead of SQL. Queries are JSON objects s
 - **No DDL types**: MongoDB is schemaless; `up` creates collections, `down` drops them
 - **Batch inserts**: Use `exec_batch` with `count`/`size`; each batch inserts one document per execution
 - **Reference data**: Use `{"find": "collection", "filter": {}}` in `seed` or `init` with `type: query` to populate datasets
+- **Transactions**: edg supports `transaction:` blocks for MongoDB using multi-document sessions. Commands run within a session context and are committed or rolled back atomically. Use the same `transaction:` / `locals` / `rollback_if` syntax as SQL drivers
 
 Example:
 ```yaml
@@ -504,7 +505,7 @@ Cassandra uses CQL (Cassandra Query Language). Tables must live inside a keyspac
 - **Cleanup**: `TRUNCATE ks.table` for deseed
 - **Teardown**: `DROP TABLE IF EXISTS ks.table` then `DROP KEYSPACE IF EXISTS ks`
 - **Placeholders**: Use `$1`, `$2`, etc.; edg converts to `?` automatically
-- **No transactions**: Cassandra does not support multi-statement transactions; use standalone queries only
+- **Transactions**: edg supports `transaction:` blocks for Cassandra using logged batches. Reads execute immediately; writes are buffered and committed atomically. Use the same `transaction:` / `locals` / `rollback_if` syntax as SQL drivers
 
 Example:
 ```yaml

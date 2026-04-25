@@ -1,10 +1,11 @@
-# Bank Workload (Cassandra)
-# =========================
-# Simulates a banking workload with customers and accounts.
-# Operations include balance checks, credits, and transfers.
+# Transaction workload for Cassandra
+#
+# Demonstrates multi-statement transactions using the bank schema.
+# The make_transfer transaction reads two account balances, then
+# debits one and credits the other inside a Cassandra logged batch.
 
 globals:
-  customers: 100000
+  customers: 10000
   initial_balance: 10000
 
 up:
@@ -91,8 +92,7 @@ init:
 
 run_weights:
   check_balance: 50
-  credit_account: 5
-  make_transfer: 45
+  make_transfer: 50
 
 run:
 
@@ -102,14 +102,6 @@ run:
       - ref_rand('fetch_accounts').id
     query: |-
       SELECT balance FROM edg.account WHERE id = $1
-
-  - name: credit_account
-    type: exec
-    args:
-      - ref_rand('fetch_accounts').id
-      - gen('number:1,1000')
-    query: |-
-      UPDATE edg.account SET balance = balance + $2 WHERE id = $1
 
   - transaction: make_transfer
     locals:

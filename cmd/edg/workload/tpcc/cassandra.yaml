@@ -456,37 +456,97 @@ run_weights:
 run:
 
   # New-Order transaction (TPC-C 2.4)
-  # Inserts a new order directly. Cassandra cannot atomically
-  # increment non-counter columns, so the full multi-step
-  # transaction is simplified to inserting the order record.
-  - name: new_order
-    type: exec
+  # Reads district to get next order ID, inserts order and new_order
+  # in a logged batch for atomicity.
+  - transaction: new_order
     wait: 18s
-    args:
-      - ref_perm('fetch_warehouses').w_id
-      - gen('number:1,10')
-      - nurand(1023, 1, customers / districts)
-      - gen('number:3001,999999')
-      - gen('number:5,15')
-    query: |-
-      INSERT INTO edg.oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
-        o_ol_cnt, o_all_local)
-      VALUES ($1, $2, $4, $3, toTimestamp(now()), $5, 1)
+    locals:
+      order_id: gen('number:3001,999999')
+      ol_cnt: gen('number:5,15')
+    queries:
+      - name: read_district
+        type: query
+        args:
+          - ref_perm('fetch_warehouses').w_id
+          - gen('number:1,10')
+        query: |-
+          SELECT d_w_id, d_id, d_next_o_id FROM edg.district
+          WHERE d_w_id = $1 AND d_id = $2
+
+      - name: insert_oorder
+        type: exec
+        args:
+          - ref_same('read_district').d_w_id
+          - ref_same('read_district').d_id
+          - local('order_id')
+          - nurand(1023, 1, customers / districts)
+          - local('ol_cnt')
+        query: |-
+          INSERT INTO edg.oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
+            o_ol_cnt, o_all_local)
+          VALUES ($1, $2, $3, $4, toTimestamp(now()), $5, 1)
+
+      - name: insert_new_order
+        type: exec
+        args:
+          - ref_same('read_district').d_w_id
+          - ref_same('read_district').d_id
+          - local('order_id')
+        query: |-
+          INSERT INTO edg.new_order (no_w_id, no_d_id, no_o_id)
+          VALUES ($1, $2, $3)
 
   # Payment transaction (TPC-C 2.5)
-  # Updates warehouse year-to-date total. Cassandra non-counter
-  # columns require overwrite semantics, so we set w_ytd to the
-  # payment amount (acceptable simplification for benchmarking).
-  - name: payment
-    type: exec
+  # Updates warehouse ytd, customer balance, and inserts history
+  # in a logged batch for atomicity.
+  - transaction: payment
     wait: 3s
-    args:
-      - ref_perm('fetch_warehouses').w_id
-      - gen('number:1,10')
-      - nurand(1023, 1, customers / districts)
-      - gen('number:100,500000')
-    query: |-
-      UPDATE edg.warehouse SET w_ytd = $4 WHERE w_id = $1
+    locals:
+      amount: gen('number:100,500000')
+    queries:
+      - name: update_warehouse
+        type: exec
+        args:
+          - ref_perm('fetch_warehouses').w_id
+          - local('amount')
+        query: |-
+          UPDATE edg.warehouse SET w_ytd = $2 WHERE w_id = $1
+
+      - name: read_customer
+        type: query
+        args:
+          - ref_same('update_warehouse').w_id
+          - gen('number:1,10')
+          - nurand(1023, 1, customers / districts)
+        query: |-
+          SELECT c_w_id, c_d_id, c_id, c_balance FROM edg.customer
+          WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3
+
+      - name: update_customer
+        type: exec
+        args:
+          - ref_same('read_customer').c_w_id
+          - ref_same('read_customer').c_d_id
+          - ref_same('read_customer').c_id
+          - local('amount')
+        query: |-
+          UPDATE edg.customer SET c_balance = c_balance + $4,
+            c_ytd_payment = c_ytd_payment + $4,
+            c_payment_cnt = c_payment_cnt + 1
+          WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3
+
+      - name: insert_history
+        type: exec
+        args:
+          - gen('uuid')
+          - ref_same('read_customer').c_id
+          - ref_same('read_customer').c_d_id
+          - ref_same('read_customer').c_w_id
+          - local('amount')
+        query: |-
+          INSERT INTO edg.history (h_id, h_c_id, h_c_d_id, h_c_w_id,
+            h_d_id, h_w_id, h_date, h_amount, h_data)
+          VALUES ($1, $2, $3, $4, $3, $4, toTimestamp(now()), $5, 'payment')
 
   # Order-Status transaction (TPC-C 2.6)
   # Retrieves the most recent order for a given customer's

@@ -4,6 +4,8 @@ Demonstrates multi-statement transactions using the bank schema. The `make_trans
 
 Compare with the [bank](_examples/bank) example, which achieves the same result using a single `UPDATE ... CASE` statement. The transaction approach is more realistic for applications that perform multiple round-trips within a transaction.
 
+Transaction support is available for all drivers including MongoDB (multi-document sessions) and Cassandra (logged batches).
+
 ```yaml
 run:
   - transaction: make_transfer
@@ -95,4 +97,42 @@ go run ./cmd/edg all \
 --driver mssql \
 --config _examples/transaction/mssql.yaml \
 --url "sqlserver://sa:P4ssw0rd@localhost:1433?database=transaction&encrypt=disable"
+```
+
+## MongoDB
+
+MongoDB transactions use multi-document sessions. Requires a replica set (standalone instances do not support transactions).
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_mongodb.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg all \
+--driver mongodb \
+--config _examples/transaction/mongodb.yaml \
+--url "mongodb://localhost:27017/edg?replicaSet=rs0"
+```
+
+## Cassandra
+
+Cassandra transactions use logged batches for atomic writes. Reads execute immediately; writes are buffered and committed together.
+
+### Setup
+
+```sh
+docker compose -f _examples/compose_cassandra.yml up -d
+```
+
+### Run
+
+```sh
+go run ./cmd/edg all \
+--driver cassandra \
+--config _examples/transaction/cassandra.yaml \
+--url "localhost:9042"
 ```

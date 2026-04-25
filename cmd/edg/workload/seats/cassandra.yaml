@@ -1,4 +1,4 @@
-# SEATS Benchmark Workload — Cassandra
+# SEATS Benchmark Workload - Cassandra
 # ======================================
 # Airline reservation system benchmark. Models flights, customers,
 # and reservations with contention on seat availability.

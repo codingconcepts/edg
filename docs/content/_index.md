@@ -46,8 +46,11 @@ Query arguments are written as expressions compiled at startup, giving you acces
 | Expectations | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
 | Prepared statements | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
 | Stages | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
-| Transactions | ☑️ | ☑️ | | | ☑️ | ☑️ | ☑️ | ☑️ |
+| Transactions | ☑️ | ☑️ | ☑️[^1] | ☑️[^2] | ☑️ | ☑️ | ☑️ | ☑️ |
 | Workers | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ |
+
+[^1]: Implemented using multi-document transactions via client sessions.
+[^2]: Implemented using logged batches, which guarantee atomicity but not isolation.
 
 ## Quick start
 
