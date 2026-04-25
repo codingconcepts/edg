@@ -3,6 +3,7 @@ package env
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/codingconcepts/edg/pkg/config"
@@ -138,6 +139,106 @@ func TestUniq_ResetBetweenQueries(t *testing.T) {
 	v, err = env.uniq("regex('[A-Z]{5}')")
 	require.NoError(t, err)
 	assert.Equal(t, "FIXED", v)
+}
+
+func TestUniq_InvalidMaxRetries(t *testing.T) {
+	env := testEnv(nil)
+	env.env["regex"] = func(pattern string) (string, error) {
+		return "ABC", nil
+	}
+	env.uniqSeen = map[string]map[any]struct{}{}
+	env.uniqProg = map[string]*vm.Program{}
+
+	_, err := env.uniq("regex('[A-Z]{3}')", "not_a_number")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "max retries must be an integer")
+}
+
+func TestUniq_CompileError(t *testing.T) {
+	env := testEnv(nil)
+	env.uniqSeen = map[string]map[any]struct{}{}
+	env.uniqProg = map[string]*vm.Program{}
+
+	_, err := env.uniq("undefined_func()")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "compiling")
+}
+
+func TestUniq_SeparateSeenPerExpression(t *testing.T) {
+	env := testEnv(nil)
+	env.env["const"] = func(v any) any { return v }
+	env.uniqSeen = map[string]map[any]struct{}{}
+	env.uniqProg = map[string]*vm.Program{}
+
+	v1, err := env.uniq("const(42)")
+	require.NoError(t, err)
+	assert.Equal(t, 42, v1)
+
+	v2, err := env.uniq("const(42)")
+	require.Error(t, err, "same expression should fail on duplicate")
+
+	env.uniqSeen = map[string]map[any]struct{}{}
+	env.uniqProg = map[string]*vm.Program{}
+
+	v3, err := env.uniq("const(42)")
+	require.NoError(t, err)
+	assert.Equal(t, 42, v3)
+	_ = v2
+}
+
+func TestUniq_Concurrent(t *testing.T) {
+	env := testEnv(nil)
+	counter := 0
+	var mu sync.Mutex
+	env.env["gen"] = func(pattern string) string {
+		mu.Lock()
+		defer mu.Unlock()
+		counter++
+		return fmt.Sprintf("val_%d", counter)
+	}
+	env.uniqSeen = map[string]map[any]struct{}{}
+	env.uniqProg = map[string]*vm.Program{}
+
+	const n = 50
+	results := make([]any, n)
+	errs := make([]error, n)
+
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := range n {
+		go func(idx int) {
+			defer wg.Done()
+			results[idx], errs[idx] = env.uniq("gen('word')")
+		}(i)
+	}
+	wg.Wait()
+
+	seen := map[any]bool{}
+	for i := range n {
+		require.NoError(t, errs[i], "goroutine %d", i)
+		assert.False(t, seen[results[i]], "duplicate: %v", results[i])
+		seen[results[i]] = true
+	}
+}
+
+func TestUniq_CachesCompiledProgram(t *testing.T) {
+	env := testEnv(nil)
+	counter := 0
+	env.env["gen"] = func(pattern string) string {
+		counter++
+		return fmt.Sprintf("val_%d", counter)
+	}
+	env.uniqSeen = map[string]map[any]struct{}{}
+	env.uniqProg = map[string]*vm.Program{}
+
+	_, err := env.uniq("gen('x')")
+	require.NoError(t, err)
+	assert.Contains(t, env.uniqProg, "gen('x')")
+
+	prog := env.uniqProg["gen('x')"]
+	_, err = env.uniq("gen('x')")
+	require.NoError(t, err)
+	assert.Same(t, prog, env.uniqProg["gen('x')"], "should reuse cached program")
 }
 
 func TestArg_DependentColumn(t *testing.T) {

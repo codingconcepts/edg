@@ -105,8 +105,8 @@ func NewEnv(database db.DB, driver string, r *config.Request, sections ...config
 		"distribute_sum":      env.distributeSum,      // Partition a total into N random parts that sum exactly to it.
 		"distribute_weighted": env.distributeWeighted, // Partition a total by proportional weights with optional noise.
 		"duration":            gen.RandDuration,       // Random duration between min and max.
-		"env":                 environ,                // Use a value in the environment and return err if missing.
 		"env_nil":             environNil,             // Use a value in the environment and return nil if missing.
+		"env":                 environ,                // Use a value in the environment and return err if missing.
 		"exp_f":               gen.ExpRandF,           // Exponential-distribution random float with precision.
 		"exp":                 gen.ExpRand,            // Exponential-distribution random float in [min, max].
 		"expr":                convert.Constant,       // Evaluate an arithmetic expression (e.g. expr(warehouses * 10)).
@@ -114,13 +114,14 @@ func NewEnv(database db.DB, driver string, r *config.Request, sections ...config
 		"fatal":               fatal,                  // Terminate the process immediately.
 		"gen_batch":           gen.GenBatch,           // Generate N values in batches, returns [][]any of comma-separated strings.
 		"gen_locale":          gen.GenLocale,          // Generate locale-aware PII (name, address, phone, etc.).
+		"uniq":               env.uniq,               // Retry expression until unique value found.
 		"gen":                 gen.Gen,                // Generate a random value using gofakeit.
 		"global":              env.global,             // Use a value in the global config section.
-		"local":               env.local,              // Use a transaction-scoped local variable.
 		"inet":                gen.GenInet,            // Random IP address within a CIDR block.
 		"iter":                env.iter,               // 1-based row counter for exec_batch queries.
 		"json_arr":            gen.JsonArr,            // Build a JSON array of N random values.
 		"json_obj":            gen.JsonObj,            // Build a JSON object from key-value pairs.
+		"local":               env.local,              // Use a transaction-scoped local variable.
 		"lognorm_f":           gen.LognormRandF,       // Log-normal-distribution random float with precision.
 		"lognorm":             gen.LognormRand,        // Log-normal-distribution random float in [min, max].
 		"ltree":               gen.GenLtree,           // PostgreSQL ltree path from dot-joined parts.
@@ -143,13 +144,13 @@ func NewEnv(database db.DB, driver string, r *config.Request, sections ...config
 		"ref_rand":            env.refRand,            // Use a random row.
 		"ref_same":            env.refSame,            // Use the same random row across multiple arguments.
 		"regex":               gen.GenRegex,           // Generate a string matching a regex pattern.
-		"seq":                 env.seq,                // Auto-incrementing sequence (start + counter * step).
+		"seq_exp":             env.seqExp,             // Exponential-distributed value from a global sequence.
 		"seq_global":          env.seqGlobal,          // Shared auto-incrementing sequence across all workers.
+		"seq_lognorm":         env.seqLognorm,         // Log-normal-distributed value from a global sequence.
+		"seq_norm":            env.seqNorm,            // Normal-distributed value from a global sequence.
 		"seq_rand":            env.seqRand,            // Uniform random value from an already-generated global sequence.
 		"seq_zipf":            env.seqZipf,            // Zipfian-distributed value from a global sequence.
-		"seq_norm":            env.seqNorm,            // Normal-distributed value from a global sequence.
-		"seq_exp":             env.seqExp,             // Exponential-distributed value from a global sequence.
-		"seq_lognorm":         env.seqLognorm,         // Log-normal-distributed value from a global sequence.
+		"seq":                 env.seq,                // Auto-incrementing sequence (start + counter * step).
 		"set_exp":             setExp,                 // Pick from a set using exponential distribution.
 		"set_lognorm":         setLognormal,           // Pick from a set using log-normal distribution.
 		"set_norm":            setNormal,              // Pick from a set using normal distribution.
@@ -157,7 +158,6 @@ func NewEnv(database db.DB, driver string, r *config.Request, sections ...config
 		"set_zipf":            setZipfian,             // Pick from a set using Zipfian distribution.
 		"sum":                 env.aggSum,             // Sum a numeric field across all rows in a dataset.
 		"template":            convert.Tmpl,           // Format string interpolation (fmt.Sprintf).
-		"gen_uniq":            env.uniq,               // Retry expression until unique value found.
 		"time":                gen.GenTime,            // Random time of day (HH:MM:SS).
 		"timestamp":           gen.RandTimestamp,      // Random timestamp between min and max (RFC3339).
 		"timez":               gen.GenTimez,           // Random time of day with timezone (HH:MM:SS+00:00).
@@ -168,9 +168,9 @@ func NewEnv(database db.DB, driver string, r *config.Request, sections ...config
 		"uuid_v6":             gen.GenUUIDv6,          // Generate a Version 6 UUID (reordered timestamp).
 		"uuid_v7":             gen.GenUUIDv7,          // Generate a Version 7 UUID (Unix timestamp + random).
 		"varbit":              gen.GenVarBit,          // Random variable-length bit string.
-		"vector":              env.vector,             // pgvector-compatible clustered vector literal (uniform).
 		"vector_norm":         env.vectorNorm,         // pgvector vector with normal centroid selection.
 		"vector_zipf":         env.vectorZipf,         // pgvector vector with Zipfian centroid selection.
+		"vector":              env.vector,             // pgvector-compatible clustered vector literal (uniform).
 		"weighted_sample_n":   env.weightedSampleN,    // N weighted random field values (comma-separated).
 		"zipf":                gen.ZipfRand,           // Zipfian-distributed random integer in [0, max].
 	}

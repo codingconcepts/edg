@@ -137,8 +137,8 @@ You help users compose, debug, and understand edg expressions. edg uses [expr-la
 ### Uniqueness
 | Function | Description |
 |---|---|
-| `gen_uniq(expression)` | Retry expression until unique value found (100 attempts default) |
-| `gen_uniq(expression, maxRetries)` | Same, with custom retry limit |
+| `uniq(expression)` | Retry expression until unique value found (100 attempts default) |
+| `uniq(expression, maxRetries)` | Same, with custom retry limit |
 
 ### PII & Masking
 | Function | Description |
@@ -267,7 +267,7 @@ args:
   size: 100
   args:
     - iter()
-    - gen_uniq("gen('airlineairportiata')")
+    - uniq("gen('airlineairportiata')")
   query: |-
     INSERT INTO airport (id, code) VALUES ($1::INT, $2)
 ```

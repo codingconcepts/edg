@@ -155,7 +155,7 @@ A complete edg YAML config with all applicable sections:
 - Use `gen_batch(total, batchSize, pattern)` for generating batched values
 - Use `batch(n)` for sequential indices
 - Use `iter()` for a 1-based row counter within batch queries (resets per query)
-- Use `gen_uniq("expression")` to retry a generator until a unique value is produced (e.g., `gen_uniq("gen('airlineairportiata')")` for unique IATA codes). Defaults to 100 retries; override with `gen_uniq("expression", 500)`
+- Use `uniq("expression")` to retry a generator until a unique value is produced (e.g., `uniq("gen('airlineairportiata')")` for unique IATA codes). Defaults to 100 retries; override with `uniq("expression", 500)`
 
 ### Transactions
 - Group related `run` queries into an explicit `BEGIN/COMMIT` block using the `transaction` key

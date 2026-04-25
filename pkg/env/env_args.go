@@ -286,7 +286,7 @@ func (e *Env) uniq(expression string, args ...any) (any, error) {
 	if len(args) > 0 {
 		v, err := convert.ToInt(args[0])
 		if err != nil {
-			return nil, fmt.Errorf("gen_uniq: max retries must be an integer: %w", err)
+			return nil, fmt.Errorf("uniq: max retries must be an integer: %w", err)
 		}
 		maxRetries = v
 	}
@@ -298,7 +298,7 @@ func (e *Env) uniq(expression string, args ...any) (any, error) {
 		prog, err = expr.Compile(expression, expr.Env(e.env))
 		if err != nil {
 			e.uniqSeenMutex.Unlock()
-			return nil, fmt.Errorf("gen_uniq: compiling %q: %w", expression, err)
+			return nil, fmt.Errorf("uniq: compiling %q: %w", expression, err)
 		}
 		e.uniqProg[expression] = prog
 	}
@@ -312,7 +312,7 @@ func (e *Env) uniq(expression string, args ...any) (any, error) {
 	for range maxRetries {
 		v, err := expr.Run(prog, e.env)
 		if err != nil {
-			return nil, fmt.Errorf("gen_uniq: evaluating %q: %w", expression, err)
+			return nil, fmt.Errorf("uniq: evaluating %q: %w", expression, err)
 		}
 		e.uniqSeenMutex.Lock()
 		if _, dup := seen[v]; !dup {
@@ -323,7 +323,7 @@ func (e *Env) uniq(expression string, args ...any) (any, error) {
 		e.uniqSeenMutex.Unlock()
 	}
 
-	return nil, fmt.Errorf("gen_uniq(%q): failed to generate unique value after %d attempts", expression, maxRetries)
+	return nil, fmt.Errorf("uniq(%q): failed to generate unique value after %d attempts", expression, maxRetries)
 }
 
 // ensure vm import is used

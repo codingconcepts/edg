@@ -133,7 +133,7 @@ seed:
     size: batch_size
     args:
       - iter()
-      - gen_uniq("regex('[A-Z]{3}')")
+      - uniq("regex('[A-Z]{3}')")
       - countries
     query: |-
       INSERT INTO airport (ap_id, ap_code, ap_name, ap_city, ap_co_id)
@@ -148,7 +148,7 @@ seed:
     size: batch_size
     args:
       - iter()
-      - gen_uniq("regex('[A-Z]{2}')")
+      - uniq("regex('[A-Z]{2}')")
     query: |-
       INSERT INTO airline (al_id, al_iata_code, al_name)
       VALUES ($1::INT, $2, 'Airline_' || lpad($1::TEXT, 3, '0'))

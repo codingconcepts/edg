@@ -40,7 +40,7 @@ These are edg's built-in functions, available in any expression context (`args:`
 | `fail(message)` | `error` | Returns an error that stops the current worker gracefully. Useful with `??` to catch unexpected values: `{'a': 1}['x'] ?? fail('unknown key')`.<br><br>`fail('unexpected region')` -> *(worker stops with error)* |
 | `fatal(message)` | `void` | Terminates the entire process immediately. Use when an unexpected value should halt all workers, not just the current one.<br><br>`fatal('missing required config')` -> *(process exits)* |
 | `gen_batch(total, batchSize, pattern)` | `[][]any` | Generates `total` values using [gofakeit](https://github.com/brianvoe/gofakeit) `pattern`, grouped into batches of `batchSize`. Each batch arg is a string of generated values delimited by the ASCII unit separator (char 31, `\x1f`).<br><br>`gen_batch(4, 2, 'firstname')` -> `[["Alice\x1fBob"], ["Carol\x1fDave"]]` |
-| `gen_uniq(expression)` | `any` | Evaluates a string expression repeatedly until a unique (not previously seen) value is produced. Defaults to 100 retry attempts. Pass an optional second argument to override: `uniq("regex('[A-Z]{2}')", 500)`. Seen values persist across rows within a query and reset between queries.<br><br>`uniq("gen('airlineairportiata')")` -> `LAX` |
+| `uniq(expression)` | `any` | Evaluates a string expression repeatedly until a unique (not previously seen) value is produced. Defaults to 100 retry attempts. Pass an optional second argument to override: `uniq("regex('[A-Z]{2}')", 500)`. Seen values persist across rows within a query and reset between queries.<br><br>`uniq("gen('airlineairportiata')")` -> `LAX` |
 | `gen(pattern)` | `string` | Generates a random value using [gofakeit](https://github.com/brianvoe/gofakeit) patterns (e.g. `gen('number:1,100')`).<br><br>`gen('number:1,10')` -> `7` |
 | `global(name)` | `any` | Looks up a value from the `globals` section by name. Globals are also available directly as variables, so `global('warehouses')` and `warehouses` are equivalent.<br><br>`global('warehouses')` -> `10` |
 | `inet(cidr)` | `string` | Random IP address within the given CIDR block.<br><br>`inet('192.168.1.0/24')` -> `192.168.1.42` |
@@ -103,7 +103,7 @@ Several functions maintain state. Understanding when that state resets is import
 | Function | Scope | Resets |
 |---|---|---|
 | `arg(index)` / `arg('name')` | Per-query | Returns the value of arg at `index` (or by name when using [named args]({{< relref "configuration#named-args" >}})). Cleared before the next query. In batch queries, resets per row. |
-| `gen_uniq(expression)` | Per-query | Tracks seen values across all rows within a query. Resets between queries. |
+| `uniq(expression)` | Per-query | Tracks seen values across all rows within a query. Resets between queries. |
 | `iter()` | Per-query | Returns 1 for the first row, 2 for the second, etc. Resets to 0 at the start of each batch query. |
 | `nurand(A, x, y)` | Per-worker | The TPC-C constant C is generated once per worker per A value and stays fixed for the worker's lifetime. |
 | `ref_diff(name)` | Per-query | Returns a unique row on each call within a query (no repeats). Index resets before the next query. |
