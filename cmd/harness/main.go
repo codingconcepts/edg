@@ -222,7 +222,6 @@ func runWorkload(cfg dbConfig, name string, duration time.Duration, workers int)
 		"--url", url,
 		"--duration", duration.String(),
 		"--workers", fmt.Sprintf("%d", workers),
-		"--errors",
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
