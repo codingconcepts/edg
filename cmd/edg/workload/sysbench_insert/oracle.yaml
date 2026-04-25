@@ -85,3 +85,7 @@ run:
       EXCEPTION WHEN OTHERS THEN
         IF SQLCODE != -1 THEN RAISE; END IF;
       END;
+
+
+expectations:
+  - error_rate < 1

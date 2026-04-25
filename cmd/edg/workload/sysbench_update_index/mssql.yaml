@@ -68,3 +68,7 @@ run:
       - gen('number:1,' + string(records))
     query: |-
       UPDATE sbtest1 SET k = k + 1 WHERE id = @p1
+
+
+expectations:
+  - error_rate < 1

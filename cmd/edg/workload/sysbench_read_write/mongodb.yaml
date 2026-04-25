@@ -133,3 +133,7 @@ run:
       - regex('[a-zA-Z0-9]{60}')
     query: |-
       {"update": "sbtest1", "updates": [{"q": {"_id": $1}, "u": {"$set": {"k": $1, "c": "$2", "pad": "$3"}}, "upsert": true}]}
+
+
+expectations:
+  - error_rate < 1

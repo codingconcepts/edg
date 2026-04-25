@@ -450,3 +450,7 @@ run:
       SELECT p_partkey, p_type, p_retailprice
       FROM edg.part
       ALLOW FILTERING
+
+
+expectations:
+  - error_rate < 1

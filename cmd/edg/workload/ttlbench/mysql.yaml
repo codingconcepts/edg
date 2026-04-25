@@ -68,3 +68,7 @@ run:
       DELETE FROM ttlbench
       WHERE inserted_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)
       LIMIT 1000
+
+
+expectations:
+  - error_rate < 1

@@ -64,3 +64,7 @@ run:
       - blob(value_size)
     query: |-
       {"update": "kv", "updates": [{"q": {"k": $1}, "u": {"$set": {"k": $1, "v": {"$binary": {"base64": "$2", "subType": "00"}}}}, "upsert": true}]}
+
+
+expectations:
+  - error_rate < 1

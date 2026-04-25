@@ -419,3 +419,7 @@ run:
       WHERE l_shipdate >= CAST(CONCAT(@p1, '-', RIGHT('0' + @p2, 2), '-01') AS DATE)
         AND l_shipdate < DATEADD(MONTH, 1,
           CAST(CONCAT(@p1, '-', RIGHT('0' + @p2, 2), '-01') AS DATE))
+
+
+expectations:
+  - error_rate < 1

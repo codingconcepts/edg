@@ -147,3 +147,7 @@ run:
                     END
         WHERE id IN (v_from_id, v_to_id);
       END;
+
+
+expectations:
+  - error_rate < 1

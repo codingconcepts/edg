@@ -115,3 +115,7 @@ run:
                       WHEN id = @p1 THEN balance - CAST(@p3 AS FLOAT)
                     END
       WHERE id IN (@p1, @p2)
+
+
+expectations:
+  - error_rate < 1

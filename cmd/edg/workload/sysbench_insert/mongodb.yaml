@@ -57,3 +57,7 @@ run:
       - regex('[a-zA-Z0-9]{60}')
     query: |-
       {"insert": "sbtest1", "documents": [{"_id": $1, "k": $2, "c": "$3", "pad": "$4"}]}
+
+
+expectations:
+  - error_rate < 1

@@ -493,3 +493,7 @@ run:
           WHERE f_id = v_f_id;
         END IF;
       END;
+
+
+expectations:
+  - error_rate < 1

@@ -110,3 +110,7 @@ run:
       DELETE FROM events
       WHERE created_at < SYSTIMESTAMP - INTERVAL '10' MINUTE
         AND ROWNUM <= 1000
+
+
+expectations:
+  - error_rate < 1

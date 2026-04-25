@@ -411,3 +411,7 @@ run:
       JOIN part p ON l.l_partkey = p.p_partkey
       WHERE l_shipdate >= CONCAT(?, '-', LPAD(?, 2, '0'), '-01')
         AND l_shipdate < DATE_ADD(CONCAT(?, '-', LPAD(?, 2, '0'), '-01'), INTERVAL 1 MONTH)
+
+
+expectations:
+  - error_rate < 1

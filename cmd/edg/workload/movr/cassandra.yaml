@@ -325,3 +325,7 @@ run:
     query: |-
       INSERT INTO edg.user_promo_codes (city, user_id, code, ts, usage_count)
       VALUES ($1, $2, $3, $4, 1)
+
+
+expectations:
+  - error_rate < 1

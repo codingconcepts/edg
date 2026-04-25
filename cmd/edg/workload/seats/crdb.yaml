@@ -395,3 +395,7 @@ run:
       UPDATE flight SET f_seats_left = f_seats_left + 1
       FROM del
       WHERE flight.f_id = del.r_f_id
+
+
+expectations:
+  - error_rate < 1

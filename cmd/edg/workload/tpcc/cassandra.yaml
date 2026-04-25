@@ -608,3 +608,7 @@ run:
       SELECT s_i_id FROM edg.stock
       WHERE s_w_id = $1 AND s_quantity < $3
       ALLOW FILTERING
+
+
+expectations:
+  - error_rate < 1

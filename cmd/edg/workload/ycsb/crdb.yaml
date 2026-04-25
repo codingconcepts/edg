@@ -154,3 +154,7 @@ run:
       UPDATE usertable SET field0 = $2
       WHERE ycsb_key = $1
       RETURNING *
+
+
+expectations:
+  - error_rate < 1

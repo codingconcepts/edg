@@ -153,3 +153,7 @@ run:
     query: |-
       UPDATE usertable SET field0 = @p1
       WHERE ycsb_key = @p2
+
+
+expectations:
+  - error_rate < 1

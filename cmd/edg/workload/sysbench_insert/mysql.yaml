@@ -70,3 +70,7 @@ run:
     query: |-
       INSERT IGNORE INTO sbtest1 (id, k, c, pad)
       VALUES (?, ?, ?, ?)
+
+
+expectations:
+  - error_rate < 1

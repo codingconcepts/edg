@@ -83,3 +83,7 @@ run:
       DELETE FROM ttlbench
       WHERE inserted_at < SYSTIMESTAMP - INTERVAL '30' MINUTE
         AND ROWNUM <= 1000
+
+
+expectations:
+  - error_rate < 1

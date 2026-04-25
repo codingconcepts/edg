@@ -157,3 +157,7 @@ run:
             floor(random()::FLOAT8 * 10000)::INT,
             $2, $3
           )
+
+
+expectations:
+  - error_rate < 1

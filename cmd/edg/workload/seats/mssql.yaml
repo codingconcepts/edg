@@ -393,3 +393,7 @@ run:
       IF @deleted > 0
         UPDATE flight SET f_seats_left = f_seats_left + 1
         WHERE f_id = @p2
+
+
+expectations:
+  - error_rate < 1

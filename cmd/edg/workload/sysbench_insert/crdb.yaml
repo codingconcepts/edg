@@ -66,3 +66,7 @@ run:
       INSERT INTO sbtest1 (id, k, c, pad)
       VALUES ($1::INT, $2::INT, $3, $4)
       ON CONFLICT (id) DO NOTHING
+
+
+expectations:
+  - error_rate < 1

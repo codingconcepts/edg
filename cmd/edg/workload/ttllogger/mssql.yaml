@@ -87,3 +87,7 @@ run:
     query: |-
       DELETE TOP(1000) FROM events
       WHERE created_at < DATEADD(MINUTE, -10, SYSUTCDATETIME())
+
+
+expectations:
+  - error_rate < 1

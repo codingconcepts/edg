@@ -379,3 +379,7 @@ run:
       DELETE FROM reservation WHERE r_id = ?;
       UPDATE flight SET f_seats_left = f_seats_left + 1
       WHERE f_id = ?
+
+
+expectations:
+  - error_rate < 1

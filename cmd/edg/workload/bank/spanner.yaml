@@ -114,3 +114,7 @@ run:
                     WHEN id = $1 THEN balance - CAST($3 AS FLOAT64)
                   END
       WHERE id IN UNNEST([$1, $2])
+
+
+expectations:
+  - error_rate < 1

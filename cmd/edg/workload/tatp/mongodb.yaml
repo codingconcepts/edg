@@ -270,3 +270,7 @@ run:
       - gen('number:0,23')
     query: |-
       {"delete": "call_forwarding", "deletes": [{"q": {"s_id": $1, "sf_type": $2, "start_time": $3}, "limit": 1}]}
+
+
+expectations:
+  - error_rate < 1

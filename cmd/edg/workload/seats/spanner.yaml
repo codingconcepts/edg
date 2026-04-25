@@ -389,3 +389,7 @@ run:
     query: |-
       UPDATE flight SET f_seats_left = f_seats_left + 1
       WHERE f_id = $1
+
+
+expectations:
+  - error_rate < 1

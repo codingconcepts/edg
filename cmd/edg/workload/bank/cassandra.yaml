@@ -160,3 +160,6 @@ run:
           - ref_same('read_target').balance + local('amount')
         query: |-
           UPDATE edg.account SET balance = $2 WHERE id = $1
+
+expectations:
+  - error_rate < 1

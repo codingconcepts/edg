@@ -484,3 +484,7 @@ run:
       - gen('number:10,20')
     query: |-
       {"aggregate": "stock", "pipeline": [{"$match": {"s_w_id": $1, "s_quantity": {"$lt": $3}}}, {"$count": "low_stock"}], "cursor": {}}
+
+
+expectations:
+  - error_rate < 1

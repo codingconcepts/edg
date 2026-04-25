@@ -397,3 +397,7 @@ run:
     query: |-
       DELETE FROM edg.reservation
       WHERE r_f_id = $2 AND r_id = $1
+
+
+expectations:
+  - error_rate < 1

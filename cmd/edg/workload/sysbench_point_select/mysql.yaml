@@ -65,3 +65,7 @@ run:
       - gen('number:1,' + string(records))
     query: |-
       SELECT c FROM sbtest1 WHERE id = ?
+
+
+expectations:
+  - error_rate < 1

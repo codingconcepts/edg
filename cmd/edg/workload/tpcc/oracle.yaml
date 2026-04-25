@@ -917,3 +917,7 @@ run:
         ON s.s_i_id = ol.ol_i_id AND s.s_w_id = d.d_w_id
       WHERE d.d_w_id = :1 AND d.d_id = :2
         AND s.s_quantity < :3
+
+
+expectations:
+  - error_rate < 1

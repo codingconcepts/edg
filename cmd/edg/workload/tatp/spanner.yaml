@@ -424,3 +424,7 @@ run:
       DELETE FROM call_forwarding
       WHERE s_id = @p1 AND sf_type = @p2
         AND start_time = @p3
+
+
+expectations:
+  - error_rate < 1

@@ -69,3 +69,7 @@ run:
     query: |-
       INSERT INTO kv (k, v) VALUES (?, ?)
       ON DUPLICATE KEY UPDATE v = VALUES(v)
+
+
+expectations:
+  - error_rate < 1

@@ -299,3 +299,7 @@ run:
     query: |-
       INSERT OR UPDATE INTO user_promo_codes (city, user_id, code, usage_count)
       VALUES ($1, $2, $3, 1)
+
+
+expectations:
+  - error_rate < 1

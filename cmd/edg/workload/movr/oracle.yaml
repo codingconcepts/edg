@@ -353,3 +353,7 @@ run:
       WHEN MATCHED THEN UPDATE SET usage_count = usage_count + 1
       WHEN NOT MATCHED THEN INSERT (city, user_id, code, usage_count)
         VALUES (s.city, s.user_id, s.code, 1)
+
+
+expectations:
+  - error_rate < 1

@@ -96,8 +96,6 @@ docker compose -f cmd/harness/compose/compose_oracle.yml down
 
 ## Todos
 
-* Add expectations for all edg workload configs
-* Rethink iter() - perhaps its better to use seq with a start pos
 * Ensure MongoDB uses object ids
 * Ensure all batch queries are inserting at least 10 rows (some cassandra batches are 1 at a time)
 * Unique constraint awareness (e.g. uniq(gen('email')) will repeated call gen until a new unique value is found. For uniq(gen('email'), 10), it will try 10 times, then fail)

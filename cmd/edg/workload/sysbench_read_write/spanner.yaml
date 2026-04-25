@@ -140,3 +140,7 @@ run:
     query: |-
       INSERT OR UPDATE INTO sbtest1 (id, k, c, pad)
       VALUES ($1, $2, $3, $4)
+
+
+expectations:
+  - error_rate < 1

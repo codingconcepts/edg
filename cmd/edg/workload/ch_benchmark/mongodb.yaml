@@ -570,3 +570,7 @@ run:
     type: query
     query: |-
       {"aggregate": "oorder", "pipeline": [{"$group": {"_id": "$o_ol_cnt", "high_line_count": {"$sum": {"$cond": [{"$and": [{"$gte": ["$o_carrier_id", 1]}, {"$lte": ["$o_carrier_id", 5]}]}, 1, 0]}}, "low_line_count": {"$sum": {"$cond": [{"$or": [{"$gt": ["$o_carrier_id", 5]}, {"$eq": ["$o_carrier_id", null]}]}, 1, 0]}}}}, {"$sort": {"_id": 1}}], "cursor": {}}
+
+
+expectations:
+  - error_rate < 1

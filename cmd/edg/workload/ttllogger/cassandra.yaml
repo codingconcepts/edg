@@ -93,3 +93,7 @@ run:
       WHERE level = $1
       ORDER BY created_at DESC
       LIMIT 20
+
+
+expectations:
+  - error_rate < 1

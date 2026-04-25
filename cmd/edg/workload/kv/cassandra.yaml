@@ -78,3 +78,7 @@ run:
       - blob(value_size)
     query: |-
       INSERT INTO edg.kv (k, v) VALUES ($1, $2)
+
+
+expectations:
+  - error_rate < 1

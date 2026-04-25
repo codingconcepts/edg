@@ -358,3 +358,7 @@ run:
     query: |-
       DELETE FROM edg.call_forwarding
       WHERE s_id = $1 AND sf_type = $2 AND start_time = $3
+
+
+expectations:
+  - error_rate < 1

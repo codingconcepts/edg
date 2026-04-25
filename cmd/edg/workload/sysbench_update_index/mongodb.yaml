@@ -59,3 +59,7 @@ run:
       - gen('number:1,' + string(records))
     query: |-
       {"update": "sbtest1", "updates": [{"q": {"_id": $1}, "u": {"$inc": {"k": 1}}}]}
+
+
+expectations:
+  - error_rate < 1

@@ -136,3 +136,7 @@ run:
           - local('amount')
         query: |-
           {"update": "account", "updates": [{"q": {"_id": "$1"}, "u": {"$inc": {"balance": $2}}}]}
+
+
+expectations:
+  - error_rate < 1

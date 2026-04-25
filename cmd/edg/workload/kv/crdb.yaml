@@ -69,3 +69,7 @@ run:
       - blob(value_size)
     query: |-
       UPSERT INTO kv (k, v) VALUES ($1::INT8, $2)
+
+
+expectations:
+  - error_rate < 1

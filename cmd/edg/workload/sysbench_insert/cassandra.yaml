@@ -76,3 +76,7 @@ run:
       - regex('[a-zA-Z0-9]{60}')
     query: |-
       INSERT INTO edg.sbtest1 (id, k, c, pad) VALUES ($1, $2, $3, $4)
+
+
+expectations:
+  - error_rate < 1

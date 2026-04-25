@@ -63,3 +63,7 @@ run:
       WHERE inserted_at > now() - INTERVAL '5 minutes'
       ORDER BY inserted_at DESC
       LIMIT 10
+
+
+expectations:
+  - error_rate < 1

@@ -63,3 +63,7 @@ run:
       - blob(value_size)
     query: |-
       INSERT OR UPDATE INTO kv (k, v) VALUES (CAST(@p1 AS INT64), @p2)
+
+
+expectations:
+  - error_rate < 1

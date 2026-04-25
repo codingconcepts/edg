@@ -118,3 +118,7 @@ run:
                         WHEN a.id = p.from_id THEN a.balance - p.amount
                       END
       WHERE a.id = p.from_id OR a.id = p.to_id
+
+
+expectations:
+  - error_rate < 1

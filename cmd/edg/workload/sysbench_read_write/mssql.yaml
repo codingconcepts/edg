@@ -146,3 +146,7 @@ run:
     query: |-
       DELETE FROM sbtest1 WHERE id = @p1;
       INSERT INTO sbtest1 (id, k, c, pad) VALUES (@p1, @p2, @p3, @p4)
+
+
+expectations:
+  - error_rate < 1

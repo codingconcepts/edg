@@ -450,3 +450,7 @@ run:
       WHERE l_shipdate >= TO_DATE(:1 || '-' || LPAD(:2, 2, '0') || '-01', 'YYYY-MM-DD')
         AND l_shipdate < ADD_MONTHS(
           TO_DATE(:1 || '-' || LPAD(:2, 2, '0') || '-01', 'YYYY-MM-DD'), 1)
+
+
+expectations:
+  - error_rate < 1

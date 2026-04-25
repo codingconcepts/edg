@@ -372,3 +372,7 @@ run:
       - gen('number:1,12')
     query: |-
       {"aggregate": "lineitem", "pipeline": [{"$match": {"l_shipdate": {"$gte": "$1-01-01", "$lte": "$1-12-31"}}}, {"$lookup": {"from": "part", "localField": "l_partkey", "foreignField": "p_partkey", "as": "part_doc"}}, {"$unwind": "$part_doc"}, {"$group": {"_id": null, "promo_revenue": {"$sum": {"$cond": [{"$regexMatch": {"input": "$part_doc.p_type", "regex": "^PROMO"}}, {"$multiply": ["$l_extendedprice", {"$subtract": [1, "$l_discount"]}]}, 0]}}, "total_revenue": {"$sum": {"$multiply": ["$l_extendedprice", {"$subtract": [1, "$l_discount"]}]}}}}, {"$project": {"promo_revenue": {"$multiply": [100, {"$divide": ["$promo_revenue", "$total_revenue"]}]}}}], "cursor": {}}
+
+
+expectations:
+  - error_rate < 1

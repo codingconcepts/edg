@@ -67,3 +67,7 @@ run:
     query: |-
       DELETE TOP(1000) FROM ttlbench
       WHERE inserted_at < DATEADD(MINUTE, -30, SYSUTCDATETIME())
+
+
+expectations:
+  - error_rate < 1

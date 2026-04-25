@@ -552,3 +552,7 @@ run:
       DELETE FROM call_forwarding
       WHERE s_id = ? AND sf_type = ?
         AND start_time = ?
+
+
+expectations:
+  - error_rate < 1

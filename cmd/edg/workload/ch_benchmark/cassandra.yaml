@@ -710,3 +710,7 @@ run:
       SELECT o_ol_cnt, o_carrier_id
       FROM edg.oorder
       ALLOW FILTERING
+
+
+expectations:
+  - error_rate < 1

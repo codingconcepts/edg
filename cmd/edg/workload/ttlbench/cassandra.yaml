@@ -68,3 +68,7 @@ run:
     type: query
     query: |-
       SELECT id, inserted_at FROM edg.ttlbench LIMIT 10
+
+
+expectations:
+  - error_rate < 1

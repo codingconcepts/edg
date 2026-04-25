@@ -306,3 +306,7 @@ run:
       INSERT INTO user_promo_codes (city, user_id, code, usage_count)
       VALUES (?, ?, ?, 1)
       ON DUPLICATE KEY UPDATE usage_count = usage_count + 1
+
+
+expectations:
+  - error_rate < 1

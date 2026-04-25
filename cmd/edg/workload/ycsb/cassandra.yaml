@@ -163,3 +163,7 @@ run:
       - regex('[a-zA-Z0-9]{100}')
     query: |-
       UPDATE edg.usertable SET field0 = $2 WHERE ycsb_key = $1
+
+
+expectations:
+  - error_rate < 1

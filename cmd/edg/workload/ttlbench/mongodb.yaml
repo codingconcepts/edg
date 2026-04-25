@@ -62,3 +62,7 @@ run:
       - date_offset('-5m')
     query: |-
       {"aggregate": "ttlbench", "pipeline": [{"$match": {"inserted_at": {"$gte": {"$date": "$1"}}}}, {"$sort": {"inserted_at": -1}}, {"$limit": 10}, {"$project": {"_id": 1, "inserted_at": 1}}], "cursor": {}}
+
+
+expectations:
+  - error_rate < 1

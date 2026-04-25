@@ -160,3 +160,7 @@ run:
     query: |-
       UPDATE usertable SET field0 = :2
       WHERE ycsb_key = :1
+
+
+expectations:
+  - error_rate < 1

@@ -78,3 +78,7 @@ run:
         AND created_at > now() - INTERVAL '5 minutes'
       ORDER BY created_at DESC
       LIMIT 20
+
+
+expectations:
+  - error_rate < 1

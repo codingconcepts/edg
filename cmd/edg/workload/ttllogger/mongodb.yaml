@@ -78,3 +78,7 @@ run:
       - date_offset('-5m')
     query: |-
       {"find": "events", "filter": {"level": "$1", "created_at": {"$gte": {"$date": "$2"}}}, "sort": {"created_at": -1}, "limit": 20}
+
+
+expectations:
+  - error_rate < 1

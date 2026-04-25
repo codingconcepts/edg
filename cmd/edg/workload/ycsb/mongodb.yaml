@@ -135,3 +135,7 @@ run:
       - regex('[a-zA-Z0-9]{100}')
     query: |-
       {"findAndModify": "usertable", "query": {"ycsb_key": "$1"}, "update": {"$set": {"field0": "$2"}}, "new": true}
+
+
+expectations:
+  - error_rate < 1

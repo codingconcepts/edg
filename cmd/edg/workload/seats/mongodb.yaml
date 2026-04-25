@@ -324,3 +324,7 @@ run:
       - ref_rand('fetch_reservations').r_f_id
     query: |-
       {"delete": "reservation", "deletes": [{"q": {"_id": "$1"}, "limit": 1}]}
+
+
+expectations:
+  - error_rate < 1

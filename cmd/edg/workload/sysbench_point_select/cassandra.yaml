@@ -71,3 +71,7 @@ run:
       - gen('number:1,' + string(records))
     query: |-
       SELECT c FROM edg.sbtest1 WHERE id = $1
+
+
+expectations:
+  - error_rate < 1

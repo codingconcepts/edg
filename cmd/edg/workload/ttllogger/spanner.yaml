@@ -88,3 +88,7 @@ run:
     query: |-
       DELETE FROM events
       WHERE created_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 10 MINUTE)
+
+
+expectations:
+  - error_rate < 1

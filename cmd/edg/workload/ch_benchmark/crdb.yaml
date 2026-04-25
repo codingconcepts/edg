@@ -897,3 +897,7 @@ run:
       WHERE ol.ol_delivery_d IS NOT NULL
       GROUP BY o.o_ol_cnt
       ORDER BY o.o_ol_cnt
+
+
+expectations:
+  - error_rate < 1

@@ -150,3 +150,7 @@ run:
     query: |-
       UPDATE usertable SET field0 = ?
       WHERE ycsb_key = ?
+
+
+expectations:
+  - error_rate < 1

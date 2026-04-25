@@ -319,3 +319,7 @@ run:
       DELETE FROM call_forwarding
       WHERE s_id = $1::INT AND sf_type = $2::INT
         AND start_time = $3::INT
+
+
+expectations:
+  - error_rate < 1

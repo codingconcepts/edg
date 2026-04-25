@@ -269,3 +269,7 @@ run:
       - ref_rand('fetch_promo_codes')._id
     query: |-
       {"update": "user_promo_codes", "updates": [{"q": {"city": "$1", "user_id": "$2", "code": "$3"}, "u": {"$inc": {"usage_count": 1}, "$setOnInsert": {"city": "$1", "user_id": "$2", "code": "$3"}}, "upsert": true}]}
+
+
+expectations:
+  - error_rate < 1

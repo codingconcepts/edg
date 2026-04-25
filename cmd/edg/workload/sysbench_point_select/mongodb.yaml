@@ -53,3 +53,7 @@ run:
       - gen('number:1,' + string(records))
     query: |-
       {"find": "sbtest1", "filter": {"_id": $1}}
+
+
+expectations:
+  - error_rate < 1
