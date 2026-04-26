@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -103,7 +104,7 @@ func runStages(ctx context.Context, _ context.CancelFunc, p workload.RunParams) 
 		totalDuration += time.Duration(s.Duration)
 	}
 
-	stats := printResults(results, p.PrintInterval, start, totalWorkers, totalDuration, p.WarmupDuration)
+	stats := printResults(os.Stdout, results, p.PrintInterval, start, totalWorkers, totalDuration, p.WarmupDuration)
 
 	return stats, time.Since(start), nil
 }
@@ -148,7 +149,7 @@ func runStage(ctx context.Context, cancel context.CancelFunc, p workload.RunPara
 		slog.Info("warming up", "duration", p.WarmupDuration)
 	}
 	slog.Info("running", "workers", p.Workers, "duration", p.Duration)
-	stats := printResults(results, p.PrintInterval, start, p.Workers, p.Duration, p.WarmupDuration)
+	stats := printResults(os.Stdout, results, p.PrintInterval, start, p.Workers, p.Duration, p.WarmupDuration)
 
 	return stats, time.Since(start), nil
 }

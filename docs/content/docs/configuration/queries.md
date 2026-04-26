@@ -542,6 +542,23 @@ The expression has access to all data in the environment, including results from
 
 If any query inside a transaction fails, the transaction is rolled back. During the `run` phase, the error is logged and the worker continues to the next iteration (same as standalone query errors). Conditional rollbacks (via `rollback_if`) are not errors and do not appear in the error rate.
 
+#### Cassandra transactions
+
+Cassandra does not support ACID transactions. When you use a `transaction` block with the Cassandra driver, edg uses a **logged batch** internally. This has important implications:
+
+- **Writes are atomic**: All `exec` queries in the transaction are accumulated into a single batch and sent to the database on commit. Either all writes succeed or none do.
+- **Reads bypass the batch**: Any `query` type inside the transaction executes immediately against the session, outside the batch. Reads do not see uncommitted writes from the same transaction.
+- **Rollback is a no-op**: If a `rollback_if` condition triggers or a query fails, the batch is simply discarded. There is no undo of already-executed reads.
+
+This makes Cassandra transactions suitable for grouping related writes that must succeed together, but not for read-then-write patterns that require isolation. If your workload needs to read a value and then write based on it within the same transaction, use lightweight transactions (LWT) with `IF` conditions in individual queries instead.
+
+#### MongoDB transactions
+
+MongoDB transactions use sessions and provide full ACID guarantees. Both reads and writes participate in the transaction and see each other's results, matching the behaviour of SQL drivers.
+
+> [!NOTE]
+> MongoDB transactions require a **replica set** or **sharded cluster**. Standalone `mongod` instances do not support multi-document transactions. If you are testing locally, use `mongod --replSet rs0` or a Docker Compose setup with replica set initialisation.
+
 ### Wait
 
 Queries can specify a `wait` duration (e.g. `wait: 18s`) to introduce a keying/think-time delay after execution. This only applies to queries in the `run` section and is ignored in other sections.

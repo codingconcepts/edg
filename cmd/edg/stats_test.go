@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"io"
+	"math"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -21,7 +25,7 @@ func TestPrintResults_BasicAccumulation(t *testing.T) {
 			close(results)
 		}()
 
-		stats := printResults(results, time.Second, time.Now(), 1, time.Minute, 0)
+		stats := printResults(io.Discard, results, time.Second, time.Now(), 1, time.Minute, 0)
 
 		assert.Equal(t, int64(2), stats["read"].count)
 		assert.Equal(t, 30*time.Millisecond, stats["read"].totalLatency)
@@ -41,7 +45,7 @@ func TestPrintResults_ErrorCounting(t *testing.T) {
 			close(results)
 		}()
 
-		stats := printResults(results, time.Second, time.Now(), 1, time.Minute, 0)
+		stats := printResults(io.Discard, results, time.Second, time.Now(), 1, time.Minute, 0)
 
 		assert.Equal(t, int64(1), stats["read"].count)
 		assert.Equal(t, int64(2), stats["read"].errors)
@@ -59,7 +63,7 @@ func TestPrintResults_TransactionTracking(t *testing.T) {
 			close(results)
 		}()
 
-		stats := printResults(results, time.Second, time.Now(), 1, time.Minute, 0)
+		stats := printResults(io.Discard, results, time.Second, time.Now(), 1, time.Minute, 0)
 
 		assert.True(t, stats["transfer"].isTransaction)
 		assert.Equal(t, int64(2), stats["transfer"].commits)
@@ -85,7 +89,7 @@ func TestPrintResults_WarmupFiltersResults(t *testing.T) {
 			close(results)
 		}()
 
-		stats := printResults(results, time.Second, time.Now(), 1, time.Minute, 5*time.Second)
+		stats := printResults(io.Discard, results, time.Second, time.Now(), 1, time.Minute, 5*time.Second)
 
 		assert.Equal(t, int64(1), stats["read"].count)
 		assert.Equal(t, 30*time.Millisecond, stats["read"].totalLatency)
@@ -103,9 +107,188 @@ func TestPrintResults_NoWarmupCountsAll(t *testing.T) {
 			close(results)
 		}()
 
-		stats := printResults(results, time.Second, time.Now(), 1, time.Minute, 0)
+		stats := printResults(io.Discard, results, time.Second, time.Now(), 1, time.Minute, 0)
 
 		assert.Equal(t, int64(3), stats["read"].count)
 		assert.Equal(t, 60*time.Millisecond, stats["read"].totalLatency)
 	})
+}
+
+func TestPrintProgress_QueryStats(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var buf bytes.Buffer
+		start := time.Now()
+		time.Sleep(10 * time.Second)
+
+		stats := map[string]*queryStats{
+			"read": {
+				count:        100,
+				errors:       2,
+				totalLatency: 500 * time.Millisecond,
+				latencies:    uniformLatencies(100, 5*time.Millisecond),
+			},
+		}
+
+		printProgress(&buf, stats, start, time.Minute)
+		out := buf.String()
+
+		assert.Contains(t, out, "10s / 1m0s")
+		assert.Contains(t, out, "QUERY")
+		assert.Contains(t, out, "read")
+		assert.Contains(t, out, "100")
+		assert.Contains(t, out, "5ms")
+	})
+}
+
+func TestPrintProgress_TransactionStats(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var buf bytes.Buffer
+		start := time.Now()
+		time.Sleep(10 * time.Second)
+
+		stats := map[string]*queryStats{
+			"transfer": {
+				count:         50,
+				errors:        1,
+				commits:       45,
+				rollbacks:     4,
+				totalLatency:  500 * time.Millisecond,
+				latencies:     uniformLatencies(50, 10*time.Millisecond),
+				isTransaction: true,
+			},
+		}
+
+		printProgress(&buf, stats, start, time.Minute)
+		out := buf.String()
+
+		assert.Contains(t, out, "TRANSACTION")
+		assert.Contains(t, out, "transfer")
+		assert.Contains(t, out, "45")
+		assert.Contains(t, out, "10ms")
+	})
+}
+
+func TestPrintProgress_MixedQueryAndTransaction(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var buf bytes.Buffer
+		start := time.Now()
+		time.Sleep(10 * time.Second)
+
+		stats := map[string]*queryStats{
+			"read": {
+				count:        100,
+				totalLatency: 500 * time.Millisecond,
+				latencies:    uniformLatencies(100, 5*time.Millisecond),
+			},
+			"transfer": {
+				count:         50,
+				commits:       50,
+				totalLatency:  500 * time.Millisecond,
+				latencies:     uniformLatencies(50, 10*time.Millisecond),
+				isTransaction: true,
+			},
+		}
+
+		printProgress(&buf, stats, start, time.Minute)
+		out := buf.String()
+
+		assert.Contains(t, out, "QUERY")
+		assert.Contains(t, out, "TRANSACTION")
+		assert.Contains(t, out, "read")
+		assert.Contains(t, out, "transfer")
+	})
+}
+
+func TestPrintProgress_CustomPrintSuppressesStats(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var buf bytes.Buffer
+		start := time.Now()
+		time.Sleep(10 * time.Second)
+
+		stats := map[string]*queryStats{
+			"insert": {
+				count:        100,
+				totalLatency: 500 * time.Millisecond,
+				latencies:    uniformLatencies(100, 5*time.Millisecond),
+				printAggExprs: []string{""},
+				printAggs: []*printAgg{
+					{
+						freq:  map[string]int64{"us": 60, "eu": 40},
+						count: 100,
+						min:   math.MaxFloat64,
+						max:   -math.MaxFloat64,
+					},
+				},
+			},
+		}
+
+		printProgress(&buf, stats, start, time.Minute)
+		out := buf.String()
+
+		assert.NotContains(t, out, "QUERY\t")
+		assert.NotContains(t, out, "TRANSACTION")
+		assert.Contains(t, out, "PRINT")
+		assert.Contains(t, out, "us=60")
+		assert.Contains(t, out, "eu=40")
+	})
+}
+
+func TestPrintProgress_EmptyStats(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var buf bytes.Buffer
+		start := time.Now()
+		time.Sleep(5 * time.Second)
+
+		stats := map[string]*queryStats{}
+
+		printProgress(&buf, stats, start, time.Minute)
+		out := buf.String()
+
+		assert.Contains(t, out, "5s / 1m0s")
+		assert.Contains(t, out, "QUERY")
+	})
+}
+
+func TestPrintProgress_CustomAggExpr(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var buf bytes.Buffer
+		start := time.Now()
+		time.Sleep(10 * time.Second)
+
+		stats := map[string]*queryStats{
+			"insert": {
+				count:        200,
+				totalLatency: 1 * time.Second,
+				latencies:    uniformLatencies(200, 5*time.Millisecond),
+				printAggExprs: []string{
+					"string(int(min)) + '-' + string(int(max))",
+				},
+				printAggs: []*printAgg{
+					{
+						freq:     map[string]int64{"10": 100, "20": 100},
+						sum:      3000,
+						min:      10,
+						max:      20,
+						count:    200,
+						numCount: 200,
+					},
+				},
+			},
+		}
+
+		printProgress(&buf, stats, start, time.Minute)
+		out := buf.String()
+
+		assert.NotContains(t, out, "QUERY\t")
+		assert.Contains(t, out, "PRINT")
+		assert.True(t, strings.Contains(out, "10-20"))
+	})
+}
+
+func uniformLatencies(n int, d time.Duration) []time.Duration {
+	l := make([]time.Duration, n)
+	for i := range l {
+		l[i] = d
+	}
+	return l
 }
