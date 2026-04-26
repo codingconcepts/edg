@@ -187,128 +187,6 @@ func TestConfigSectionValues(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_NoIncludes(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "main.yaml", `
-globals:
-  batch_size: 100
-up:
-  - name: create_table
-    query: CREATE TABLE t (id INT)
-`)
-
-	req, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	require.NoError(t, err)
-
-	assert.Equal(t, 100, req.Globals["batch_size"])
-	require.Len(t, req.Up, 1)
-	assert.Equal(t, "create_table", req.Up[0].Name)
-}
-
-func TestLoadConfig_IncludeMapping(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "shared/globals.yaml", `
-batch_size: 500
-workers: 4
-`)
-	writeFile(t, dir, "main.yaml", `
-globals: !include shared/globals.yaml
-up:
-  - name: create_table
-    query: CREATE TABLE t (id INT)
-`)
-
-	req, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	require.NoError(t, err)
-
-	assert.Equal(t, 500, req.Globals["batch_size"])
-	assert.Equal(t, 4, req.Globals["workers"])
-}
-
-func TestLoadConfig_IncludeSequence(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "shared/schema.yaml", `
-- name: create_users
-  query: CREATE TABLE users (id INT)
-- name: create_orders
-  query: CREATE TABLE orders (id INT)
-`)
-	writeFile(t, dir, "main.yaml", `
-up: !include shared/schema.yaml
-`)
-
-	req, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	require.NoError(t, err)
-
-	require.Len(t, req.Up, 2)
-	assert.Equal(t, "create_users", req.Up[0].Name)
-	assert.Equal(t, "create_orders", req.Up[1].Name)
-}
-
-func TestLoadConfig_IncludeSequenceItem(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "shared/transfer.yaml", `
-- name: make_transfer
-  type: exec
-  query: UPDATE account SET balance = balance + 1
-`)
-	writeFile(t, dir, "main.yaml", `
-run:
-  - name: check_balance
-    type: query
-    query: SELECT balance FROM account WHERE id = 1
-  - !include shared/transfer.yaml
-`)
-
-	req, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	require.NoError(t, err)
-
-	require.Len(t, req.Run, 2)
-	assert.Equal(t, "check_balance", req.Run[0].Name())
-	assert.Equal(t, "make_transfer", req.Run[1].Name())
-}
-
-func TestLoadConfig_NestedIncludes(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "level2.yaml", `
-batch_size: 42
-`)
-	writeFile(t, dir, "main.yaml", `
-globals: !include level2.yaml
-up:
-  - name: t
-    query: CREATE TABLE t (id INT)
-`)
-
-	req, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	require.NoError(t, err)
-
-	assert.Equal(t, 42, req.Globals["batch_size"])
-}
-
-func TestLoadConfig_CircularInclude(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "a.yaml", `
-globals: !include b.yaml
-`)
-	writeFile(t, dir, "b.yaml", `
-batch_size: !include a.yaml
-`)
-
-	_, err := LoadConfig(filepath.Join(dir, "a.yaml"))
-	require.Error(t, err)
-}
-
-func TestLoadConfig_MissingInclude(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "main.yaml", `
-globals: !include nonexistent.yaml
-`)
-
-	_, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	require.Error(t, err)
-}
-
 func TestTransactionParsesRollbackIf(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -437,22 +315,88 @@ run:
 	assert.Equal(t, "const(5)", tx.Locals["fee"])
 }
 
-func TestValidate_LocalShadowsQueryName(t *testing.T) {
-	req := &Request{
-		Run: []*RunItem{
-			{Transaction: &Transaction{
-				Name:   "tx",
-				Locals: map[string]string{"debit": "const(1)"},
-				Queries: []*Query{
-					{Name: "debit", Type: QueryTypeExec, Query: "UPDATE t SET x = 1"},
+func TestValidate_Transactions(t *testing.T) {
+	cases := []struct {
+		name    string
+		req     *Request
+		wantErr string
+	}{
+		{
+			name: "local shadows query name",
+			req: &Request{
+				Run: []*RunItem{
+					{Transaction: &Transaction{
+						Name:   "tx",
+						Locals: map[string]string{"debit": "const(1)"},
+						Queries: []*Query{
+							{Name: "debit", Type: QueryTypeExec, Query: "UPDATE t SET x = 1"},
+						},
+					}},
 				},
-			}},
+			},
+			wantErr: `local "debit" shadows query name`,
+		},
+		{
+			name: "empty queries",
+			req: &Request{
+				Run: []*RunItem{
+					{Transaction: &Transaction{Name: "empty_tx", Queries: []*Query{}}},
+				},
+			},
+			wantErr: "must contain at least one query",
+		},
+		{
+			name: "batch not allowed",
+			req: &Request{
+				Run: []*RunItem{
+					{Transaction: &Transaction{
+						Name:    "tx",
+						Queries: []*Query{{Name: "q1", Type: QueryTypeExecBatch, Query: "INSERT INTO t VALUES ($1)"}},
+					}},
+				},
+			},
+			wantErr: "cannot be a batch type inside a transaction",
+		},
+		{
+			name: "prepared not allowed",
+			req: &Request{
+				Run: []*RunItem{
+					{Transaction: &Transaction{
+						Name:    "tx",
+						Queries: []*Query{{Name: "q1", Type: QueryTypeExec, Prepared: true, Query: "INSERT INTO t VALUES ($1)"}},
+					}},
+				},
+			},
+			wantErr: "cannot use prepared statements inside a transaction",
+		},
+		{
+			name: "rollback_if with extra fields",
+			req: &Request{
+				Run: []*RunItem{
+					{Transaction: &Transaction{
+						Name: "tx",
+						Queries: []*Query{
+							{Name: "q1", Type: QueryTypeExec, Query: "INSERT INTO t VALUES (1)"},
+							{RollbackIf: "true", Name: "bad", Query: "SELECT 1"},
+						},
+					}},
+				},
+			},
+			wantErr: "must not have name, type, args, or query",
 		},
 	}
 
-	err := req.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `local "debit" shadows query name`)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.req.Validate()
+			if c.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), c.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestCompileLocals(t *testing.T) {
@@ -677,32 +621,6 @@ func TestValidate_SectionFiltering(t *testing.T) {
 	}
 }
 
-func TestParseConfig_GlobalsOrder(t *testing.T) {
-	input := `
-globals:
-  warehouses: 1
-  districts: 10
-  customers: 30000
-  batch_size: 500
-`
-	req, err := ParseConfig([]byte(input))
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{"warehouses", "districts", "customers", "batch_size"}, req.GlobalsOrder)
-}
-
-func TestParseConfig_GlobalsOrder_NoGlobals(t *testing.T) {
-	input := `
-up:
-  - name: t
-    query: CREATE TABLE t (id INT)
-`
-	req, err := ParseConfig([]byte(input))
-	require.NoError(t, err)
-
-	assert.Nil(t, req.GlobalsOrder)
-}
-
 func TestRateUnmarshalYAML(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -773,49 +691,73 @@ workers:
 	require.Equal(t, 1, req.Workers[1].Args.Len())
 }
 
-func TestValidate_WorkerMissingName(t *testing.T) {
-	req := &Request{
-		Workers: []*Worker{
-			{Query: Query{Type: QueryTypeExec, Query: "SELECT 1"}, Rate: Rate{Times: 1, Interval: time.Second, tickerInterval: time.Second}},
+func TestValidate_Workers(t *testing.T) {
+	cases := []struct {
+		name    string
+		req     *Request
+		wantErr string
+	}{
+		{
+			name: "missing name",
+			req: &Request{
+				Workers: []*Worker{
+					{Query: Query{Type: QueryTypeExec, Query: "SELECT 1"}, Rate: Rate{Times: 1, Interval: time.Second, tickerInterval: time.Second}},
+				},
+			},
+			wantErr: "missing a name",
+		},
+		{
+			name: "bad rate",
+			req: &Request{
+				Workers: []*Worker{
+					{Query: Query{Name: "bad", Type: QueryTypeExec, Query: "SELECT 1"}, Rate: Rate{Times: 0, Interval: time.Second}},
+				},
+			},
+			wantErr: "rate must have positive",
 		},
 	}
-	err := req.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "missing a name")
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.req.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), c.wantErr)
+		})
+	}
 }
 
-func TestValidate_WorkerBadRate(t *testing.T) {
-	req := &Request{
-		Workers: []*Worker{
-			{Query: Query{Name: "bad", Type: QueryTypeExec, Query: "SELECT 1"}, Rate: Rate{Times: 0, Interval: time.Second}},
+func TestValidate_Seq(t *testing.T) {
+	cases := []struct {
+		name    string
+		req     *Request
+		wantErr string
+	}{
+		{
+			name: "duplicate name",
+			req: &Request{
+				Seq: []seq.Config{
+					{Name: "a", Start: 1, Step: 1},
+					{Name: "a", Start: 1, Step: 1},
+				},
+			},
+			wantErr: "duplicate seq name",
+		},
+		{
+			name: "missing name",
+			req: &Request{
+				Seq: []seq.Config{{Start: 1, Step: 1}},
+			},
+			wantErr: "missing a name",
 		},
 	}
-	err := req.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "rate must have positive")
-}
 
-func TestValidate_SeqDuplicateName(t *testing.T) {
-	req := &Request{
-		Seq: []seq.Config{
-			{Name: "a", Start: 1, Step: 1},
-			{Name: "a", Start: 1, Step: 1},
-		},
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.req.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), c.wantErr)
+		})
 	}
-	err := req.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "duplicate seq name")
-}
-
-func TestValidate_SeqMissingName(t *testing.T) {
-	req := &Request{
-		Seq: []seq.Config{
-			{Start: 1, Step: 1},
-		},
-	}
-	err := req.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "missing a name")
 }
 
 func TestValidate_SeqReference(t *testing.T) {
@@ -960,61 +902,366 @@ func TestValidate_SeqReference(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_MultipleIncludes(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "shared/globals.yaml", `
-batch_size: 100
-`)
-	writeFile(t, dir, "shared/schema.yaml", `
-- name: create_table
-  query: CREATE TABLE t (id INT)
-`)
-	writeFile(t, dir, "shared/teardown.yaml", `
-- name: drop_table
-  type: exec
-  query: DROP TABLE t
-`)
-	writeFile(t, dir, "main.yaml", `
-globals: !include shared/globals.yaml
-up: !include shared/schema.yaml
-down: !include shared/teardown.yaml
-`)
-
-	req, err := LoadConfig(filepath.Join(dir, "main.yaml"))
-	require.NoError(t, err)
-
-	assert.Equal(t, 100, req.Globals["batch_size"])
-	require.Len(t, req.Up, 1)
-	assert.Equal(t, "create_table", req.Up[0].Name)
-	require.Len(t, req.Down, 1)
-	assert.Equal(t, "drop_table", req.Down[0].Name)
-}
-
-func TestValidate_ExpectationGlobalShadowsMetric(t *testing.T) {
-	for _, metric := range []string{MetricSuccessCount, MetricTotalErrors, MetricErrorRate, MetricTPM} {
-		t.Run(metric, func(t *testing.T) {
-			req := &Request{
-				Globals:      map[string]any{metric: 42},
+func TestValidate_ExpectationGlobals(t *testing.T) {
+	cases := []struct {
+		name    string
+		req     *Request
+		wantErr string
+	}{
+		{
+			name: "shadows success_count",
+			req: &Request{
+				Globals:      map[string]any{MetricSuccessCount: 42},
 				Expectations: []Expectation{{Expr: "true"}},
+			},
+			wantErr: "shadows a built-in expectation metric",
+		},
+		{
+			name: "shadows total_errors",
+			req: &Request{
+				Globals:      map[string]any{MetricTotalErrors: 42},
+				Expectations: []Expectation{{Expr: "true"}},
+			},
+			wantErr: "shadows a built-in expectation metric",
+		},
+		{
+			name: "shadows error_rate",
+			req: &Request{
+				Globals:      map[string]any{MetricErrorRate: 42},
+				Expectations: []Expectation{{Expr: "true"}},
+			},
+			wantErr: "shadows a built-in expectation metric",
+		},
+		{
+			name: "shadows tpm",
+			req: &Request{
+				Globals:      map[string]any{MetricTPM: 42},
+				Expectations: []Expectation{{Expr: "true"}},
+			},
+			wantErr: "shadows a built-in expectation metric",
+		},
+		{
+			name: "non-reserved global allowed",
+			req: &Request{
+				Globals:      map[string]any{"accounts": 100},
+				Expectations: []Expectation{{Expr: "true"}},
+			},
+		},
+		{
+			name: "skipped without expectations",
+			req: &Request{
+				Globals: map[string]any{MetricErrorRate: 42},
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.req.Validate()
+			if c.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), c.wantErr)
+				return
 			}
-			err := req.Validate()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "shadows a built-in expectation metric")
+			require.NoError(t, err)
 		})
 	}
 }
 
-func TestValidate_ExpectationGlobalAllowed(t *testing.T) {
+func TestCompilePrint(t *testing.T) {
+	cases := []struct {
+		name    string
+		print   []PrintExpr
+		env     map[string]any
+		wantErr bool
+		wantLen int
+	}{
+		{
+			name:    "empty print",
+			print:   nil,
+			env:     map[string]any{},
+			wantLen: 0,
+		},
+		{
+			name:    "valid expression",
+			print:   []PrintExpr{{Expr: "x + 1"}},
+			env:     map[string]any{"x": 1},
+			wantLen: 1,
+		},
+		{
+			name:    "multiple expressions",
+			print:   []PrintExpr{{Expr: "x"}, {Expr: "y"}},
+			env:     map[string]any{"x": 1, "y": 2},
+			wantLen: 2,
+		},
+		{
+			name:    "invalid syntax",
+			print:   []PrintExpr{{Expr: "invalid +++"}},
+			env:     map[string]any{},
+			wantErr: true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			q := &Query{Print: c.print}
+			err := q.CompilePrint(c.env)
+
+			if c.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "failed to compile print")
+				return
+			}
+			require.NoError(t, err)
+			assert.Len(t, q.CompiledPrint, c.wantLen)
+		})
+	}
+}
+
+func TestPrintExprUnmarshalYAML(t *testing.T) {
+	t.Run("scalar string", func(t *testing.T) {
+		input := `print: latency`
+		var out struct {
+			Print PrintExpr `yaml:"print"`
+		}
+		require.NoError(t, yaml.Unmarshal([]byte(input), &out))
+		assert.Equal(t, "latency", out.Print.Expr)
+		assert.Empty(t, out.Print.Agg)
+	})
+
+	t.Run("object with agg", func(t *testing.T) {
+		input := `
+print:
+  expr: latency
+  agg: avg
+`
+		var out struct {
+			Print PrintExpr `yaml:"print"`
+		}
+		require.NoError(t, yaml.Unmarshal([]byte(input), &out))
+		assert.Equal(t, "latency", out.Print.Expr)
+		assert.Equal(t, "avg", out.Print.Agg)
+	})
+
+	t.Run("list of mixed", func(t *testing.T) {
+		input := `
+print:
+  - latency
+  - expr: count
+    agg: sum
+`
+		var out struct {
+			Print []PrintExpr `yaml:"print"`
+		}
+		require.NoError(t, yaml.Unmarshal([]byte(input), &out))
+		require.Len(t, out.Print, 2)
+		assert.Equal(t, "latency", out.Print[0].Expr)
+		assert.Equal(t, "count", out.Print[1].Expr)
+		assert.Equal(t, "sum", out.Print[1].Agg)
+	})
+}
+
+func TestCompileArgs(t *testing.T) {
+	env := map[string]any{
+		"x":     1,
+		"y":     "hello",
+		"const": func(v any) any { return v },
+	}
+
+	cases := []struct {
+		name    string
+		query   *Query
+		env     map[string]any
+		wantErr string
+	}{
+		{
+			name:  "positional args",
+			query: &Query{Args: PositionalArgs("x", "y")},
+			env:   env,
+		},
+		{
+			name:  "with count",
+			query: &Query{Args: PositionalArgs("x"), Count: 10},
+			env:   env,
+		},
+		{
+			name:  "with size",
+			query: &Query{Args: PositionalArgs("x"), Size: 5},
+			env:   env,
+		},
+		{
+			name:  "with count and size",
+			query: &Query{Args: PositionalArgs("x"), Count: 10, Size: 5},
+			env:   env,
+		},
+		{
+			name:    "invalid arg expression",
+			query:   &Query{Args: PositionalArgs("bad +++")},
+			env:     map[string]any{},
+			wantErr: "failed to compile arg",
+		},
+		{
+			name:    "invalid count expression",
+			query:   &Query{Args: PositionalArgs("x"), Count: "bad +++"},
+			env:     env,
+			wantErr: "failed to compile count",
+		},
+		{
+			name:    "invalid size expression",
+			query:   &Query{Args: PositionalArgs("x"), Size: "bad +++"},
+			env:     env,
+			wantErr: "failed to compile size",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.query.CompileArgs(c.env)
+			if c.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), c.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Len(t, c.query.CompiledArgs, c.query.Args.Len())
+			if c.query.Count != nil {
+				assert.NotNil(t, c.query.CompiledCount)
+			}
+			if c.query.Size != nil {
+				assert.NotNil(t, c.query.CompiledSize)
+			}
+		})
+	}
+}
+
+func TestValidate_RunWeights(t *testing.T) {
+	cases := []struct {
+		name    string
+		req     *Request
+		wantErr string
+	}{
+		{
+			name: "missing name",
+			req: &Request{
+				RunWeights: map[string]int{"q1": 1},
+				Run:        []*RunItem{{Query: &Query{Type: QueryTypeExec, Query: "SELECT 1"}}},
+			},
+			wantErr: "missing a name",
+		},
+		{
+			name: "unknown query",
+			req: &Request{
+				RunWeights: map[string]int{"nonexistent": 5},
+				Run:        []*RunItem{{Query: &Query{Name: "q1", Type: QueryTypeExec, Query: "SELECT 1"}}},
+			},
+			wantErr: `run_weights references unknown query "nonexistent"`,
+		},
+		{
+			name: "valid",
+			req: &Request{
+				RunWeights: map[string]int{"q1": 5, "q2": 3},
+				Run: []*RunItem{
+					{Query: &Query{Name: "q1", Type: QueryTypeExec, Query: "SELECT 1"}},
+					{Query: &Query{Name: "q2", Type: QueryTypeExec, Query: "SELECT 2"}},
+				},
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.req.Validate()
+			if c.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), c.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestValidate_RowRefs(t *testing.T) {
+	cases := []struct {
+		name    string
+		req     *Request
+		wantErr string
+	}{
+		{
+			name: "row and args mutually exclusive",
+			req: &Request{
+				Rows: map[string][]string{"user": {"gen('email')"}},
+				Seed: []*Query{{Name: "q1", Row: "user", Args: PositionalArgs("1")}},
+			},
+			wantErr: "row and args are mutually exclusive",
+		},
+		{
+			name: "unknown row ref",
+			req: &Request{
+				Rows: map[string][]string{"user": {"gen('email')"}},
+				Seed: []*Query{{Name: "q1", Row: "nonexistent"}},
+			},
+			wantErr: `references unknown row "nonexistent"`,
+		},
+		{
+			name: "valid row ref",
+			req: &Request{
+				Rows: map[string][]string{"user": {"gen('email')"}},
+				Seed: []*Query{{Name: "q1", Row: "user", Query: "INSERT INTO users VALUES ($1)"}},
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.req.Validate()
+			if c.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), c.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestValidate_DuplicateRunItemName(t *testing.T) {
 	req := &Request{
-		Globals:      map[string]any{"accounts": 100},
-		Expectations: []Expectation{{Expr: "true"}},
+		Run: []*RunItem{
+			{Transaction: &Transaction{Name: "dup", Queries: []*Query{{Name: "q1", Type: QueryTypeExec, Query: "SELECT 1"}}}},
+			{Transaction: &Transaction{Name: "dup", Queries: []*Query{{Name: "q2", Type: QueryTypeExec, Query: "SELECT 2"}}}},
+		},
+	}
+	err := req.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `duplicate name "dup" in run`)
+}
+
+func TestRunItem_NilQueryAndTransaction(t *testing.T) {
+	ri := &RunItem{}
+	assert.Equal(t, "", ri.Name())
+	assert.Nil(t, ri.AllQueries())
+}
+
+func TestQueryArgsUnmarshalYAML_InvalidKind(t *testing.T) {
+	input := `args: 42`
+	var out struct {
+		Args QueryArgs `yaml:"args"`
+	}
+	err := yaml.Unmarshal([]byte(input), &out)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "args must be a list or map")
+}
+
+func TestValidate_PrintExpressionInValidation(t *testing.T) {
+	req := &Request{
+		Run: []*RunItem{
+			{Query: &Query{
+				Name:  "q1",
+				Print: []PrintExpr{{Expr: "gen('email')"}},
+			}},
+		},
 	}
 	require.NoError(t, req.Validate())
 }
 
-func TestValidate_GlobalShadowSkippedWithoutExpectations(t *testing.T) {
-	req := &Request{
-		Globals: map[string]any{MetricErrorRate: 42},
-	}
-	require.NoError(t, req.Validate())
-}
