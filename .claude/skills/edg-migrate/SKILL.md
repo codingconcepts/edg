@@ -66,6 +66,17 @@ Apply the following transformations based on the source and target driver. edg h
 | mongodb | Not applicable; batch uses `exec_batch` with per-document `{"insert": ...}` commands |
 | cassandra | Not applicable; batch uses `exec_batch` with CQL `INSERT` statements (unlogged batch internally) |
 
+### Multi-Row VALUES (`__values__` token)
+
+As an alternative to driver-specific batch expansion, use `__values__` to generate a standard multi-row `VALUES` clause. This works the same across pgx, mysql, mssql, spanner, and dsql - no driver-specific SQL needed:
+
+```yaml
+query: |-
+  INSERT INTO t (name, email) __values__
+```
+
+When migrating between SQL drivers (pgx, mysql, mssql, spanner, dsql), `__values__` queries need no changes. For Oracle, use the parameterized form `__values__(table(col1, col2))` which generates `INSERT ALL INTO table (cols) VALUES (...) ... SELECT 1 FROM DUAL`. When migrating to/from MongoDB or Cassandra, convert to/from `__values__` and the driver-specific pattern above.
+
 ### Upsert / Merge
 
 | Driver | Pattern |

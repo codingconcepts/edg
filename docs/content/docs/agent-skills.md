@@ -177,19 +177,19 @@ Convert my PostgreSQL workload at workloads/users.yaml to MongoDB.
 
 | Concern | What changes |
 |---|---|
-| Batch expansion | `unnest(string_to_array(...))` → `JSON_TABLE` / `OPENJSON` / `XMLTABLE` / `UNNEST(SPLIT(...))` (Spanner) |
-| Cleanup | `TRUNCATE CASCADE` → `DELETE FROM` / `CASCADE CONSTRAINTS PURGE` / `DELETE FROM ... WHERE TRUE` (Spanner) / `TRUNCATE` (Cassandra) / `{"delete": ...}` (MongoDB) |
-| Column types | `UUID` → `CHAR(36)` / `STRING(36)` / `TEXT` (Cassandra), `STRING` → `VARCHAR(n)`, etc. |
-| DDL safety | `IF NOT EXISTS` → `IF OBJECT_ID(...)` / PL/SQL exception blocks / `CREATE TABLE IF NOT EXISTS` (Spanner) |
-| Default values | `gen_random_uuid()` → `UUID()` / `NEWID()` / `GENERATE_UUID()` / args-based |
-| Pagination | `LIMIT/OFFSET` → `FETCH NEXT ... ROWS ONLY` |
-| Placeholders | `$1` → `?` (MySQL, Cassandra) / `:1` (Oracle) / `@p1` (MSSQL, Spanner) / inlined JSON (MongoDB) |
-| Primary key | inline `PRIMARY KEY` → table-level `PRIMARY KEY (col)` (Spanner) |
-| Query format | SQL → BSON/JSON commands (MongoDB) / CQL (Cassandra) |
-| Random ordering | `random()` → `RAND()` / `NEWID()` / `DBMS_RANDOM.VALUE` / `TABLESAMPLE RESERVOIR` (Spanner) |
-| Row generation | `generate_series` → recursive CTE / `CONNECT BY` / `GENERATE_ARRAY` + `UNNEST` (Spanner) |
-| Schema creation | `CREATE TABLE` → `{"create": "collection"}` (MongoDB) / `CREATE KEYSPACE` + `CREATE TABLE` (Cassandra) |
-| Upsert | `ON CONFLICT` → `ON DUPLICATE KEY` / `MERGE INTO` / `INSERT OR UPDATE` (Spanner) |
+| Batch expansion | `unnest(string_to_array(...))` -> `JSON_TABLE` / `OPENJSON` / `XMLTABLE` / `UNNEST(SPLIT(...))` (Spanner) |
+| Cleanup | `TRUNCATE CASCADE` -> `DELETE FROM` / `CASCADE CONSTRAINTS PURGE` / `DELETE FROM ... WHERE TRUE` (Spanner) / `TRUNCATE` (Cassandra) / `{"delete": ...}` (MongoDB) |
+| Column types | `UUID` -> `CHAR(36)` / `STRING(36)` / `TEXT` (Cassandra), `STRING` -> `VARCHAR(n)`, etc. |
+| DDL safety | `IF NOT EXISTS` -> `IF OBJECT_ID(...)` / PL/SQL exception blocks / `CREATE TABLE IF NOT EXISTS` (Spanner) |
+| Default values | `gen_random_uuid()` -> `UUID()` / `NEWID()` / `GENERATE_UUID()` / args-based |
+| Pagination | `LIMIT/OFFSET` -> `FETCH NEXT ... ROWS ONLY` |
+| Placeholders | `$1` -> `?` (MySQL, Cassandra) / `:1` (Oracle) / `@p1` (MSSQL, Spanner) / inlined JSON (MongoDB) |
+| Primary key | inline `PRIMARY KEY` -> table-level `PRIMARY KEY (col)` (Spanner) |
+| Query format | SQL -> BSON/JSON commands (MongoDB) / CQL (Cassandra) |
+| Random ordering | `random()` -> `RAND()` / `NEWID()` / `DBMS_RANDOM.VALUE` / `TABLESAMPLE RESERVOIR` (Spanner) |
+| Row generation | `generate_series` -> recursive CTE / `CONNECT BY` / `GENERATE_ARRAY` + `UNNEST` (Spanner) |
+| Schema creation | `CREATE TABLE` -> `{"create": "collection"}` (MongoDB) / `CREATE KEYSPACE` + `CREATE TABLE` (Cassandra) |
+| Upsert | `ON CONFLICT` -> `ON DUPLICATE KEY` / `MERGE INTO` / `INSERT OR UPDATE` (Spanner) |
 
 Expression args (`gen()`, `ref_rand()`, `zipf()`, etc.) are driver-agnostic and remain unchanged.
 

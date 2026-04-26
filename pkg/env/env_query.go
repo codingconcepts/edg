@@ -135,6 +135,10 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 					inlined = strings.ReplaceAll(inlined, placeholder, formatted)
 				}
 
+				if raw, ok := args[0].(convert.RawSQL); ok {
+					inlined = valuesTokenRe.ReplaceAllLiteralString(inlined, string(raw))
+				}
+
 				inlinedQuery := &config.Query{
 					Name:  q.Name,
 					Type:  q.Type,

@@ -112,7 +112,7 @@ A complete edg YAML config with all applicable sections:
 - `mask(value, 'base64')` / `mask(value, 'base32')` for alternative encodings
 - `mask(value, 'asterisk')` for `****************` (length configurable)
 - `mask(value, 'redact')` for fixed `[REDACTED]` output
-- `mask(value, 'email')` to preserve `@domain` and mask local part: `mask(arg('email'), 'email', 4)` → `****@example.com`
+- `mask(value, 'email')` to preserve `@domain` and mask local part: `mask(arg('email'), 'email', 4)` -> `****@example.com`
 
 ### Dependent columns
 - `arg(index)` to reference a previously evaluated arg by zero-based index
@@ -156,6 +156,7 @@ A complete edg YAML config with all applicable sections:
 - Use `batch(n)` for sequential indices
 - Use `iter()` for a 1-based row counter within batch queries (resets per query)
 - Use `uniq("expression")` to retry a generator until a unique value is produced (e.g., `uniq("gen('airlineairportiata')")` for unique IATA codes). Defaults to 100 retries; override with `uniq("expression", 500)`
+- **`__values__` token**: Use `__values__` in the query to generate a multi-row `VALUES` clause instead of driver-specific batch expansion (`unnest`/`JSON_TABLE`/`OPENJSON`). Produces `VALUES (v1, v2), (v3, v4), ...` - one INSERT per batch. Works with pgx, mysql, mssql, spanner, dsql. For Oracle, use `__values__(table(col1, col2))` to generate `INSERT ALL INTO table (cols) VALUES (...) ... SELECT 1 FROM DUAL`. Does not work with MongoDB or Cassandra. Also supports upsert (`ON CONFLICT`/`ON DUPLICATE KEY`/`MERGE`) and update via CTE
 
 ### Transactions
 - Group related `run` queries into an explicit `BEGIN/COMMIT` block using the `transaction` key
@@ -344,7 +345,25 @@ Apply these patterns based on the target driver.
 - **Row generation in seed**: Use `generate_series(1, $1)` for bulk generation inside SQL
 - **Array columns**: Use `ARRAY[...]` type and `array(minN, maxN, pattern)` expression
 - **Vector columns**: Use `VECTOR(n)` type (pgvector) and `vector(dims, clusters, spread)` expression for clustered, unit-length vectors that support realistic similarity search
-- **Batch expansion**: Use `unnest(string_to_array('$1', __sep__))` to expand batch args into rows. `__sep__` is a query-text token that emits the correct SQL separator function for the target driver (`chr(31)` for pgx, `CHAR(31)` for MySQL/MSSQL, `codepoints-to-string(31)` for Oracle, `CODE_POINTS_TO_STRING([31])` for Spanner)
+- **Batch expansion (unnest)**: Use `unnest(string_to_array('$1', __sep__))` to expand batch args into rows. `__sep__` is a query-text token that emits the correct SQL separator function for the target driver (`chr(31)` for pgx, `CHAR(31)` for MySQL/MSSQL, `codepoints-to-string(31)` for Oracle, `CODE_POINTS_TO_STRING([31])` for Spanner)
+- **Batch expansion (__values__)**: Use `__values__` to generate a multi-row VALUES clause. Simpler than unnest and produces one INSERT per batch:
+  ```yaml
+  query: |-
+    INSERT INTO t (name, email) __values__
+  ```
+- **Batch upsert (__values__)**: Combine `__values__` with `ON CONFLICT`:
+  ```yaml
+  query: |-
+    INSERT INTO t (name, price) __values__
+    ON CONFLICT (name) DO UPDATE SET price = EXCLUDED.price
+  ```
+- **Batch update (__values__)**: Use a CTE with `__values__`:
+  ```yaml
+  query: |-
+    UPDATE t SET price = v.price
+    FROM (__values__) AS v(id, price)
+    WHERE t.id = v.id::UUID
+  ```
 - **Upsert**: `ON CONFLICT (col) DO UPDATE SET ...`
 - **Pagination**: `LIMIT $1 OFFSET $2`
 - **Random ordering**: `ORDER BY random()`
@@ -362,12 +381,17 @@ Apply these patterns based on the target driver.
     SELECT 1 AS s UNION ALL SELECT s + 1 FROM seq WHERE s < $1
   ) SELECT * FROM seq
   ```
-- **Batch expansion**: Use `JSON_TABLE` to convert batch args into rows. `__sep__` emits the driver-aware separator:
+- **Batch expansion (JSON_TABLE)**: Use `JSON_TABLE` to convert batch args into rows. `__sep__` emits the driver-aware separator:
   ```sql
   SELECT j.val FROM JSON_TABLE(
     CONCAT('["', REPLACE('$1', __sep__, '","'), '"]'),
     '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
   ) j
+  ```
+- **Batch expansion (__values__)**: Use `__values__` for simpler multi-row VALUES:
+  ```yaml
+  query: |-
+    INSERT INTO t (name, email) __values__
   ```
 - **Upsert**: `ON DUPLICATE KEY UPDATE col = VALUES(col)`
 - **Categorical selection**: Use `ELT(index, 'val1', 'val2', ...)` instead of array indexing
@@ -385,9 +409,14 @@ Apply these patterns based on the target driver.
     SELECT 1 AS s UNION ALL SELECT s + 1 FROM seq WHERE s < $1
   ) SELECT * FROM seq OPTION (MAXRECURSION 0)
   ```
-- **Batch expansion**: Use `batch_format: json` and `OPENJSON`:
+- **Batch expansion (OPENJSON)**: Use `batch_format: json` and `OPENJSON`:
   ```sql
   SELECT value FROM OPENJSON('$1')
+  ```
+- **Batch expansion (__values__)**: Use `__values__` for simpler multi-row VALUES (max 1000 rows per INSERT):
+  ```yaml
+  query: |-
+    INSERT INTO t (name, email) __values__
   ```
 - **Upsert**: Use `MERGE INTO ... USING ... ON ... WHEN MATCHED THEN UPDATE ... WHEN NOT MATCHED THEN INSERT ...`
 - **DDL safety**: Wrap in existence check:
@@ -407,10 +436,15 @@ Apply these patterns based on the target driver.
   ```sql
   SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= $1
   ```
-- **Batch expansion**: Use `XMLTABLE` to expand batch args. `__sep__` emits the driver-aware separator:
+- **Batch expansion (XMLTABLE)**: Use `XMLTABLE` to expand batch args. `__sep__` emits the driver-aware separator:
   ```sql
   SELECT column_value FROM XMLTABLE(('"' || REPLACE('$1', __sep__, '","') || '"'))
   ```
+- **Batch expansion (__values__)**: Use `__values__(table(col1, col2))` for Oracle `INSERT ALL`:
+  ```yaml
+  query: INSERT ALL __values__(product(name, price))
+  ```
+  Generates: `INTO product (name, price) VALUES (...)\nINTO product ... \nSELECT 1 FROM DUAL`
 - **Upsert**: Use `MERGE INTO ... USING (SELECT :1 AS col FROM DUAL) src ON ... WHEN MATCHED THEN UPDATE ... WHEN NOT MATCHED THEN INSERT ...`
 - **DDL safety**: Wrap in PL/SQL with exception handling:
   ```sql
@@ -648,7 +682,7 @@ When the user wants to test dual-write consistency, CDC pipelines, or cross-data
 - **Matching schemas**: Same table names, column names, and logical types. SQL dialect differs (e.g., `DEFAULT NOW()` vs `DEFAULT CURRENT_TIMESTAMP`).
 - **Matching seed args**: Both configs must use identical `args` expressions (same `gen()`, `ref_rand()`, `uniform()`, `set_rand()`, etc.). The `--rng-seed` flag + PRNG re-seeding ensures identical values.
 - **Use `exec_batch`**: Sync configs should use `type: exec_batch` with `count` and `size` for efficient bulk inserts.
-- **Driver-specific batch SQL**: Use `unnest(string_to_array('$N', __sep__))` for pgx and `JSON_TABLE(CONCAT(...))` for MySQL (same patterns as non-sync batch configs).
+- **Driver-specific batch SQL**: Use `unnest(string_to_array('$N', __sep__))` for pgx and `JSON_TABLE(CONCAT(...))` for MySQL, or use `__values__` for a cross-driver multi-row VALUES clause (works with pgx, mysql, mssql, spanner, dsql, and oracle via `__values__(table(cols))`).
 - **No `run` section**: Sync configs only need `up`, `seed`, `deseed`, and `down`. The benchmark workload is separate.
 - **Shared globals**: Both configs should use the same `globals` values (row counts, batch sizes).
 

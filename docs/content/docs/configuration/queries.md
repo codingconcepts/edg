@@ -359,6 +359,108 @@ up:
       )
 ```
 
+#### Multi-Row VALUES (`__values__`)
+
+As an alternative to the driver-specific batch expansion patterns above, you can use the `__values__` token to generate a standard multi-row `VALUES` clause. This produces a single INSERT statement per batch instead of one per row, and works the same way across all SQL drivers that support multi-row VALUES (pgx, mysql, mssql, spanner, dsql).
+
+```yaml
+seed:
+  - name: populate_contacts
+    type: exec_batch
+    count: 1000
+    size: 100
+    args:
+      - gen('name')
+      - gen('email')
+    query: |-
+      INSERT INTO contact (name, email)
+      __values__
+```
+
+Which resolves to the following query automatically by edg:
+
+```sql
+INSERT INTO contact (name, email)
+VALUES ('Alice', 'alice@example.com'), ('Bob', 'bob@example.com'), ...
+```
+
+Each batch of `size` rows produces exactly one INSERT statement. With `count: 1000` and `size: 100`, edg sends 10 INSERT statements, each containing 100 value tuples.
+
+`__values__` also works with upsert and update patterns:
+
+**Upsert (PostgreSQL / CockroachDB):**
+```yaml
+query: |-
+  INSERT INTO product (name, price)
+  __values__
+  ON CONFLICT (name) DO UPDATE SET price = EXCLUDED.price
+```
+
+**Upsert (MySQL):**
+```yaml
+query: |-
+  INSERT INTO product (name, price)
+  __values__
+  ON DUPLICATE KEY UPDATE price = VALUES(price)
+```
+
+**Upsert (MSSQL):**
+```yaml
+query: |-
+  MERGE INTO product AS target
+  USING (
+    __values__
+  ) AS source(name, price)
+  ON target.name = source.name
+  WHEN MATCHED THEN UPDATE SET price = source.price
+  WHEN NOT MATCHED THEN INSERT (name, price) VALUES (source.name, source.price);
+```
+
+**Update via CTE (PostgreSQL / CockroachDB):**
+```yaml
+query: |-
+  UPDATE product
+  SET price = v.price
+  FROM (
+    __values__
+  ) AS v(id, price)
+  WHERE product.id = v.id::UUID
+```
+
+> [!NOTE]
+> `__values__` works with pgx, mysql, mssql, spanner, and dsql. SQL Server limits multi-row VALUES to 1000 rows per INSERT; set `size` accordingly. For MongoDB and Cassandra, continue using the batch expansion patterns described above.
+
+#### Oracle (`INSERT ALL`)
+
+Oracle does not support multi-row `VALUES`. Instead, use the parameterized form `__values__(table(col1, col2))` to generate an `INSERT ALL ... SELECT 1 FROM DUAL` statement:
+
+```yaml
+seed:
+  - name: insert_products
+    type: exec_batch
+    count: 100
+    size: 10
+    args:
+      - gen('productname')
+      - uniform_f(1.00, 100.00, 2)
+    query: |-
+      INSERT ALL __values__(product(name, price))
+```
+
+This produces:
+
+```sql
+INSERT ALL
+INTO product (name, price) VALUES ('Widget', 9.99)
+INTO product (name, price) VALUES ('Gadget', 24.50)
+...
+SELECT 1 FROM DUAL
+```
+
+The table name and column list are extracted from the token parameters. Non-Oracle drivers ignore the parameters and use standard multi-row `VALUES` syntax.
+
+See [`_examples/multi_row_dml/`](https://github.com/codingconcepts/edg/tree/main/_examples/multi_row_dml) for complete working examples across multiple databases.
+
 ### Prepared Statements
 
 Setting `prepared: true` on a `run` query causes the SQL statement to be prepared once per worker and reused across iterations. This reduces server-side parse overhead for high-throughput workloads by allowing the database to cache the query plan.

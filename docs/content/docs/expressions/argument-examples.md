@@ -160,7 +160,7 @@ These expressions are used in the `args:` list of a `run` query. Each entry in `
 | `gen_locale('phone', 'ko_KR')` | Korean phone number (e.g. 010-1234-5678) |
 | `gen_locale('zip', 'ja_JP')` | Japanese postal code (e.g. 123-4567) |
 | `gen_locale('address', 'de_DE')` | Full German address with street number, city, and zip |
-| `mask('john@example.com')` | Deterministic 16-char hex token (e.g. `a3f8c1d9e2b74f06`). Same input → same output within a session |
+| `mask('john@example.com')` | Deterministic 16-char hex token (e.g. `a3f8c1d9e2b74f06`). Same input -> same output within a session |
 | `mask(arg('email'), 8)` | 8-char hex token of a previously generated email (e.g. `a3f8c1d9`) |
 | `mask('secret', 'base64')` | Base64-encoded token, 16 chars (e.g. `o/jB2eK3TwYKd1==`) |
 | `mask('secret', 'base64', 8)` | Base64-encoded token, 8 chars (e.g. `o/jB2eK3`) |

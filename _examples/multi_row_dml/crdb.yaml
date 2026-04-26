@@ -1,0 +1,118 @@
+# Multi-row DML using the __values__ token (CockroachDB / PostgreSQL)
+#
+# The __values__ token generates a single multi-row VALUES clause:
+#   INSERT INTO t (a, b) __values__
+# becomes:
+#   INSERT INTO t (a, b) VALUES (1, 'x'), (2, 'y'), (3, 'z')
+#
+# This is simpler than the unnest(string_to_array(...)) pattern and
+# sends fewer round-trips to the database (one INSERT per batch
+# instead of one per row).
+#
+# __values__ also works with upsert (ON CONFLICT) and update (via CTE).
+
+globals:
+  products: 20
+  reviews: 50
+
+up:
+
+  - name: create_product
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS product (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name STRING NOT NULL UNIQUE,
+        price DECIMAL(10,2) NOT NULL DEFAULT 0
+      )
+
+  - name: create_review
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS review (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id UUID NOT NULL REFERENCES product(id),
+        rating INT NOT NULL,
+        body STRING NOT NULL
+      )
+
+seed:
+
+  # Batch insert using __values__
+  - name: insert_products
+    type: exec_batch
+    count: products
+    size: 10
+    args:
+      - gen('productname')
+      - uniform_f(1.00, 100.00, 2)
+    query: |-
+      INSERT INTO product (name, price)
+      __values__
+
+  - name: fetch_products
+    type: query
+    query: SELECT id, name FROM product
+
+  # Batch insert with foreign key reference
+  - name: insert_reviews
+    type: exec_batch
+    count: reviews
+    size: 10
+    args:
+      - ref_rand('fetch_products').id
+      - norm(4, 1, 1, 5)
+      - gen('loremipsumsentence:5')
+    query: |-
+      INSERT INTO review (product_id, rating, body)
+      __values__
+
+  # Batch upsert using __values__ with ON CONFLICT
+  - name: upsert_products
+    type: exec_batch
+    count: products
+    size: 10
+    args:
+      - gen('productname')
+      - uniform_f(50.00, 200.00, 2)
+    query: |-
+      INSERT INTO product (name, price)
+      __values__
+      ON CONFLICT (name) DO UPDATE SET price = EXCLUDED.price
+
+  # Batch update via CTE: generate (id, new_price) pairs
+  # and join them against the target table.
+  - name: update_prices
+    type: exec_batch
+    count: products
+    size: 10
+    args:
+      - ref_rand('fetch_products').id
+      - uniform_f(5.00, 150.00, 2)
+    query: |-
+      UPDATE product
+      SET price = v.price
+      FROM (
+        __values__
+      ) AS v(id, price)
+      WHERE product.id = v.id::UUID
+
+deseed:
+
+  - name: truncate_review
+    type: exec
+    query: TRUNCATE TABLE review CASCADE
+
+  - name: truncate_product
+    type: exec
+    query: TRUNCATE TABLE product CASCADE
+
+down:
+
+  - name: drop_review
+    type: exec
+    query: DROP TABLE IF EXISTS review
+
+  - name: drop_product
+    type: exec
+    query: DROP TABLE IF EXISTS product

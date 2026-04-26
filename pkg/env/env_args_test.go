@@ -363,6 +363,149 @@ func TestArg_Batch(t *testing.T) {
 	}
 }
 
+func TestGenerateBatchArgs_Values(t *testing.T) {
+	env := testEnv(nil)
+	env.env["const"] = convert.Constant
+
+	q := &config.Query{
+		Name:  "values_batch",
+		Type:  config.QueryTypeExecBatch,
+		Count: 3,
+		Args:  config.PositionalArgs("const(10)", "const('Alice')"),
+		Query: "INSERT INTO t (id, name) __values__",
+	}
+	require.NoError(t, q.CompileArgs(env.env))
+
+	argSets, batchExpanded, err := env.GenerateArgs(q)
+	require.NoError(t, err)
+	assert.True(t, batchExpanded)
+
+	require.Len(t, argSets, 1)
+	require.Len(t, argSets[0], 1)
+
+	valuesClause := string(argSets[0][0].(convert.RawSQL))
+	assert.Equal(t, "VALUES (10, 'Alice'), (10, 'Alice'), (10, 'Alice')", valuesClause)
+}
+
+func TestGenerateBatchArgs_ValuesSized(t *testing.T) {
+	env := testEnv(nil)
+	env.env["const"] = convert.Constant
+
+	q := &config.Query{
+		Type:  config.QueryTypeExecBatch,
+		Count: 5,
+		Size:  2,
+		Args:  config.PositionalArgs("const(1)"),
+		Query: "INSERT INTO t (id) __values__",
+	}
+	require.NoError(t, q.CompileArgs(env.env))
+
+	argSets, _, err := env.GenerateArgs(q)
+	require.NoError(t, err)
+
+	require.Len(t, argSets, 3)
+	assert.Equal(t, "VALUES (1), (1)", string(argSets[0][0].(convert.RawSQL)))
+	assert.Equal(t, "VALUES (1), (1)", string(argSets[1][0].(convert.RawSQL)))
+	assert.Equal(t, "VALUES (1)", string(argSets[2][0].(convert.RawSQL)))
+}
+
+func TestGenerateBatchArgs_ValuesNullable(t *testing.T) {
+	env := testEnv(nil)
+	env.env["const"] = convert.Constant
+
+	q := &config.Query{
+		Type:  config.QueryTypeExecBatch,
+		Count: 1,
+		Args:  config.PositionalArgs("const(nil)"),
+		Query: "INSERT INTO t (v) __values__",
+	}
+	require.NoError(t, q.CompileArgs(env.env))
+
+	argSets, _, err := env.GenerateArgs(q)
+	require.NoError(t, err)
+
+	require.Len(t, argSets, 1)
+	assert.Equal(t, "VALUES (NULL)", string(argSets[0][0].(convert.RawSQL)))
+}
+
+func TestGenerateBatchArgs_ValuesCapture(t *testing.T) {
+	env := testEnv(nil)
+	env.env["const"] = convert.Constant
+
+	q := &config.Query{
+		Name:  "captured",
+		Type:  config.QueryTypeExecBatch,
+		Count: 2,
+		Args: config.QueryArgs{
+			Exprs: []string{"const(42)", "const('Bob')"},
+			Names: map[string]int{"id": 0, "name": 1},
+		},
+		Query: "INSERT INTO t (id, name) __values__",
+	}
+	require.NoError(t, q.CompileArgs(env.env))
+
+	_, _, err := env.GenerateArgs(q)
+	require.NoError(t, err)
+
+	require.Len(t, env.capturedRows, 2)
+	assert.Equal(t, 42, env.capturedRows[0]["id"])
+	assert.Equal(t, "Bob", env.capturedRows[0]["name"])
+}
+
+func TestGenerateBatchArgs_ValuesOracle(t *testing.T) {
+	env := testEnv(nil)
+	env.driver = "oracle"
+	env.env["const"] = convert.Constant
+
+	q := &config.Query{
+		Type:  config.QueryTypeExecBatch,
+		Count: 3,
+		Args:  config.PositionalArgs("const(10)", "const('Alice')"),
+		Query: "INSERT ALL __values__(product(name, price)) ",
+	}
+	require.NoError(t, q.CompileArgs(env.env))
+
+	argSets, batchExpanded, err := env.GenerateArgs(q)
+	require.NoError(t, err)
+	assert.True(t, batchExpanded)
+
+	require.Len(t, argSets, 1)
+	require.Len(t, argSets[0], 1)
+
+	got := string(argSets[0][0].(convert.RawSQL))
+	expected := "INTO product (name, price) VALUES (10, 'Alice')\n" +
+		"INTO product (name, price) VALUES (10, 'Alice')\n" +
+		"INTO product (name, price) VALUES (10, 'Alice')\n" +
+		"SELECT 1 FROM DUAL"
+	assert.Equal(t, expected, got)
+}
+
+func TestGenerateBatchArgs_ValuesOracleSized(t *testing.T) {
+	env := testEnv(nil)
+	env.driver = "oracle"
+	env.env["const"] = convert.Constant
+
+	q := &config.Query{
+		Type:  config.QueryTypeExecBatch,
+		Count: 3,
+		Size:  2,
+		Args:  config.PositionalArgs("const(1)"),
+		Query: "INSERT ALL __values__(t(id)) ",
+	}
+	require.NoError(t, q.CompileArgs(env.env))
+
+	argSets, _, err := env.GenerateArgs(q)
+	require.NoError(t, err)
+
+	require.Len(t, argSets, 2)
+
+	got0 := string(argSets[0][0].(convert.RawSQL))
+	assert.Equal(t, "INTO t (id) VALUES (1)\nINTO t (id) VALUES (1)\nSELECT 1 FROM DUAL", got0)
+
+	got1 := string(argSets[1][0].(convert.RawSQL))
+	assert.Equal(t, "INTO t (id) VALUES (1)\nSELECT 1 FROM DUAL", got1)
+}
+
 func TestLocal_ReturnsValue(t *testing.T) {
 	env := testEnv(nil)
 	env.txLocals = map[string]any{"amount": 42}

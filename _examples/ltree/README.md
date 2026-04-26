@@ -2,11 +2,11 @@
 
 Hierarchical org chart using PostgreSQL's `ltree` extension. Each management level builds its path by appending to its parent's path via `ltree()`:
 
-- 1 CEO → `Jane_Doe`
-- 5 VPs → `Jane_Doe.Alice_Smith`
-- 15 Directors → `Jane_Doe.Alice_Smith.Bob_Jones`
-- 50 Managers → `Jane_Doe.Alice_Smith.Bob_Jones.Carol_White`
-- 200 ICs → `Jane_Doe.Alice_Smith.Bob_Jones.Carol_White.Dave_Brown`
+- 1 CEO -> `Jane_Doe`
+- 5 VPs -> `Jane_Doe.Alice_Smith`
+- 15 Directors -> `Jane_Doe.Alice_Smith.Bob_Jones`
+- 50 Managers -> `Jane_Doe.Alice_Smith.Bob_Jones.Carol_White`
+- 200 ICs -> `Jane_Doe.Alice_Smith.Bob_Jones.Carol_White.Dave_Brown`
 
 The `ltree()` function joins its arguments with dots and sanitizes labels to valid ltree characters (`[A-Za-z0-9_]`).
 

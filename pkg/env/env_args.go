@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"regexp"
 	"strings"
 
 	"github.com/codingconcepts/edg/pkg/config"
@@ -12,6 +13,12 @@ import (
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
 )
+
+// valuesTokenRe matches __values__ with optional Oracle params:
+//
+//	__values__                        → standard multi-row VALUES
+//	__values__(product(name, price))  → Oracle INSERT ALL
+var valuesTokenRe = regexp.MustCompile(`__values__(?:\((\w+)\(([^)]+)\)\))?`)
 
 // GenerateArgs evaluates compiled arg expressions and returns one or more
 // arg sets. The returned bool indicates whether batch expansion occurred
@@ -128,27 +135,40 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 
 	useJSON := q.BatchFormat == "json"
 
+	valuesMatch := valuesTokenRe.FindStringSubmatch(q.Query)
+	useValues := valuesMatch != nil
+	var oracleTable, oracleCols string
+	if useValues && len(valuesMatch) > 2 {
+		oracleTable = valuesMatch[1]
+		oracleCols = valuesMatch[2]
+	}
+
 	// Determine the formatting function per arg position based on the
 	// SQL template. Placeholders inside quotes ('$N') are part of a
 	// string literal (e.g. string_to_array) and need unquoted values.
 	// Bare placeholders ($N, e.g. ARRAY[$N]) need SQL-quoted values.
 	// When batch_format is "json", all values use BatchFormatValue
 	// (raw text) since JSON escaping is handled by BatchJoinJSON.
-	formatters := make([]func(any) string, len(q.CompiledArgs))
-	for i := range q.CompiledArgs {
-		if useJSON {
-			formatters[i] = func(v any) string { return convert.BatchFormatValue(v, e.driver) }
-		} else {
-			singleQuoted := fmt.Sprintf("'$%d'", i+1)
-			doubleQuoted := fmt.Sprintf(`"$%d"`, i+1)
-			if strings.Contains(q.Query, singleQuoted) {
-				formatters[i] = func(v any) string { return convert.BatchFormatValue(v, e.driver) }
-			} else if strings.Contains(q.Query, doubleQuoted) && e.driver == "mongodb" {
-				formatters[i] = func(v any) string { return convert.SQLFormatValue(v, e.driver) }
-			} else if strings.Contains(q.Query, doubleQuoted) {
+	// When __values__ is used, formatters are not needed (SQLFormatValue
+	// is called directly per value in the tuple-building loop).
+	var formatters []func(any) string
+	if !useValues {
+		formatters = make([]func(any) string, len(q.CompiledArgs))
+		for i := range q.CompiledArgs {
+			if useJSON {
 				formatters[i] = func(v any) string { return convert.BatchFormatValue(v, e.driver) }
 			} else {
-				formatters[i] = func(v any) string { return convert.SQLFormatValue(v, e.driver) }
+				singleQuoted := fmt.Sprintf("'$%d'", i+1)
+				doubleQuoted := fmt.Sprintf(`"$%d"`, i+1)
+				if strings.Contains(q.Query, singleQuoted) {
+					formatters[i] = func(v any) string { return convert.BatchFormatValue(v, e.driver) }
+				} else if strings.Contains(q.Query, doubleQuoted) && e.driver == "mongodb" {
+					formatters[i] = func(v any) string { return convert.SQLFormatValue(v, e.driver) }
+				} else if strings.Contains(q.Query, doubleQuoted) {
+					formatters[i] = func(v any) string { return convert.BatchFormatValue(v, e.driver) }
+				} else {
+					formatters[i] = func(v any) string { return convert.SQLFormatValue(v, e.driver) }
+				}
 			}
 		}
 	}
@@ -165,6 +185,56 @@ func (e *Env) generateBatchArgs(q *config.Query) ([][]any, error) {
 		n := size
 		if remaining := count - b*size; remaining < size {
 			n = remaining
+		}
+
+		if useValues {
+			tuples := make([]string, n)
+			for row := range n {
+				e.clearOneCache()
+				e.computedArgs = e.computedArgs[:0]
+				vals := make([]string, len(q.CompiledArgs))
+				for i, cq := range q.CompiledArgs {
+					v, err := expr.Run(cq, e.env)
+					if err != nil {
+						return nil, fmt.Errorf("error running batch arg %d row %d: %w", i, b*size+row, err)
+					}
+					vals[i] = convert.SQLFormatValue(v, e.driver)
+					e.computedArgs = append(e.computedArgs, v)
+				}
+				if captureColumns != nil {
+					r := make(map[string]any, len(captureColumns))
+					for ci, col := range captureColumns {
+						if ci < len(e.computedArgs) {
+							r[col] = e.computedArgs[ci]
+						}
+					}
+					e.capturedRows = append(e.capturedRows, r)
+				}
+				tuples[row] = "(" + strings.Join(vals, ", ") + ")"
+			}
+
+			var valuesSQL string
+			switch {
+			case oracleTable != "":
+				var sb strings.Builder
+				for _, t := range tuples {
+					sb.WriteString("INTO ")
+					sb.WriteString(oracleTable)
+					sb.WriteString(" (")
+					sb.WriteString(oracleCols)
+					sb.WriteString(") VALUES ")
+					sb.WriteString(t)
+					sb.WriteByte('\n')
+				}
+				sb.WriteString("SELECT 1 FROM DUAL")
+				valuesSQL = sb.String()
+			default:
+				valuesSQL = "VALUES " + strings.Join(tuples, ", ")
+			}
+			result[b] = []any{convert.RawSQL(valuesSQL)}
+			rowsDone := b*size + n
+			slog.Info("generating rows", "query", q.Name, "progress", fmt.Sprintf("%d/%d", rowsDone, count))
+			continue
 		}
 
 		perArg := make([][]string, len(q.CompiledArgs))
@@ -281,7 +351,26 @@ func (e *Env) SetEnv(name string, data []map[string]any) {
 	e.env[name] = data
 }
 
-func (e *Env) uniq(expression string, args ...any) (any, error) {
+func (e *Env) uniq(first any, args ...any) (any, error) {
+	switch v := first.(type) {
+	case []any:
+		seen := map[any]struct{}{}
+		var result []any
+		for _, item := range v {
+			if _, dup := seen[item]; !dup {
+				seen[item] = struct{}{}
+				result = append(result, item)
+			}
+		}
+		return result, nil
+	case string:
+		return e.uniqExpr(v, args...)
+	default:
+		return nil, fmt.Errorf("uniq: expected string expression or array, got %T", first)
+	}
+}
+
+func (e *Env) uniqExpr(expression string, args ...any) (any, error) {
 	maxRetries := 100
 	if len(args) > 0 {
 		v, err := convert.ToInt(args[0])

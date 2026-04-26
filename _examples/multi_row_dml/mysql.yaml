@@ -1,0 +1,100 @@
+# Multi-row DML using the __values__ token (MySQL)
+#
+# The __values__ token generates a single multi-row VALUES clause:
+#   INSERT INTO t (a, b) __values__
+# becomes:
+#   INSERT INTO t (a, b) VALUES (1, 'x'), (2, 'y'), (3, 'z')
+#
+# This is simpler than the JSON_TABLE pattern and sends fewer
+# round-trips to the database.
+
+globals:
+  products: 20
+  reviews: 50
+
+up:
+
+  - name: create_product
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS product (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        name VARCHAR(255) NOT NULL,
+        price DECIMAL(10,2) NOT NULL DEFAULT 0,
+        UNIQUE KEY uk_name (name)
+      )
+
+  - name: create_review
+    type: exec
+    query: |-
+      CREATE TABLE IF NOT EXISTS review (
+        id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+        product_id CHAR(36) NOT NULL,
+        rating INT NOT NULL,
+        body TEXT NOT NULL,
+        FOREIGN KEY (product_id) REFERENCES product(id)
+      )
+
+seed:
+
+  # Batch insert using __values__
+  - name: insert_products
+    type: exec_batch
+    count: products
+    size: 10
+    args:
+      - gen('productname')
+      - uniform_f(1.00, 100.00, 2)
+    query: |-
+      INSERT INTO product (name, price)
+      __values__
+
+  - name: fetch_products
+    type: query
+    query: SELECT id, name FROM product
+
+  # Batch insert with foreign key reference
+  - name: insert_reviews
+    type: exec_batch
+    count: reviews
+    size: 10
+    args:
+      - ref_rand('fetch_products').id
+      - norm(4, 1, 1, 5)
+      - gen('loremipsumsentence:5')
+    query: |-
+      INSERT INTO review (product_id, rating, body)
+      __values__
+
+  # Batch upsert using __values__ with ON DUPLICATE KEY
+  - name: upsert_products
+    type: exec_batch
+    count: products
+    size: 10
+    args:
+      - gen('productname')
+      - uniform_f(50.00, 200.00, 2)
+    query: |-
+      INSERT INTO product (name, price)
+      __values__
+      ON DUPLICATE KEY UPDATE price = VALUES(price)
+
+deseed:
+
+  - name: delete_review
+    type: exec
+    query: DELETE FROM review
+
+  - name: delete_product
+    type: exec
+    query: DELETE FROM product
+
+down:
+
+  - name: drop_review
+    type: exec
+    query: DROP TABLE IF EXISTS review
+
+  - name: drop_product
+    type: exec
+    query: DROP TABLE IF EXISTS product

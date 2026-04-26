@@ -12,7 +12,7 @@ edg is uniquely suited to work as a self-contained integration testing tool for 
 The `all` command runs five phases in order:
 
 ```
-up  →  seed  →  run  →  deseed  →  down
+up  ->  seed  ->  run  ->  deseed  ->  down
 ```
 
 1. **up** - creates tables and indexes

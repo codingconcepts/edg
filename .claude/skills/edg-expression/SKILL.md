@@ -145,7 +145,7 @@ You help users compose, debug, and understand edg expressions. edg uses [expr-la
 |---|---|
 | `gen_locale('first_name', 'ja_JP')` | Locale-aware name/address/phone generation |
 | `gen_locale('name', 'de_DE')` | Full name in locale order (eastern = last+first, western = first last) |
-| `mask(value)` | Deterministic 16-char hex token (same input → same output) |
+| `mask(value)` | Deterministic 16-char hex token (same input -> same output) |
 | `mask(value, length)` | Hex token truncated to `length` chars |
 | `mask(value, 'base64')` | Base64-encoded token |
 | `mask(value, 'base32')` | Base32-encoded token |

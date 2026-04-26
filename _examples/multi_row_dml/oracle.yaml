@@ -1,0 +1,95 @@
+# Multi-row DML using the __values__ token (Oracle)
+#
+# Oracle does not support multi-row VALUES. Instead, use the parameterized
+# form __values__(table(col1, col2)) to generate INSERT ALL:
+#
+#   INSERT ALL __values__(product(name, price))
+# becomes:
+#   INSERT ALL
+#   INTO product (name, price) VALUES ('Widget', 9.99)
+#   INTO product (name, price) VALUES ('Gadget', 24.50)
+#   SELECT 1 FROM DUAL
+
+globals:
+  products: 20
+  reviews: 50
+
+up:
+
+  - name: create_product
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE product (
+            id VARCHAR2(36) DEFAULT SYS_GUID() PRIMARY KEY,
+            name VARCHAR2(255) NOT NULL UNIQUE,
+            price NUMBER(10,2) DEFAULT 0 NOT NULL
+          )';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+  - name: create_review
+    type: exec
+    query: |-
+      BEGIN
+        EXECUTE IMMEDIATE '
+          CREATE TABLE review (
+            id VARCHAR2(36) DEFAULT SYS_GUID() PRIMARY KEY,
+            product_id VARCHAR2(36) NOT NULL,
+            rating NUMBER(1) NOT NULL,
+            body VARCHAR2(4000) NOT NULL
+          )';
+      EXCEPTION WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN RAISE; END IF;
+      END;
+
+seed:
+
+  # Batch insert using __values__ with Oracle INSERT ALL
+  - name: insert_products
+    type: exec_batch
+    count: products
+    size: 10
+    args:
+      - gen('productname')
+      - uniform_f(1.00, 100.00, 2)
+    query: |-
+      INSERT ALL __values__(product(name, price))
+
+  - name: fetch_products
+    type: query
+    query: SELECT id, name FROM product
+
+  # Batch insert with foreign key reference
+  - name: insert_reviews
+    type: exec_batch
+    count: reviews
+    size: 10
+    args:
+      - ref_rand('fetch_products').id
+      - norm(4, 1, 1, 5)
+      - gen('loremipsumsentence:5')
+    query: |-
+      INSERT ALL __values__(review(product_id, rating, body))
+
+deseed:
+
+  - name: truncate_review
+    type: exec
+    query: TRUNCATE TABLE review
+
+  - name: truncate_product
+    type: exec
+    query: TRUNCATE TABLE product
+
+down:
+
+  - name: drop_review
+    type: exec
+    query: DROP TABLE review CASCADE CONSTRAINTS PURGE
+
+  - name: drop_product
+    type: exec
+    query: DROP TABLE product CASCADE CONSTRAINTS PURGE

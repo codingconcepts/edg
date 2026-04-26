@@ -208,6 +208,45 @@ func TestRunSection_SeedCaptureHierarchical(t *testing.T) {
 	}
 }
 
+func TestRunSection_ExecBatchValues(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectExec("INSERT INTO employees").WillReturnResult(driver.ResultNoRows)
+
+	env := &Env{
+		db:        edgdb.NewSQDB(db),
+		oneCache:  map[string]any{},
+		permCache: map[string]any{},
+		env:       map[string]any{"const": convert.Constant},
+		request:   &config.Request{},
+	}
+
+	q := &config.Query{
+		Name:  "insert_emp",
+		Type:  config.QueryTypeExecBatch,
+		Count: 3,
+		Query: "INSERT INTO employees (id, title) __values__",
+		Args: config.QueryArgs{
+			Exprs: []string{"const(10)", "const('VP')"},
+			Names: map[string]int{"id": 0, "title": 1},
+		},
+	}
+	require.NoError(t, q.CompileArgs(env.env))
+
+	require.NoError(t, env.runSection(context.Background(), []*config.Query{q}, config.ConfigSectionSeed, edgdb.NewSQDB(db)))
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	data, ok := env.env["insert_emp"].([]map[string]any)
+	require.True(t, ok, "seed batch __values__ should capture dataset")
+	require.Len(t, data, 3)
+	for i, row := range data {
+		assert.Equal(t, 10, row["id"], "row %d", i)
+		assert.Equal(t, "VP", row["title"], "row %d", i)
+	}
+}
+
 func TestRunSection_SeedCaptureNotInRunSection(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
