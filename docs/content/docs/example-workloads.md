@@ -11,6 +11,7 @@ Complete workload configs you can run directly or use as starting points for you
 | Workload | Description |
 |---|---|
 | [Aggregation](https://github.com/codingconcepts/edg/tree/main/_examples/aggregation/) | Demonstrates aggregation functions (sum, avg, min, max, count, distinct) |
+| [Anomalies](https://github.com/codingconcepts/edg/tree/main/_examples/anomalies/) | Read/write anomaly patterns (lost update, stale read, write skew) for isolation level testing |
 | [Bank](https://github.com/codingconcepts/edg/tree/main/_examples/bank/) | Bank account operations for contention and correctness testing |
 | [CH-benCHmark](https://github.com/codingconcepts/edg/tree/main/cmd/edg/workload/ch_benchmark/) | Mixed OLTP+OLAP workload combining TPC-C transactions with TPC-H-style analytical queries |
 | [Batch](https://github.com/codingconcepts/edg/tree/main/_examples/batch/) | Demonstrates `query_batch` and `exec_batch` query types for batch inserts and updates |
@@ -28,6 +29,7 @@ Complete workload configs you can run directly or use as starting points for you
 | [Geo Spatial](https://github.com/codingconcepts/edg/tree/main/_examples/geo_spatial/) | Dating app workload with location-based discovery (`ST_DWithin`, GiST index), swipes, matches, and messaging |
 | [Global Sequences](https://github.com/codingconcepts/edg/tree/main/_examples/global_sequences/) | Globally unique auto-incrementing sequences shared across all workers with `seq_global` |
 | [Includes](https://github.com/codingconcepts/edg/tree/main/_examples/includes/) | Splitting and reusing config fragments with the `!include` directive |
+| [Invoice Lines](https://github.com/codingconcepts/edg/tree/main/_examples/invoice_lines/) | Correlated parent-child data with `distribute_sum()` and `distribute_weighted()` for totals that always balance |
 | [IoT](https://github.com/codingconcepts/edg/tree/main/_examples/iot/) | IoT devices, sensors, and time-series readings |
 | [LTREE](https://github.com/codingconcepts/edg/tree/main/_examples/ltree/) | Hierarchical org chart using PostgreSQL's `ltree` extension with `ltree()` path builder |
 | [Locale](https://github.com/codingconcepts/edg/tree/main/_examples/locale/) | Locale-aware PII generation (`gen_locale`) with deterministic masking (`mask`) across JP and DE regions |
@@ -38,6 +40,7 @@ Complete workload configs you can run directly or use as starting points for you
 | [Nullable](https://github.com/codingconcepts/edg/tree/main/_examples/nullable/) | Demonstrates `nullable(expr, probability)` for injecting NULLs with controlled frequency |
 | [Observability](https://github.com/codingconcepts/edg/tree/main/_examples/observability/) | Prometheus metrics and Grafana dashboard with queries, writes, and rollback-prone transactions |
 | [Org Tree](https://github.com/codingconcepts/edg/tree/main/_examples/org_tree/) | Hierarchical org chart (CEO -> VPs -> Directors -> Managers -> ICs) using seed capture for self-referential generation |
+| [Output](https://github.com/codingconcepts/edg/tree/main/_examples/output/) | `stage` command output formats (SQL, JSON, CSV, Parquet, stdout) without a database connection |
 | [Pipeline](https://github.com/codingconcepts/edg/tree/main/_examples/pipeline/) | Multi-table sequential reads and writes |
 | [Populate](https://github.com/codingconcepts/edg/tree/main/_examples/populate/) | Billion-row data population benchmark |
 | [Prepared](https://github.com/codingconcepts/edg/tree/main/_examples/prepared/) | Prepared statements for reduced parse overhead in high-throughput workloads |

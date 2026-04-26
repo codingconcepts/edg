@@ -96,9 +96,9 @@ The `query_batch` and `exec_batch` types use two additional fields to control ho
 
 Each arg expression is evaluated once per row. For example, with `count: 1000` and `size: 100`, you get 10 batches of 100 rows each.
 
-#### Multi-Row VALUES (`__values__`) — Recommended
+#### Multi-Row VALUES (`__values__`) - Recommended
 
-The `__values__` token generates a standard multi-row `VALUES` clause. This is the recommended approach for batch inserts — it produces a single INSERT statement per batch and works the same way across all SQL drivers that support multi-row VALUES (pgx, mysql, mssql, spanner, dsql).
+The `__values__` token generates a standard multi-row `VALUES` clause. This is the recommended approach for batch inserts. It produces a single INSERT statement per batch and works the same way across all SQL drivers that support multi-row VALUES (pgx, mysql, mssql, spanner, dsql).
 
 ```yaml
 seed:
@@ -200,7 +200,7 @@ See [`_examples/multi_row_dml/`](https://github.com/codingconcepts/edg/tree/main
 
 #### Driver-Specific Batch Expansion
 
-As an alternative to `__values__`, edg supports driver-specific batch expansion patterns using `__sep__` (the ASCII unit separator). These are more verbose but give you full control over the SQL shape — useful for non-INSERT contexts or advanced patterns.
+As an alternative to `__values__`, edg supports driver-specific batch expansion patterns using `__sep__` (the ASCII unit separator). These are more verbose but give you full control over the SQL shape (useful for non-INSERT contexts or advanced patterns).
 
 ##### Postgres / CockroachDB
 

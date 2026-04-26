@@ -48,6 +48,7 @@ A typical workflow runs the commands in order: `up` -> `seed` -> `run` -> `desee
 | `--print-interval` | | `1s` | Progress reporting interval (run and all commands) |
 | `--metrics-addr`<br>`EDG_METRICS_ADDR` | | | Address for Prometheus metrics endpoint (e.g. `:9090`). See [Observability]({{< relref "observability" >}}) for details. |
 | `--pool-size`<br>`EDG_POOL_SIZE` | | `0` | Maximum number of open database connections. `0` uses the driver default (typically unlimited). |
+| `--no-wait`<br>`EDG_NO_WAIT` | | `false` | Ignore wait durations configured in workload queries (run and all commands) |
 | `--warmup-duration` | | `0` | Warmup period before collecting metrics (e.g. `10s`). Workers run during warmup but results are discarded. See [Warmup](#warmup) for details. |
 
 </div>

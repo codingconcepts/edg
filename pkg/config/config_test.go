@@ -118,11 +118,11 @@ expectations:
 }
 
 func TestDurationUnmarshalYAML(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  string
-		want   time.Duration
-		expErr string
+	cases := []struct {
+		name    string
+		input   string
+		want    time.Duration
+		wantErr string
 	}{
 		{"seconds", "wait: 5s", 5 * time.Second, ""},
 		{"milliseconds", "wait: 250ms", 250 * time.Millisecond, ""},
@@ -131,18 +131,18 @@ func TestDurationUnmarshalYAML(t *testing.T) {
 		{"invalid", "wait: notaduration", 0, "invalid duration"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
 			var out struct {
 				Wait Duration `yaml:"wait"`
 			}
-			err := yaml.Unmarshal([]byte(tt.input), &out)
-			if tt.expErr != "" {
-				require.ErrorContains(t, err, tt.expErr)
+			err := yaml.Unmarshal([]byte(c.input), &out)
+			if c.wantErr != "" {
+				require.ErrorContains(t, err, c.wantErr)
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.want, time.Duration(out.Wait))
+			assert.Equal(t, c.want, time.Duration(out.Wait))
 		})
 	}
 }
@@ -168,23 +168,6 @@ seed:
 	// Count/Size are parsed as any from YAML, typically int.
 	assert.Equal(t, 100, q.Count)
 	assert.Equal(t, 50, q.Size)
-}
-
-func TestConfigSectionValues(t *testing.T) {
-	cases := []struct {
-		name string
-		got  ConfigSection
-		want ConfigSection
-	}{
-		{"seed", ConfigSection("seed"), ConfigSectionSeed},
-		{"deseed", ConfigSection("deseed"), ConfigSectionDeseed},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, c.want, c.got)
-		})
-	}
 }
 
 func TestTransactionParsesRollbackIf(t *testing.T) {
@@ -404,7 +387,7 @@ func TestCompileLocals(t *testing.T) {
 		name    string
 		locals  map[string]string
 		env     map[string]any
-		wantErr bool
+		wantErr string
 		wantLen int
 	}{
 		{
@@ -417,7 +400,7 @@ func TestCompileLocals(t *testing.T) {
 			name:    "invalid syntax",
 			locals:  map[string]string{"bad": "invalid +++"},
 			env:     map[string]any{},
-			wantErr: true,
+			wantErr: "failed to compile local",
 		},
 	}
 
@@ -425,9 +408,8 @@ func TestCompileLocals(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			tx := &Transaction{Locals: c.locals}
 			err := tx.CompileLocals(c.env)
-
-			if c.wantErr {
-				require.Error(t, err)
+			if c.wantErr != "" {
+				require.ErrorContains(t, err, c.wantErr)
 				return
 			}
 			require.NoError(t, err)
@@ -503,48 +485,36 @@ func TestValidate_EnvPattern(t *testing.T) {
 		name    string
 		env     map[string]string
 		pattern string
-		expErr  string
+		wantErr string
 	}{
 		{
-			name: "valid single quote",
-			env: map[string]string{
-				"ABC": "123",
-			},
+			name:    "valid single quote",
+			env:     map[string]string{"ABC": "123"},
 			pattern: `env('ABC')`,
-			expErr:  "",
 		},
 		{
-			name: "valid double quote",
-			env: map[string]string{
-				"ABC": "123",
-			},
+			name:    "valid double quote",
+			env:     map[string]string{"ABC": "123"},
 			pattern: `env("ABC")`,
-			expErr:  "",
 		},
 		{
-			name: "missing env var",
-			env: map[string]string{
-				"ABC": "123",
-			},
+			name:    "missing env var",
+			env:     map[string]string{"ABC": "123"},
 			pattern: `env("DEF")`,
-			expErr:  "missing environment variable",
+			wantErr: "missing environment variable",
 		},
 		{
-			name: "mismatched quotes not matched",
-			env: map[string]string{
-				"ABC": "123",
-			},
+			name:    "mismatched quotes not matched",
+			env:     map[string]string{"ABC": "123"},
 			pattern: `env('ABC")`,
-			expErr:  "", // regex won't match, so no validation error (expr-lang catches syntax)
 		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			test.CleanupEnv(t, "ABC")
-
 			for k, v := range c.env {
-				require.NoError(t, os.Setenv(k, v))
+				t.Setenv(k, v)
 			}
 
 			req := &Request{
@@ -552,11 +522,9 @@ func TestValidate_EnvPattern(t *testing.T) {
 					"value": {c.pattern},
 				},
 			}
-
 			err := req.Validate()
-
-			if c.expErr != "" {
-				require.ErrorContains(t, err, c.expErr)
+			if c.wantErr != "" {
+				require.ErrorContains(t, err, c.wantErr)
 			} else {
 				require.NoError(t, err)
 			}
@@ -628,7 +596,7 @@ func TestRateUnmarshalYAML(t *testing.T) {
 		wantTimes    int
 		wantInterval time.Duration
 		wantTicker   time.Duration
-		expErr       string
+		wantErr      string
 	}{
 		{"once per 10s", "rate: 1/10s", 1, 10 * time.Second, 10 * time.Second, ""},
 		{"3 per 10s", "rate: 3/10s", 3, 10 * time.Second, 10 * time.Second / 3, ""},
@@ -645,8 +613,8 @@ func TestRateUnmarshalYAML(t *testing.T) {
 				Rate Rate `yaml:"rate"`
 			}
 			err := yaml.Unmarshal([]byte(c.input), &out)
-			if c.expErr != "" {
-				require.ErrorContains(t, err, c.expErr)
+			if c.wantErr != "" {
+				require.ErrorContains(t, err, c.wantErr)
 				return
 			}
 			require.NoError(t, err)
@@ -973,7 +941,7 @@ func TestCompilePrint(t *testing.T) {
 		name    string
 		print   []PrintExpr
 		env     map[string]any
-		wantErr bool
+		wantErr string
 		wantLen int
 	}{
 		{
@@ -998,7 +966,7 @@ func TestCompilePrint(t *testing.T) {
 			name:    "invalid syntax",
 			print:   []PrintExpr{{Expr: "invalid +++"}},
 			env:     map[string]any{},
-			wantErr: true,
+			wantErr: "failed to compile print",
 		},
 	}
 
@@ -1006,10 +974,8 @@ func TestCompilePrint(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			q := &Query{Print: c.print}
 			err := q.CompilePrint(c.env)
-
-			if c.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), "failed to compile print")
+			if c.wantErr != "" {
+				require.ErrorContains(t, err, c.wantErr)
 				return
 			}
 			require.NoError(t, err)
@@ -1264,4 +1230,3 @@ func TestValidate_PrintExpressionInValidation(t *testing.T) {
 	}
 	require.NoError(t, req.Validate())
 }
-

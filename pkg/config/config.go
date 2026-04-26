@@ -21,7 +21,6 @@ var (
 	seqCallRe = regexp.MustCompile(`seq_(?:global|rand|zipf|norm|exp|lognorm)\(\s*(?:'([^']+)'|"([^"]+)")`)
 )
 
-// Duration wraps time.Duration for YAML unmarshaling from strings like "1s".
 type Duration time.Duration
 
 func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
@@ -91,8 +90,7 @@ type Request struct {
 	Expectations []Expectation               `json:"expectations" yaml:"expectations"`
 }
 
-// RunAllQueries returns a flat list of all queries in the run section,
-// including queries nested inside transactions.
+// RunAllQueries includes queries nested inside transactions.
 func (r *Request) RunAllQueries() []*Query {
 	var queries []*Query
 	for _, item := range r.Run {
@@ -205,14 +203,10 @@ func (qa *QueryArgs) UnmarshalYAML(node *yaml.Node) error {
 	}
 }
 
-// IsRollbackIf returns true when this query element is a rollback_if
-// condition check rather than a database query.
 func (q *Query) IsRollbackIf() bool {
 	return q.RollbackIf != ""
 }
 
-// CompileRollbackIf compiles the rollback_if expression (if set)
-// against the given environment map.
 func (q *Query) CompileRollbackIf(envMap map[string]any) error {
 	if q.RollbackIf == "" {
 		return nil
@@ -298,8 +292,6 @@ type Transaction struct {
 	CompiledLocals map[string]*vm.Program `json:"-" yaml:"-"`
 }
 
-// CompileLocals compiles each locals expression against the given
-// environment map.
 func (tx *Transaction) CompileLocals(envMap map[string]any) error {
 	tx.CompiledLocals = make(map[string]*vm.Program, len(tx.Locals))
 	for name, body := range tx.Locals {
@@ -312,8 +304,6 @@ func (tx *Transaction) CompileLocals(envMap map[string]any) error {
 	return nil
 }
 
-// RunItem represents a single entry in the run section: either a
-// standalone query or a transaction containing multiple queries.
 type RunItem struct {
 	Query       *Query
 	Transaction *Transaction
@@ -341,7 +331,6 @@ func (ri *RunItem) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// Name returns the name of the run item (query name or transaction name).
 func (ri *RunItem) Name() string {
 	if ri.Transaction != nil {
 		return ri.Transaction.Name
@@ -352,12 +341,10 @@ func (ri *RunItem) Name() string {
 	return ""
 }
 
-// IsTransaction returns true when this run item is a transaction group.
 func (ri *RunItem) IsTransaction() bool {
 	return ri.Transaction != nil
 }
 
-// AllQueries returns all queries contained in this run item.
 func (ri *RunItem) AllQueries() []*Query {
 	if ri.Transaction != nil {
 		return ri.Transaction.Queries

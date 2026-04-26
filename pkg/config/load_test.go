@@ -107,7 +107,7 @@ func TestExtractGlobalsOrder(t *testing.T) {
 			name: "non-mapping globals",
 			node: func() *yaml.Node {
 				var doc yaml.Node
-				yaml.Unmarshal([]byte("globals:\n  - item1\n  - item2\n"), &doc)
+				_ = yaml.Unmarshal([]byte("globals:\n  - item1\n  - item2\n"), &doc)
 				return &doc
 			}(),
 		},
