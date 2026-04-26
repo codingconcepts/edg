@@ -198,7 +198,7 @@ func BatchJoinJSON(parts []string) string {
 type RawSQL string
 
 // SQLFormatValue formats a value for safe inline substitution in SQL.
-// Strings are single-quoted with embedded quotes escaped ('→”);
+// Strings are single-quoted with embedded quotes escaped ('->”);
 // numeric types are returned as-is; nil becomes NULL; RawSQL values
 // are returned unchanged; []byte values are hex-encoded using the
 // driver-appropriate literal: 0x... for mssql, X'...' (ANSI SQL hex

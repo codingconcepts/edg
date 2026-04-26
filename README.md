@@ -96,7 +96,7 @@ docker compose -f cmd/harness/compose/compose_oracle.yml down
 
 ## Todos
 
-* Replace with pgx, mysql, mssql, spanner, and dsql examples to use __values__ instead of unnest approach
+* Unit tests for each file part
 * Ensure all batch queries are inserting at least 10 rows (some cassandra batches are 1 at a time)
 * Unique constraint awareness (e.g. uniq(gen('email')) will repeated call gen until a new unique value is found. For uniq(gen('email'), 10), it will try 10 times, then fail)
 * MongoDB and Cassandra sync verify support

@@ -36,19 +36,7 @@ seed:
       - cond(!arg(1), gen('phone'), nil)
     query: |-
       INSERT INTO contact (name, email, phone)
-      SELECT j1.val, NULLIF(j3.val, 'NULL'), NULLIF(j4.val, 'NULL')
-      FROM JSON_TABLE(
-        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
-        '$[*]' COLUMNS(val VARCHAR(255) PATH '$', rn FOR ORDINALITY)
-      ) j1
-      JOIN JSON_TABLE(
-        CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'),
-        '$[*]' COLUMNS(val VARCHAR(255) PATH '$', rn FOR ORDINALITY)
-      ) j3 ON j1.rn = j3.rn
-      JOIN JSON_TABLE(
-        CONCAT('["', REPLACE('$4', CHAR(31), '","'), '"]'),
-        '$[*]' COLUMNS(val VARCHAR(50) PATH '$', rn FOR ORDINALITY)
-      ) j4 ON j1.rn = j4.rn
+      __values__
 
 deseed:
 

@@ -34,14 +34,14 @@ seed:
       - gen_batch(num_a, 1, 'company')
     query: |-
       INSERT INTO a (name)
-      SELECT unnest(string_to_array('$1', __sep__))
+      __values__
 
   - name: populate b
     args:
       - gen_batch(num_b, 1, 'email')
     query: |-
       INSERT INTO b (email)
-      SELECT unnest(string_to_array('$1', __sep__))
+      __values__
 
   - name: populate c
     args:

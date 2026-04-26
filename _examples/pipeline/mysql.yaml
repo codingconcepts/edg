@@ -47,11 +47,7 @@ seed:
       - gen_batch(a_rows, batch_size, 'word')
     query: |-
       INSERT INTO a (name)
-      SELECT j.val
-      FROM JSON_TABLE(
-        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
-        '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
-      ) j
+      __values__
 
   - name: populate_b
     args:

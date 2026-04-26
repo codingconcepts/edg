@@ -28,7 +28,6 @@ seed:
 
   - name: populate_contact
     type: exec_batch
-    batch_format: json
     count: contacts
     size: batch_size
     args:
@@ -38,10 +37,7 @@ seed:
       - cond(!arg(1), gen('phone'), nil)
     query: |-
       INSERT INTO contact (name, email, phone)
-      SELECT n.value, NULLIF(e.value, 'null'), NULLIF(p.value, 'null')
-      FROM OPENJSON('$1') n
-      JOIN OPENJSON('$3') e ON n.[key] = e.[key]
-      JOIN OPENJSON('$4') p ON n.[key] = p.[key]
+      __values__
 
 deseed:
 

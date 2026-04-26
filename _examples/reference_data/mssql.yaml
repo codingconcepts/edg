@@ -29,7 +29,6 @@ seed:
 
   - name: populate_customer
     type: exec_batch
-    batch_format: json
     count: customers
     size: 10
     args:
@@ -38,10 +37,7 @@ seed:
       - set_rand(ref_same('regions').cities, [])
     query: |-
       INSERT INTO customer (email, region, city)
-      SELECT j1.value, j2.value, j3.value
-      FROM OPENJSON('$1') j1
-      JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
-      JOIN OPENJSON('$3') j3 ON j1.[key] = j3.[key]
+      __values__
 
 deseed:
 

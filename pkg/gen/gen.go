@@ -68,7 +68,7 @@ func GenUUIDv1() (string, error) { return random.UUIDv1() }
 func GenUUIDv4() string          { return random.UUIDv4() }
 func GenUUIDv6() (string, error) { return random.UUIDv6() }
 func GenUUIDv7() (string, error) { return random.UUIDv7() }
-func GenObjectID() bson.ObjectID  { return random.ObjectID() }
+func GenObjectID() bson.ObjectID { return random.ObjectID() }
 
 // FloatRand generates a random float64 in [min, max] rounded to the
 // given number of decimal places.
@@ -453,7 +453,7 @@ var ltreeInvalidChars = regexp.MustCompile(`[^A-Za-z0-9_.]`)
 // with dots. Nil and empty parts are skipped. Each label is sanitized
 // to contain only characters valid in ltree labels ([A-Za-z0-9_]).
 //
-//	ltree('Top', 'Science', 'Astronomy') → "Top.Science.Astronomy"
+//	ltree('Top', 'Science', 'Astronomy') -> "Top.Science.Astronomy"
 func GenLtree(parts ...any) (string, error) {
 	var segments []string
 	for _, p := range parts {

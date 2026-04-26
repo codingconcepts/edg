@@ -168,12 +168,16 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 		}
 
 		if section == config.ConfigSectionSeed && q.Name != "" && len(q.CompiledArgs) > 0 {
-			if q.IsBatch() {
+			switch {
+			case q.Type == config.QueryTypeQueryBatch:
+				// query_batch stores results via Query() → SetEnv from
+				// RETURNING data; don't overwrite with input args.
+			case q.IsBatch():
 				if len(e.capturedRows) > 0 {
 					e.SetEnv(q.Name, e.capturedRows)
 					e.capturedRows = nil
 				}
-			} else {
+			default:
 				columns := output.ExtractColumns(q)
 				rows := make([]map[string]any, 0, len(argSets))
 				for _, args := range argSets {

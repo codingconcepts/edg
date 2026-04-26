@@ -24,7 +24,6 @@ seed:
 
   - name: populate_user
     type: exec_batch
-    batch_format: json
     count: users
     size: batch_size
     args:
@@ -34,11 +33,7 @@ seed:
       - nullable(uuid_v4(), 0.8)
     query: |-
       INSERT INTO [user] (email, phone, bio, referred_by)
-      SELECT j1.value, NULLIF(j2.value, 'null'), NULLIF(j3.value, 'null'), CAST(NULLIF(j4.value, 'null') AS UNIQUEIDENTIFIER)
-      FROM OPENJSON('$1') j1
-      JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
-      JOIN OPENJSON('$3') j3 ON j1.[key] = j3.[key]
-      JOIN OPENJSON('$4') j4 ON j1.[key] = j4.[key]
+      __values__
 
 deseed:
 

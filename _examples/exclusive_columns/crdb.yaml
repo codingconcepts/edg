@@ -31,13 +31,7 @@ seed:
       - cond(!arg(1), gen('phone'), nil)
     query: |-
       INSERT INTO contact (name, email, phone)
-      SELECT n, e, p
-      FROM unnest(
-        ARRAY[$1],
-        ARRAY[$2],
-        ARRAY[$3],
-        ARRAY[$4]
-      ) AS t(n, flip, e, p)
+      __values__
 
 deseed:
 

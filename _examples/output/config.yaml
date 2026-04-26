@@ -40,9 +40,7 @@ seed:
       email: gen('email')
     query: |-
       INSERT INTO customer (id, name, email)
-      SELECT unnest(string_to_array('$1', chr(31))),
-             unnest(string_to_array('$2', chr(31))),
-             unnest(string_to_array('$3', chr(31)))
+      __values__
 
   - name: populate_order
     type: exec_batch
@@ -54,10 +52,7 @@ seed:
       status: set_rand(['pending', 'shipped', 'delivered'], [])
     query: |-
       INSERT INTO purchase_order (id, customer_id, amount, status)
-      SELECT unnest(string_to_array('$1', chr(31))),
-             unnest(string_to_array('$2', chr(31))),
-             unnest(string_to_array('$3', chr(31))),
-             unnest(string_to_array('$4', chr(31)))
+      __values__
 
 deseed:
 

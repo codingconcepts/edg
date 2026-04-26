@@ -36,23 +36,17 @@ seed:
   - name: populate_customer
     type: exec_batch
     count: customers
-    batch_format: json
     args:
       id: seq_global("customer_id")
       name: gen('name')
       email: gen('email')
     query: |-
       INSERT INTO customer (id, name, email)
-      SELECT j1.value, j2.value, j3.value
-      FROM OPENJSON($1) j1
-      CROSS APPLY OPENJSON($2) j2
-      CROSS APPLY OPENJSON($3) j3
-      WHERE j1.[key] = j2.[key] AND j2.[key] = j3.[key]
+      __values__
 
   - name: populate_order
     type: exec_batch
     count: customers * 3
-    batch_format: json
     args:
       id: seq_global("order_id")
       customer_id: seq_rand("customer_id")
@@ -60,12 +54,7 @@ seed:
       status: set_rand(['pending', 'shipped', 'delivered'], [])
     query: |-
       INSERT INTO purchase_order (id, customer_id, amount, status)
-      SELECT j1.value, j2.value, j3.value, j4.value
-      FROM OPENJSON($1) j1
-      CROSS APPLY OPENJSON($2) j2
-      CROSS APPLY OPENJSON($3) j3
-      CROSS APPLY OPENJSON($4) j4
-      WHERE j1.[key] = j2.[key] AND j2.[key] = j3.[key] AND j3.[key] = j4.[key]
+      __values__
 
 deseed:
 

@@ -66,9 +66,7 @@ seed:
     args:
       - gen('email')
     query: |-
-      INSERT INTO customer (email)
-      SELECT column_value
-      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"'))
+      INSERT ALL __values__(customer(email))
 
   - name: populate_account
     args:

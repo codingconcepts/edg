@@ -61,9 +61,7 @@ seed:
     args:
       - gen('productname')
     query: |-
-      INSERT INTO product (name)
-      SELECT column_value
-      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"'))
+      INSERT ALL __values__(product(name))
 
   - name: fetch_products
     type: query
@@ -78,11 +76,7 @@ seed:
       - norm(4, 1, 1, 5)
       - gen('loremipsumsentence:5')
     query: |-
-      INSERT INTO review (product_id, rating, body)
-      SELECT TO_NUMBER(p.val), TO_NUMBER(r.val), b.val
-      FROM (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"'))) p
-      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$2', CHR(31), '","') || '"'))) r ON p.rn = r.rn
-      JOIN (SELECT column_value AS val, ROWNUM AS rn FROM XMLTABLE(('"' || REPLACE('$3', CHR(31), '","') || '"'))) b ON p.rn = b.rn
+      INSERT ALL __values__(review(product_id, rating, body))
 
 deseed:
 

@@ -33,11 +33,7 @@ seed:
       - gen_batch(customers, batch_size, 'email')
     query: |-
       INSERT INTO customer (email)
-      SELECT j.val
-      FROM JSON_TABLE(
-        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
-        '$[*]' COLUMNS(val VARCHAR(255) PATH '$')
-      ) j
+      __values__
 
   - name: populate_account
     args:

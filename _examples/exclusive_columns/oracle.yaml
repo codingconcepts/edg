@@ -46,11 +46,7 @@ seed:
       - cond(arg(1), gen('email'), nil)
       - cond(!arg(1), gen('phone'), nil)
     query: |-
-      INSERT INTO contact (name, email, phone)
-      SELECT n.val, NULLIF(e.val, 'NULL'), NULLIF(p.val, 'NULL')
-      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(255) PATH '.') n
-      JOIN XMLTABLE(('"' || REPLACE('$3', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(255) PATH '.') e ON n.rn = e.rn
-      JOIN XMLTABLE(('"' || REPLACE('$4', CHR(31), '","') || '"') COLUMNS rn FOR ORDINALITY, val VARCHAR2(50) PATH '.') p ON n.rn = p.rn
+      INSERT ALL __values__(contact(name, email, phone))
 
 deseed:
 

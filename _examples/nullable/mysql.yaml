@@ -32,23 +32,7 @@ seed:
       - nullable(uuid_v4(), 0.8)
     query: |-
       INSERT INTO app_user (email, phone, bio, referred_by)
-      SELECT j1.val, j2.val, j3.val, j4.val
-      FROM JSON_TABLE(
-        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
-        '$[*]' COLUMNS(val VARCHAR(255) PATH '$', rn FOR ORDINALITY)
-      ) j1
-      JOIN JSON_TABLE(
-        CONCAT('["', REPLACE('$2', CHAR(31), '","'), '"]'),
-        '$[*]' COLUMNS(val VARCHAR(50) PATH '$', rn FOR ORDINALITY)
-      ) j2 ON j1.rn = j2.rn
-      JOIN JSON_TABLE(
-        CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'),
-        '$[*]' COLUMNS(val TEXT PATH '$', rn FOR ORDINALITY)
-      ) j3 ON j1.rn = j3.rn
-      JOIN JSON_TABLE(
-        CONCAT('["', REPLACE('$4', CHAR(31), '","'), '"]'),
-        '$[*]' COLUMNS(val CHAR(36) PATH '$', rn FOR ORDINALITY)
-      ) j4 ON j1.rn = j4.rn
+      __values__
 
 deseed:
 

@@ -16,8 +16,8 @@ import (
 
 // valuesTokenRe matches __values__ with optional Oracle params:
 //
-//	__values__                        → standard multi-row VALUES
-//	__values__(product(name, price))  → Oracle INSERT ALL
+//	__values__                        -> standard multi-row VALUES
+//	__values__(product(name, price))  -> Oracle INSERT ALL
 var valuesTokenRe = regexp.MustCompile(`__values__(?:\((\w+)\(([^)]+)\)\))?`)
 
 // GenerateArgs evaluates compiled arg expressions and returns one or more

@@ -38,10 +38,7 @@ seed:
       - gen('name')
     query: |-
       INSERT INTO users (id, email, name)
-      SELECT
-        unnest(string_to_array('$1', __sep__))::INT,
-        unnest(string_to_array('$2', __sep__)),
-        unnest(string_to_array('$3', __sep__))
+      __values__
 
   - name: fetch_users
     type: query
@@ -58,11 +55,7 @@ seed:
       - set_rand(['pending', 'shipped', 'delivered', 'cancelled'], [40, 35, 20, 5])
     query: |-
       INSERT INTO orders (id, user_id, amount, status)
-      SELECT
-        unnest(string_to_array('$1', __sep__))::INT,
-        unnest(string_to_array('$2', __sep__))::INT,
-        unnest(string_to_array('$3', __sep__))::DECIMAL,
-        unnest(string_to_array('$4', __sep__))
+      __values__
 
 deseed:
 

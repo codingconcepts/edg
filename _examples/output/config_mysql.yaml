@@ -35,31 +35,24 @@ seed:
     type: exec_batch
     count: customers
     args:
-      id: seq_global("customer_id")
-      name: gen('name')
-      email: gen('email')
+      - seq_global("customer_id")
+      - gen('name')
+      - gen('email')
     query: |-
       INSERT INTO customer (id, name, email)
-      SELECT j1.val, j2.val, j3.val
-      FROM JSON_TABLE(CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j1
-      JOIN JSON_TABLE(CONCAT('["', REPLACE('$2', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j2
-      JOIN JSON_TABLE(CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j3
+      __values__
 
   - name: populate_order
     type: exec_batch
     count: customers * 3
     args:
-      id: seq_global("order_id")
-      customer_id: seq_rand("customer_id")
-      amount: uniform_f(9.99, 499.99, 2)
-      status: set_rand(['pending', 'shipped', 'delivered'], [])
+      - seq_global("order_id")
+      - seq_rand("customer_id")
+      - uniform_f(9.99, 499.99, 2)
+      - set_rand(['pending', 'shipped', 'delivered'], [])
     query: |-
       INSERT INTO purchase_order (id, customer_id, amount, status)
-      SELECT j1.val, j2.val, j3.val, j4.val
-      FROM JSON_TABLE(CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j1
-      JOIN JSON_TABLE(CONCAT('["', REPLACE('$2', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j2
-      JOIN JSON_TABLE(CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j3
-      JOIN JSON_TABLE(CONCAT('["', REPLACE('$4', CHAR(31), '","'), '"]'), '$[*]' COLUMNS(val VARCHAR(255) PATH '$')) j4
+      __values__
 
 deseed:
 

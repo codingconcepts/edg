@@ -28,7 +28,6 @@ seed:
 
   - name: populate_article
     type: exec_batch
-    batch_format: json
     count: articles
     size: batch_size
     args:
@@ -38,11 +37,7 @@ seed:
       - vector_norm(32, 5, 0.1, 2.0, 0.8)
     query: |-
       INSERT INTO article (title, embedding_uniform, embedding_zipf, embedding_norm)
-      SELECT j1.value, j2.value, j3.value, j4.value
-      FROM OPENJSON('$1') j1
-      JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
-      JOIN OPENJSON('$3') j3 ON j1.[key] = j3.[key]
-      JOIN OPENJSON('$4') j4 ON j1.[key] = j4.[key]
+      __values__
 
 deseed:
 

@@ -38,13 +38,12 @@ seed:
 
   - name: insert_products
     type: exec_batch
-    batch_format: json
     count: products
     args:
       - gen('productname')
     query: |-
       INSERT INTO product (name)
-      SELECT value FROM OPENJSON('$1')
+      __values__
 
   - name: fetch_products
     type: query
@@ -52,7 +51,6 @@ seed:
 
   - name: insert_reviews
     type: exec_batch
-    batch_format: json
     count: reviews
     size: 10
     args:
@@ -61,10 +59,7 @@ seed:
       - gen('loremipsumsentence:5')
     query: |-
       INSERT INTO review (product_id, rating, body)
-      SELECT CAST(j1.value AS UNIQUEIDENTIFIER), CAST(j2.value AS INT), j3.value
-      FROM OPENJSON('$1') j1
-      JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
-      JOIN OPENJSON('$3') j3 ON j1.[key] = j3.[key]
+      __values__
 
 deseed:
 

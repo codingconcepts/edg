@@ -27,13 +27,7 @@ seed:
       - nullable(uuid_v4(), 0.8)
     query: |-
       INSERT INTO "user" (email, phone, bio, referred_by)
-      SELECT e, p, b, r::UUID
-      FROM unnest(
-        ARRAY[$1],
-        ARRAY[$2],
-        ARRAY[$3],
-        ARRAY[$4]
-      ) AS t(e, p, b, r)
+      __values__
 
 deseed:
 

@@ -31,10 +31,7 @@ seed:
       - set_rand(ref_same('regions').cities, [])
     query: |-
       INSERT INTO customer (email, region, city)
-      SELECT
-        unnest(string_to_array('$1', __sep__)),
-        unnest(string_to_array('$2', __sep__)),
-        unnest(string_to_array('$3', __sep__))
+      __values__
 
 deseed:
 

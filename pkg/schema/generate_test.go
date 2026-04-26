@@ -101,7 +101,7 @@ func TestGenerate_EmptySeed(t *testing.T) {
 	var cfg initConfig
 	require.NoError(t, yaml.Unmarshal([]byte(out), &cfg))
 
-	// All columns are generated → seed section omitted.
+	// All columns are generated -> seed section omitted.
 	assert.Empty(t, cfg.Seed)
 }
 

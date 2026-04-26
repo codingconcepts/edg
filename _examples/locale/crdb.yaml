@@ -39,18 +39,7 @@ seed:
       masked_email: mask(arg('email'))
     query: |-
       INSERT INTO users (id, region, first_name, last_name, full_name, email, phone, city, address, masked_name, masked_email)
-      SELECT
-        unnest(string_to_array('$1', __sep__))::UUID,
-        unnest(string_to_array('$2', __sep__)),
-        unnest(string_to_array('$3', __sep__)),
-        unnest(string_to_array('$4', __sep__)),
-        unnest(string_to_array('$5', __sep__)),
-        unnest(string_to_array('$6', __sep__)),
-        unnest(string_to_array('$7', __sep__)),
-        unnest(string_to_array('$8', __sep__)),
-        unnest(string_to_array('$9', __sep__)),
-        unnest(string_to_array('$10', __sep__)),
-        unnest(string_to_array('$11', __sep__))
+      __values__
 
   - name: de_users
     type: exec_batch
@@ -69,18 +58,7 @@ seed:
       masked_email: mask(arg('email'))
     query: |-
       INSERT INTO users (id, region, first_name, last_name, full_name, email, phone, city, address, masked_name, masked_email)
-      SELECT
-        unnest(string_to_array('$1', __sep__))::UUID,
-        unnest(string_to_array('$2', __sep__)),
-        unnest(string_to_array('$3', __sep__)),
-        unnest(string_to_array('$4', __sep__)),
-        unnest(string_to_array('$5', __sep__)),
-        unnest(string_to_array('$6', __sep__)),
-        unnest(string_to_array('$7', __sep__)),
-        unnest(string_to_array('$8', __sep__)),
-        unnest(string_to_array('$9', __sep__)),
-        unnest(string_to_array('$10', __sep__)),
-        unnest(string_to_array('$11', __sep__))
+      __values__
 
 deseed:
 

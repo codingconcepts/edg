@@ -43,33 +43,24 @@ seed:
     type: exec_batch
     count: customers
     args:
-      id: seq_global("customer_id")
-      name: gen('name')
-      email: gen('email')
+      - seq_global("customer_id")
+      - gen('name')
+      - gen('email')
     query: |-
-      INSERT INTO customer (id, name, email)
-      SELECT t1.column_value, t2.column_value, t3.column_value
-      FROM XMLTABLE(('"' || REPLACE('$1', chr(31), '","') || '"')) t1,
-           XMLTABLE(('"' || REPLACE('$2', chr(31), '","') || '"')) t2,
-           XMLTABLE(('"' || REPLACE('$3', chr(31), '","') || '"')) t3
-      WHERE ROWNUM <= (SELECT COUNT(*) FROM XMLTABLE(('"' || REPLACE('$1', chr(31), '","') || '"')))
+      INSERT ALL
+      __values__(customer(id, name, email))
 
   - name: populate_order
     type: exec_batch
     count: customers * 3
     args:
-      id: seq_global("order_id")
-      customer_id: seq_rand("customer_id")
-      amount: uniform_f(9.99, 499.99, 2)
-      status: set_rand(['pending', 'shipped', 'delivered'], [])
+      - seq_global("order_id")
+      - seq_rand("customer_id")
+      - uniform_f(9.99, 499.99, 2)
+      - set_rand(['pending', 'shipped', 'delivered'], [])
     query: |-
-      INSERT INTO purchase_order (id, customer_id, amount, status)
-      SELECT t1.column_value, t2.column_value, t3.column_value, t4.column_value
-      FROM XMLTABLE(('"' || REPLACE('$1', chr(31), '","') || '"')) t1,
-           XMLTABLE(('"' || REPLACE('$2', chr(31), '","') || '"')) t2,
-           XMLTABLE(('"' || REPLACE('$3', chr(31), '","') || '"')) t3,
-           XMLTABLE(('"' || REPLACE('$4', chr(31), '","') || '"')) t4
-      WHERE ROWNUM <= (SELECT COUNT(*) FROM XMLTABLE(('"' || REPLACE('$1', chr(31), '","') || '"')))
+      INSERT ALL
+      __values__(purchase_order(id, customer_id, amount, status))
 
 deseed:
 

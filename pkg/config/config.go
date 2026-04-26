@@ -170,7 +170,7 @@ type Query struct {
 // form. Named args preserve YAML declaration order for $1/$2/... binding.
 type QueryArgs struct {
 	Exprs []string       // ordered expressions
-	Names map[string]int // name → index; nil for positional args
+	Names map[string]int // name -> index; nil for positional args
 }
 
 func (qa QueryArgs) Len() int      { return len(qa.Exprs) }

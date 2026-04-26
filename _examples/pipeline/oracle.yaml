@@ -83,9 +83,7 @@ seed:
     args:
       - gen('word')
     query: |-
-      INSERT INTO a (name)
-      SELECT column_value
-      FROM XMLTABLE(('"' || REPLACE('$1', CHR(31), '","') || '"'))
+      INSERT ALL __values__(a(name))
 
   - name: populate_b
     args:
