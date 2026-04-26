@@ -301,7 +301,7 @@ Each worker gets its own isolated environment. The `init` section runs once, and
 
 ### Stages
 
-When a config file includes a `stages` section, the `-w` and `-d` flags are ignored. Instead, each stage defines its own worker count and duration, and stages run sequentially. See [Configuration > Stages]({{< relref "configuration#stages" >}}) for details.
+When a config file includes a `stages` section, each stage defines its own worker count and duration, and stages run sequentially. Explicitly passing `-w` or `-d` overrides the stages section and falls back to single-stage mode. See [Configuration > Stages]({{< relref "configuration#stages" >}}) for details.
 
 ```sh
 edg run \

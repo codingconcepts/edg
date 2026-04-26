@@ -205,7 +205,7 @@ func RunCmd(deps Deps) *cobra.Command {
 			}
 			defer db.Close()
 
-			if cmd.Flags().Changed("duration") {
+			if cmd.Flags().Changed("duration") || cmd.Flags().Changed("workers") {
 				req.Stages = nil
 			}
 
@@ -272,7 +272,7 @@ func AllCmd(deps Deps) *cobra.Command {
 				}
 			}
 
-			if cmd.Flags().Changed("duration") {
+			if cmd.Flags().Changed("duration") || cmd.Flags().Changed("workers") {
 				req.Stages = nil
 			}
 

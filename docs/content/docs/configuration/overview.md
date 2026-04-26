@@ -23,7 +23,7 @@ reference:
 # Named auto-incrementing sequences shared across all workers.
 seq:
 
-# Staged workload execution (overrides -w and -d flags).
+# Staged workload execution (overridden by explicit -w and -d flags).
 stages:
 
 # Schema creation queries.
@@ -449,7 +449,7 @@ ORDER BY 1;
 
 ## Stages
 
-The `stages` section defines a sequence of workload phases, each with its own worker count and duration. When stages are present, the `-w` and `-d` CLI flags are ignored.
+The `stages` section defines a sequence of workload phases, each with its own worker count and duration. Explicitly passing `-w` or `-d` on the command line overrides the stages section, falling back to single-stage mode with the provided values.
 
 ```yaml
 stages:
