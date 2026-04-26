@@ -98,8 +98,8 @@ docker compose -f cmd/harness/compose/compose_oracle.yml down
 
 * Unit tests for each file part
 * Ensure all batch queries are inserting at least 10 rows (some cassandra batches are 1 at a time)
-* Unique constraint awareness (e.g. uniq(gen('email')) will repeated call gen until a new unique value is found. For uniq(gen('email'), 10), it will try 10 times, then fail)
 * MongoDB and Cassandra sync verify support
 * Log levels
 * Better error output
 * Comparison mode (run the same workload against databases or different configurations of the same) and produce side-by-side differences
+* Remove dangling unnest
