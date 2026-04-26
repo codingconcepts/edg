@@ -265,7 +265,8 @@ seed:
       - gen('email')
       - gen('firstname') + ' ' + gen('lastname')
     query: |-
-      INSERT INTO users (id, email, name) VALUES ($1, $2, $3)
+      INSERT INTO users (id, email, name)
+      __values__
 
   - name: seed_orders
     type: exec_batch
@@ -277,7 +278,8 @@ seed:
       - uniform_f(5.00, 500.00, 2)
       - set_rand(['pending', 'shipped', 'delivered', 'cancelled'], [40, 30, 25, 5])
     query: |-
-      INSERT INTO orders (id, user_id, total, status) VALUES ($1, $2, $3, $4)
+      INSERT INTO orders (id, user_id, total, status)
+      __values__
 
 init:
 
@@ -717,10 +719,7 @@ seed:
       - gen('name')
     query: |-
       INSERT INTO users (id, email, name)
-      SELECT
-        unnest(string_to_array('$1', __sep__))::INT,
-        unnest(string_to_array('$2', __sep__)),
-        unnest(string_to_array('$3', __sep__))
+      __values__
 ```
 
 **mysql.yaml:**
@@ -750,19 +749,7 @@ seed:
       - gen('name')
     query: |-
       INSERT INTO users (id, email, name)
-      SELECT CAST(j1.val AS UNSIGNED), j2.val, j3.val
-      FROM JSON_TABLE(
-        CONCAT('["', REPLACE('$1', CHAR(31), '","'), '"]'),
-        '$[*]' COLUMNS(val VARCHAR(20) PATH '$', rn FOR ORDINALITY)
-      ) j1
-      JOIN JSON_TABLE(
-        CONCAT('["', REPLACE('$2', CHAR(31), '","'), '"]'),
-        '$[*]' COLUMNS(val VARCHAR(255) PATH '$', rn FOR ORDINALITY)
-      ) j2 ON j1.rn = j2.rn
-      JOIN JSON_TABLE(
-        CONCAT('["', REPLACE('$3', CHAR(31), '","'), '"]'),
-        '$[*]' COLUMNS(val VARCHAR(255) PATH '$', rn FOR ORDINALITY)
-      ) j3 ON j1.rn = j3.rn
+      __values__
 ```
 
 ### Usage

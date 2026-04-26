@@ -29,7 +29,7 @@ seed:
       - gen('email')
     query: |-
       INSERT INTO users (email)
-      SELECT unnest(string_to_array('$1', __sep__))
+      __values__
 ```
 
 ## Workers vs Pool Size

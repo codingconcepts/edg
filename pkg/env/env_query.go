@@ -207,7 +207,7 @@ func (e *Env) runSection(ctx context.Context, queries []*config.Query, section c
 		}
 		e.sendResult(config.QueryResult{Name: q.Name, Section: section, Latency: time.Since(queryStart), Count: len(argSets), PrintAggs: printAggs, PrintValues: e.lastPrintValues})
 
-		if section == config.ConfigSectionRun && q.Wait > 0 {
+		if section == config.ConfigSectionRun && q.Wait > 0 && !e.NoWait {
 			select {
 			case <-time.After(time.Duration(q.Wait)):
 			case <-ctx.Done():

@@ -25,12 +25,12 @@ seed:
       - batch_size
       - value_size
     query: |-
+      INSERT INTO kv (k, v)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s
         UNION ALL
         SELECT s + 1 FROM seq WHERE s < $2
       )
-      INSERT INTO kv (k, v)
       SELECT
         $1 * $2 + s,
         RANDOM_BYTES($3)

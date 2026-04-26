@@ -58,11 +58,14 @@ up:
 
 seed:
   - name: populate_users
+    type: exec_batch
+    count: users
+    size: batch_size
     args:
-      - gen_batch(users, batch_size, 'email')
+      - gen('email')
     query: |-
       INSERT INTO users (email)
-      SELECT unnest(string_to_array('$1', sep))
+      __values__
 
 init:
   - name: fetch_users

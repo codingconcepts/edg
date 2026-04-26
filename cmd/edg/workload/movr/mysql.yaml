@@ -57,7 +57,7 @@ up:
       CREATE TABLE IF NOT EXISTS vehicle_location_histories (
         city VARCHAR(50) NOT NULL,
         ride_id CHAR(36) NOT NULL,
-        timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        timestamp TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
         lat DOUBLE NOT NULL,
         lng DOUBLE NOT NULL,
         PRIMARY KEY (city, ride_id, timestamp)
@@ -91,10 +91,10 @@ seed:
       - batch(num_users / batch_size)
       - batch_size
     query: |-
+      INSERT INTO users (city, name, address, credit_card)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s UNION ALL SELECT s + 1 FROM seq WHERE s < $2
       )
-      INSERT INTO users (city, name, address, credit_card)
       SELECT
         ELT(FLOOR(RAND() * 9) + 1,
           'new york','boston','washington dc','seattle',
@@ -144,10 +144,10 @@ seed:
     args:
       - num_promo_codes
     query: |-
+      INSERT INTO promo_codes (code, description, expiration_time, rules)
       WITH RECURSIVE seq AS (
         SELECT 1 AS s UNION ALL SELECT s + 1 FROM seq WHERE s < $1
       )
-      INSERT INTO promo_codes (code, description, expiration_time, rules)
       SELECT
         UPPER(SUBSTRING(MD5(RAND()), 1, 8)),
         CONCAT('Promo ', s, ': save on your next ride'),
@@ -293,8 +293,8 @@ run:
       - uniform(-90, 90)
       - uniform(-180, 180)
     query: |-
-      INSERT INTO vehicle_location_histories (city, ride_id, lat, lng)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO vehicle_location_histories (city, ride_id, timestamp, lat, lng)
+      VALUES (?, ?, NOW(6), ?, ?)
 
   - name: apply_promo_code
     type: exec

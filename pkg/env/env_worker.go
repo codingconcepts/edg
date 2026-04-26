@@ -80,6 +80,13 @@ func (e *Env) runTransaction(ctx context.Context, tx *config.Transaction) error 
 		lastErr = e.tryTransaction(ctx, tx)
 		if lastErr == nil {
 			e.sendResult(config.QueryResult{Name: tx.Name, Section: config.ConfigSectionRun, Latency: time.Since(start), Count: 1, IsTransaction: true})
+			if tx.Wait > 0 && !e.NoWait {
+				select {
+				case <-time.After(time.Duration(tx.Wait)):
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
 			return nil
 		}
 		if errors.Is(lastErr, ErrConditionalRollback) {

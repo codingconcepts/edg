@@ -20,6 +20,25 @@ These expressions are used in the `args:` list of a `run` query. Each entry in `
 
 ## Batch operations
 
+The recommended approach for batch inserts is `exec_batch` or `query_batch` with `__values__`:
+
+```yaml
+seed:
+  - name: populate_users
+    type: exec_batch
+    count: 1000
+    size: 100
+    args:
+      - gen('email')
+    query: |-
+      INSERT INTO users (email)
+      __values__
+```
+
+For Oracle, use the parameterized form `__values__(table(cols))` to generate `INSERT ALL ... SELECT 1 FROM DUAL`.
+
+The following expressions are used with the driver-specific batch expansion patterns (`unnest`, `JSON_TABLE`, etc.):
+
 | Expression | Description |
 |---|---|
 | `batch(customers / batch_size)` | Drives batched execution: the parent query runs N times with $1 = 0..N-1 |
@@ -27,7 +46,7 @@ These expressions are used in the `args:` list of a `run` query. Each entry in `
 | `string_to_array('$1', __sep__)` | Splits a batch-expanded placeholder back into rows using the driver-aware separator |
 
 > [!NOTE]
-> Always use `__sep__` instead of a literal comma delimiter when splitting batch args. Generated values (names, addresses, etc.) can contain commas, which would silently split a single value into multiple rows and corrupt your data. `__sep__` uses the ASCII unit separator (char 31), which never appears in generated text.
+> When using driver-specific batch expansion, always use `__sep__` instead of a literal comma delimiter. Generated values (names, addresses, etc.) can contain commas, which would silently split a single value into multiple rows and corrupt your data. The `__values__` approach avoids this issue entirely.
 
 ## Binary
 

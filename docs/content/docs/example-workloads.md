@@ -32,6 +32,7 @@ Complete workload configs you can run directly or use as starting points for you
 | [LTREE](https://github.com/codingconcepts/edg/tree/main/_examples/ltree/) | Hierarchical org chart using PostgreSQL's `ltree` extension with `ltree()` path builder |
 | [Locale](https://github.com/codingconcepts/edg/tree/main/_examples/locale/) | Locale-aware PII generation (`gen_locale`) with deterministic masking (`mask`) across JP and DE regions |
 | [MongoDB](https://github.com/codingconcepts/edg/tree/main/_examples/mongodb/) | MongoDB with BSON/JSON command syntax, collection operations, and reference data |
+| [Multi-Row DML](https://github.com/codingconcepts/edg/tree/main/_examples/multi_row_dml/) | `__values__` token for cross-driver multi-row INSERT, UPSERT, and UPDATE (pgx, mysql, mssql, oracle, spanner) |
 | [Normal](https://github.com/codingconcepts/edg/tree/main/_examples/normal/) | Product reviews with normal distribution ratings |
 | [Named Args](https://github.com/codingconcepts/edg/tree/main/_examples/named_args/) | Map-style args with `arg('name')` instead of `arg(0)` |
 | [Nullable](https://github.com/codingconcepts/edg/tree/main/_examples/nullable/) | Demonstrates `nullable(expr, probability)` for injecting NULLs with controlled frequency |

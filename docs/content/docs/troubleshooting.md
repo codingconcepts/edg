@@ -111,9 +111,23 @@ Batch queries (`exec_batch`, `query_batch`) and batch-expanded queries (using `g
 
 ### Data corruption with comma separators
 
-**Never use commas as batch separators.** Generated values (names, addresses) can contain commas, silently splitting one value into multiple rows. Always use `__sep__` in your SQL:
+**Never use commas as batch separators.** Generated values (names, addresses) can contain commas, silently splitting one value into multiple rows.
 
-For example, if `gen('name')` produces `O'Brien, James`, the comma-separated batch string becomes `Alice,O'Brien,James,Bob` - four values instead of three, with `O'Brien` and `James` split into separate rows.
+The simplest solution is to use `__values__`, which avoids batch separators entirely by generating a standard multi-row `VALUES` clause:
+
+```yaml
+# Recommended - no separator issues.
+type: exec_batch
+count: 1000
+size: 100
+args:
+  - gen('name')
+query: |-
+  INSERT INTO users (name)
+  __values__
+```
+
+If you're using the driver-specific batch expansion patterns (`unnest`, `JSON_TABLE`, etc.), always use `__sep__` instead of a literal comma:
 
 ```yaml
 # Wrong - will corrupt data containing commas.

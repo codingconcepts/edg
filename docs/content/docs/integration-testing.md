@@ -51,11 +51,14 @@ up:
 
 seed:
   - name: populate_customer
+    type: exec_batch
+    count: customers
+    size: batch_size
     args:
-      - gen_batch(customers, batch_size, 'email')
+      - gen('email')
     query: |-
       INSERT INTO customer (email)
-      SELECT unnest(string_to_array('$1', sep))
+      __values__
 
   - name: populate_account
     args:
@@ -210,11 +213,14 @@ globals:
 up: !include shared/schema.yaml
 seed:
   - name: populate_users
+    type: exec_batch
+    count: users
+    size: batch_size
     args:
-      - gen_batch(users, batch_size, 'email')
+      - gen('email')
     query: |-
       INSERT INTO users (email)
-      SELECT unnest(string_to_array('$1', sep))
+      __values__
 deseed: !include shared/teardown.yaml
 down: !include shared/schema.yaml
 ```
@@ -360,7 +366,7 @@ The examples above use PostgreSQL/CockroachDB (`pgx`) syntax. When targeting oth
 |---|---|---|
 | UUID column | `UUID DEFAULT gen_random_uuid()` | `STRING(36) DEFAULT (GENERATE_UUID())` |
 | Primary key | inline `PRIMARY KEY` | `PRIMARY KEY (col)` at table level |
-| Batch expansion | `unnest(string_to_array('$1', sep))` | `UNNEST(SPLIT('$1', CODE_POINTS_TO_STRING([31])))` |
+| Batch expansion | `__values__` (recommended) or `unnest(string_to_array('$1', sep))` | `__values__` (recommended) or `UNNEST(SPLIT('$1', CODE_POINTS_TO_STRING([31])))` |
 | Type cast | `$1::UUID`, `$2::FLOAT` | `CAST($1 AS STRING)`, `CAST($2 AS FLOAT64)` |
 | Random ordering | `ORDER BY random()` | `TABLESAMPLE RESERVOIR (N ROWS)` |
 | Cleanup | `TRUNCATE TABLE t CASCADE` | `DELETE FROM t WHERE TRUE` |

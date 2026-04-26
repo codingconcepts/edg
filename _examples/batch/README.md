@@ -2,10 +2,13 @@
 
 Demonstrates `query_batch` and `exec_batch` query types. A `query_batch` inserts products and captures the returned rows, then an `exec_batch` references those rows to insert reviews against them.
 
-- **`query_batch`** evaluates args per row (controlled by `count` and `size`), collects values into comma-separated strings, and stores the query results for use by `ref_*` functions.
+- **`query_batch`** evaluates args per row (controlled by `count` and `size`), generates a multi-row `VALUES` clause via `__values__`, and stores the query results for use by `ref_*` functions.
 - **`exec_batch`** does the same arg generation but executes without reading results.
 
-> **Note:** MySQL and Oracle do not support `INSERT...RETURNING`, so the MySQL and Oracle configs use `exec_batch` + a follow-up `query` to fetch inserted rows instead of `query_batch`.
+Both types use the `__values__` token to produce a single `INSERT ... VALUES (...), (...), ...` statement per batch. For Oracle, the parameterized form `__values__(table(cols))` generates `INSERT ALL ... SELECT 1 FROM DUAL` syntax.
+
+> [!NOTE]
+> MySQL and Oracle do not support `INSERT...RETURNING`, so the MySQL and Oracle configs use `exec_batch` + a follow-up `query` to fetch inserted rows instead of `query_batch`.
 
 ## CockroachDB
 

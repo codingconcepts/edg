@@ -168,6 +168,7 @@ func startWorkers(ctx context.Context, numWorkers int, d workerDeps) *sync.WaitG
 			workerEnv.InitFrom(d.InitEnv)
 			workerEnv.SetSeqManager(d.SeqMgr)
 			workerEnv.Retries = flagRetries
+			workerEnv.NoWait = flagNoWait
 			workerEnv.Results = d.Results
 
 			for ctx.Err() == nil {
@@ -206,6 +207,7 @@ func startBackgroundWorkers(ctx context.Context, d workerDeps) *sync.WaitGroup {
 
 			workerEnv.InitFrom(d.InitEnv)
 			workerEnv.SetSeqManager(d.SeqMgr)
+			workerEnv.NoWait = flagNoWait
 			workerEnv.Results = d.Results
 			workerEnv.RunWorker(ctx, w)
 		})

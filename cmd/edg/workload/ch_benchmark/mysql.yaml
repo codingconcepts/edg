@@ -655,23 +655,47 @@ run:
 
   # === OLTP Transactions (TPC-C) ===
 
-  # New-Order transaction (TPC-C 2.4) - Simplified
-  # Inserts the order entry. Stock update and order lines require
-  # writable CTEs or stored procedures for atomicity.
-  - name: new_order
-    type: exec
+  # New-Order transaction (TPC-C 2.4)
+  # Atomically increments d_next_o_id and inserts the order.
+  - transaction: new_order
     wait: 18s
-    args:
-      - ref_perm('fetch_warehouses').w_id
-      - gen('number:1,10')
-      - nurand(1023, 1, customers / districts)
-      - gen('number:5,15')
-    query: |-
-      INSERT INTO oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
-        o_ol_cnt, o_all_local)
-      SELECT p.w_id, p.d_id, d.d_next_o_id, p.c_id, NOW(), p.ol_cnt, 1
-      FROM (SELECT ? AS w_id, ? AS d_id, ? AS c_id, ? AS ol_cnt) p
-      JOIN district d ON d.d_w_id = p.w_id AND d.d_id = p.d_id
+    locals:
+      w_id: ref_perm('fetch_warehouses').w_id
+      d_id: gen('number:1,10')
+      c_id: nurand(1023, 1, customers / districts)
+      ol_cnt: gen('number:5,15')
+    queries:
+      - name: get_next_o_id
+        type: query
+        args:
+          - local('w_id')
+          - local('d_id')
+        query: |-
+          SELECT d_next_o_id FROM district
+          WHERE d_w_id = ? AND d_id = ?
+          FOR UPDATE
+
+      - name: incr_next_o_id
+        type: exec
+        args:
+          - local('w_id')
+          - local('d_id')
+        query: |-
+          UPDATE district SET d_next_o_id = d_next_o_id + 1
+          WHERE d_w_id = ? AND d_id = ?
+
+      - name: insert_oorder
+        type: exec
+        args:
+          - local('w_id')
+          - local('d_id')
+          - ref_same('get_next_o_id').d_next_o_id
+          - local('c_id')
+          - local('ol_cnt')
+        query: |-
+          INSERT INTO oorder (o_w_id, o_d_id, o_id, o_c_id, o_entry_d,
+            o_ol_cnt, o_all_local)
+          VALUES (?, ?, ?, ?, NOW(), ?, 1)
 
   # Payment transaction (TPC-C 2.5) - Simplified
   # Updates customer balance.
@@ -725,12 +749,13 @@ run:
       - gen('number:1,10')
     query: |-
       DELETE n FROM new_order n
-      JOIN (SELECT ? AS w_id, ? AS d_id) p ON 1=1
-      WHERE n.no_w_id = p.w_id AND n.no_d_id = p.d_id
-        AND n.no_o_id = (
-          SELECT MIN(no_o_id) FROM new_order
-          WHERE no_w_id = p.w_id AND no_d_id = p.d_id
-        )
+      JOIN (
+        SELECT MIN(no_o_id) AS min_o_id, no_w_id, no_d_id
+        FROM new_order
+        WHERE no_w_id = ? AND no_d_id = ?
+        GROUP BY no_w_id, no_d_id
+      ) m ON n.no_w_id = m.no_w_id AND n.no_d_id = m.no_d_id
+        AND n.no_o_id = m.min_o_id
 
   # Stock-Level transaction (TPC-C 2.8) - Read-only
   - name: stock_level
@@ -785,6 +810,7 @@ run:
   - name: q11_important_stock
     type: query
     args:
+      - ref_perm('fetch_warehouses').w_id
       - ref_perm('fetch_warehouses').w_id
     query: |-
       SELECT s_i_id, SUM(s_quantity) AS total_qty

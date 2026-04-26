@@ -177,7 +177,7 @@ Convert my PostgreSQL workload at workloads/users.yaml to MongoDB.
 
 | Concern | What changes |
 |---|---|
-| Batch expansion | `unnest(string_to_array(...))` -> `JSON_TABLE` / `OPENJSON` / `XMLTABLE` / `UNNEST(SPLIT(...))` (Spanner) |
+| Batch expansion | `__values__` works across all SQL drivers (recommended). Driver-specific alternatives: `unnest(string_to_array(...))` (pgx), `JSON_TABLE` (MySQL), `OPENJSON` (MSSQL), `XMLTABLE` (Oracle), `UNNEST(SPLIT(...))` (Spanner). Oracle uses `__values__(table(cols))` for `INSERT ALL` syntax. |
 | Cleanup | `TRUNCATE CASCADE` -> `DELETE FROM` / `CASCADE CONSTRAINTS PURGE` / `DELETE FROM ... WHERE TRUE` (Spanner) / `TRUNCATE` (Cassandra) / `{"delete": ...}` (MongoDB) |
 | Column types | `UUID` -> `CHAR(36)` / `STRING(36)` / `TEXT` (Cassandra), `STRING` -> `VARCHAR(n)`, etc. |
 | DDL safety | `IF NOT EXISTS` -> `IF OBJECT_ID(...)` / PL/SQL exception blocks / `CREATE TABLE IF NOT EXISTS` (Spanner) |

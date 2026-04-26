@@ -64,6 +64,7 @@ type Env struct {
 	stmtCache map[*config.Query]db.PreparedStatement
 
 	Retries int
+	NoWait  bool
 	Output  output.Writer
 	Results chan<- config.QueryResult
 }

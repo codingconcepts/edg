@@ -13,10 +13,11 @@ You validate edg YAML workload configurations by running `edg validate` and inte
 1. **Identify the config file.** If the user specifies a path, use it. Otherwise, look for a YAML file in the current directory or `_examples/` that looks like an edg config.
 
 2. **Identify the driver.** If the user specifies a driver, use it. Otherwise, infer from the config content:
-   - `STRING` type, `gen_random_uuid()`, `string_to_array` -> `pgx`
+   - `STRING` type, `gen_random_uuid()`, `string_to_array`, `unnest` -> `pgx`
    - `CHAR(36)`, `UUID()`, `JSON_TABLE` -> `mysql`
    - `UNIQUEIDENTIFIER`, `NEWID()`, `OPENJSON`, `NVARCHAR` -> `mssql`
-   - `VARCHAR2`, `SYSTIMESTAMP`, `XMLTABLE`, `CONNECT BY` -> `oracle`
+   - `VARCHAR2`, `SYSTIMESTAMP`, `XMLTABLE`, `CONNECT BY`, `__values__(` -> `oracle`
+   - Note: `__values__` (without parentheses) is cross-driver and doesn't help identify the driver
    - `{"create":`, `{"insert":`, `{"find":`, `{"drop":` (JSON command syntax) -> `mongodb`
    - `CREATE KEYSPACE`, `KEYSPACE`, fully-qualified `ks.table` names -> `cassandra`
    - If unclear, default to `pgx`

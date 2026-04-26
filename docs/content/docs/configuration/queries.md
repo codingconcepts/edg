@@ -20,11 +20,14 @@ up:
 
 seed:
   - name: populate_users
+    type: exec_batch
+    count: 1000
+    size: 100
     args:
-      - gen_batch(1000, 100, 'email')
+      - gen('email')
     query: |-
       INSERT INTO users (email)
-      SELECT unnest(string_to_array('$1', __sep__))
+      __values__
 ```
 
 - **`up`** and **`down`** manage schema (CREATE/DROP).
@@ -89,13 +92,117 @@ The `query_batch` and `exec_batch` types use two additional fields to control ho
 |---|---|
 | `count` | Total number of rows to generate. Evaluated as an expression, so it can reference globals. |
 | `size` | Number of rows per batch. If omitted or zero, defaults to `count` (single batch). Also evaluated as an expression. |
-| `batch_format` | Controls how batch values are serialized. Default uses the ASCII unit separator (char 31, `\x1f`) as a delimiter. Set to `json` to produce JSON arrays. |
+| `batch_format` | Controls how batch values are serialized when using driver-specific batch expansion. Default uses the ASCII unit separator (char 31, `\x1f`). Set to `json` for JSON arrays (used with MSSQL `OPENJSON`). Not needed when using `__values__`. |
 
-Each arg expression is evaluated once per row. The results are collected into strings per arg position, delimited by the ASCII unit separator (char 31, `\x1f`). For example, with `count: 1000` and `size: 100`, you get 10 batches, each containing 100 generated values.
+Each arg expression is evaluated once per row. For example, with `count: 1000` and `size: 100`, you get 10 batches of 100 rows each.
 
-#### Postgres / CockroachDB
+#### Multi-Row VALUES (`__values__`) — Recommended
 
-By default, batch values are joined with the ASCII unit separator (char 31). This works well with PostgreSQL/CockroachDB `string_to_array` and MySQL `JSON_TABLE`:
+The `__values__` token generates a standard multi-row `VALUES` clause. This is the recommended approach for batch inserts — it produces a single INSERT statement per batch and works the same way across all SQL drivers that support multi-row VALUES (pgx, mysql, mssql, spanner, dsql).
+
+```yaml
+seed:
+  - name: populate_contacts
+    type: exec_batch
+    count: 1000
+    size: 100
+    args:
+      - gen('name')
+      - gen('email')
+    query: |-
+      INSERT INTO contact (name, email)
+      __values__
+```
+
+Which resolves to the following query automatically by edg:
+
+```sql
+INSERT INTO contact (name, email)
+VALUES ('Alice', 'alice@example.com'), ('Bob', 'bob@example.com'), ...
+```
+
+Each batch of `size` rows produces exactly one INSERT statement. With `count: 1000` and `size: 100`, edg sends 10 INSERT statements, each containing 100 value tuples.
+
+`__values__` also works with upsert and update patterns:
+
+**Upsert (PostgreSQL / CockroachDB):**
+```yaml
+query: |-
+  INSERT INTO product (name, price)
+  __values__
+  ON CONFLICT (name) DO UPDATE SET price = EXCLUDED.price
+```
+
+**Upsert (MySQL):**
+```yaml
+query: |-
+  INSERT INTO product (name, price)
+  __values__
+  ON DUPLICATE KEY UPDATE price = VALUES(price)
+```
+
+**Upsert (MSSQL):**
+```yaml
+query: |-
+  MERGE INTO product AS target
+  USING (
+    __values__
+  ) AS source(name, price)
+  ON target.name = source.name
+  WHEN MATCHED THEN UPDATE SET price = source.price
+  WHEN NOT MATCHED THEN INSERT (name, price) VALUES (source.name, source.price);
+```
+
+**Update via CTE (PostgreSQL / CockroachDB):**
+```yaml
+query: |-
+  UPDATE product
+  SET price = v.price
+  FROM (
+    __values__
+  ) AS v(id, price)
+  WHERE product.id = v.id::UUID
+```
+
+> [!NOTE]
+> `__values__` works with pgx, mysql, mssql, spanner, and dsql. SQL Server limits multi-row VALUES to 1000 rows per INSERT; set `size` accordingly. For MongoDB and Cassandra, use their native batch patterns described below.
+
+#### Oracle (`INSERT ALL`)
+
+Oracle does not support multi-row `VALUES`. Instead, use the parameterized form `__values__(table(col1, col2))` to generate an `INSERT ALL ... SELECT 1 FROM DUAL` statement:
+
+```yaml
+seed:
+  - name: insert_products
+    type: exec_batch
+    count: 100
+    size: 10
+    args:
+      - gen('productname')
+      - uniform_f(1.00, 100.00, 2)
+    query: |-
+      INSERT ALL __values__(product(name, price))
+```
+
+This produces:
+
+```sql
+INSERT ALL
+INTO product (name, price) VALUES ('Widget', 9.99)
+INTO product (name, price) VALUES ('Gadget', 24.50)
+...
+SELECT 1 FROM DUAL
+```
+
+The table name and column list are extracted from the token parameters. Non-Oracle drivers ignore the parameters and use standard multi-row `VALUES` syntax.
+
+See [`_examples/multi_row_dml/`](https://github.com/codingconcepts/edg/tree/main/_examples/multi_row_dml) for complete working examples across multiple databases.
+
+#### Driver-Specific Batch Expansion
+
+As an alternative to `__values__`, edg supports driver-specific batch expansion patterns using `__sep__` (the ASCII unit separator). These are more verbose but give you full control over the SQL shape — useful for non-INSERT contexts or advanced patterns.
+
+##### Postgres / CockroachDB
 
 ```yaml
 seed:
@@ -110,7 +217,7 @@ seed:
       SELECT unnest(string_to_array('$1', __sep__))
 ```
 
-Which resolves to the following query automatically by edg:
+Which resolves to:
 
 ```sql
 INSERT INTO users (email)
@@ -119,7 +226,7 @@ SELECT unnest(string_to_array(
 ))
 ```
 
-#### MySQL
+##### MySQL
 
 MySQL uses `JSON_TABLE` to unpack batch values. The unit-separator-delimited string is converted to a JSON array using `CONCAT` and `REPLACE`, then `JSON_TABLE` extracts each element as a row. Multiple columns are correlated using `FOR ORDINALITY`:
 
@@ -140,7 +247,7 @@ seed:
       ) j
 ```
 
-Which resolves to the following query automatically by edg:
+Which resolves to:
 
 ```sql
 INSERT INTO users (email)
@@ -156,9 +263,9 @@ FROM JSON_TABLE(
 ) j
 ```
 
-#### Oracle
+##### Oracle
 
-For Oracle, batch values are joined with the unit separator and unpacked using `xmltable` with `tokenize`. Multiple columns are correlated by joining on `rowid`:
+Oracle batch values are unpacked using `xmltable` with `tokenize`. Multiple columns are correlated by joining on `rowid`:
 
 ```yaml
 seed:
@@ -184,7 +291,7 @@ seed:
            ) x2 ON x1.rowid = x2.rowid
 ```
 
-Which resolves to the following query automatically by edg:
+Which resolves to:
 
 ```sql
 INSERT INTO users (name, email)
@@ -201,9 +308,9 @@ JOIN xmltable(
 ) x2 ON x1.rowid = x2.rowid
 ```
 
-#### MSSQL
+##### MSSQL
 
-When `batch_format` is set to `json`, each arg position is serialized as a properly escaped JSON array (e.g. `["val1","val2","val3"]`). This is recommended for MSSQL, where `OPENJSON` expects JSON input. Multiple `OPENJSON` calls are correlated using `[key]`, which is the zero-based array index. NULL values appear as JSON `null` and can be handled with `NULLIF(j.value, 'null')` if the target column is nullable:
+When `batch_format` is set to `json`, each arg position is serialized as a properly escaped JSON array (e.g. `["val1","val2","val3"]`). Multiple `OPENJSON` calls are correlated using `[key]`, which is the zero-based array index. NULL values appear as JSON `null` and can be handled with `NULLIF(j.value, 'null')` if the target column is nullable:
 
 ```yaml
 seed:
@@ -222,7 +329,7 @@ seed:
       JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
 ```
 
-Which resolves to the following query automatically by edg:
+Which resolves to:
 
 ```sql
 INSERT INTO contact (name, email)
@@ -232,7 +339,7 @@ JOIN OPENJSON('["a@x.com","b@y.com",...,"z@x.com"]') j2
   ON j1.[key] = j2.[key]
 ```
 
-#### Spanner (GoogleSQL)
+##### Spanner (GoogleSQL)
 
 Spanner uses GoogleSQL syntax. Batch values are unpacked with `UNNEST(SPLIT(..., __sep__))`. The `__sep__` token resolves to `CODE_POINTS_TO_STRING([31])` for Spanner, and `UNNEST` converts the resulting array into rows. Multiple columns are correlated using `WITH OFFSET`:
 
@@ -250,7 +357,7 @@ seed:
       FROM UNNEST(SPLIT('$1', __sep__)) AS val
 ```
 
-Which resolves to the following query automatically by edg:
+Which resolves to:
 
 ```sql
 INSERT INTO users (email)
@@ -358,108 +465,6 @@ up:
         email TEXT
       )
 ```
-
-#### Multi-Row VALUES (`__values__`)
-
-As an alternative to the driver-specific batch expansion patterns above, you can use the `__values__` token to generate a standard multi-row `VALUES` clause. This produces a single INSERT statement per batch instead of one per row, and works the same way across all SQL drivers that support multi-row VALUES (pgx, mysql, mssql, spanner, dsql).
-
-```yaml
-seed:
-  - name: populate_contacts
-    type: exec_batch
-    count: 1000
-    size: 100
-    args:
-      - gen('name')
-      - gen('email')
-    query: |-
-      INSERT INTO contact (name, email)
-      __values__
-```
-
-Which resolves to the following query automatically by edg:
-
-```sql
-INSERT INTO contact (name, email)
-VALUES ('Alice', 'alice@example.com'), ('Bob', 'bob@example.com'), ...
-```
-
-Each batch of `size` rows produces exactly one INSERT statement. With `count: 1000` and `size: 100`, edg sends 10 INSERT statements, each containing 100 value tuples.
-
-`__values__` also works with upsert and update patterns:
-
-**Upsert (PostgreSQL / CockroachDB):**
-```yaml
-query: |-
-  INSERT INTO product (name, price)
-  __values__
-  ON CONFLICT (name) DO UPDATE SET price = EXCLUDED.price
-```
-
-**Upsert (MySQL):**
-```yaml
-query: |-
-  INSERT INTO product (name, price)
-  __values__
-  ON DUPLICATE KEY UPDATE price = VALUES(price)
-```
-
-**Upsert (MSSQL):**
-```yaml
-query: |-
-  MERGE INTO product AS target
-  USING (
-    __values__
-  ) AS source(name, price)
-  ON target.name = source.name
-  WHEN MATCHED THEN UPDATE SET price = source.price
-  WHEN NOT MATCHED THEN INSERT (name, price) VALUES (source.name, source.price);
-```
-
-**Update via CTE (PostgreSQL / CockroachDB):**
-```yaml
-query: |-
-  UPDATE product
-  SET price = v.price
-  FROM (
-    __values__
-  ) AS v(id, price)
-  WHERE product.id = v.id::UUID
-```
-
-> [!NOTE]
-> `__values__` works with pgx, mysql, mssql, spanner, and dsql. SQL Server limits multi-row VALUES to 1000 rows per INSERT; set `size` accordingly. For MongoDB and Cassandra, continue using the batch expansion patterns described above.
-
-#### Oracle (`INSERT ALL`)
-
-Oracle does not support multi-row `VALUES`. Instead, use the parameterized form `__values__(table(col1, col2))` to generate an `INSERT ALL ... SELECT 1 FROM DUAL` statement:
-
-```yaml
-seed:
-  - name: insert_products
-    type: exec_batch
-    count: 100
-    size: 10
-    args:
-      - gen('productname')
-      - uniform_f(1.00, 100.00, 2)
-    query: |-
-      INSERT ALL __values__(product(name, price))
-```
-
-This produces:
-
-```sql
-INSERT ALL
-INTO product (name, price) VALUES ('Widget', 9.99)
-INTO product (name, price) VALUES ('Gadget', 24.50)
-...
-SELECT 1 FROM DUAL
-```
-
-The table name and column list are extracted from the token parameters. Non-Oracle drivers ignore the parameters and use standard multi-row `VALUES` syntax.
-
-See [`_examples/multi_row_dml/`](https://github.com/codingconcepts/edg/tree/main/_examples/multi_row_dml) for complete working examples across multiple databases.
 
 ### Prepared Statements
 
@@ -754,7 +759,26 @@ Arg placeholders (`$1`, `$2`, etc.) are passed to the database in one of two way
 
 #### Inlining
 
-Inlining means edg performs a text replacement on the SQL string _before_ sending it to the database. Every `$N` in the query is replaced with the literal arg value. For example, given:
+Inlining means edg performs a text replacement on the SQL string _before_ sending it to the database. Every `$N` in the query (or `__values__` token) is replaced with the literal arg values. For example, with `__values__`:
+
+```yaml
+type: exec_batch
+count: 3
+args:
+  - gen('email')
+query: |-
+  INSERT INTO users (email)
+  __values__
+```
+
+The SQL sent to the database becomes:
+
+```sql
+INSERT INTO users (email)
+VALUES ('alice@x.com'), ('bob@y.com'), ('carol@z.com')
+```
+
+With driver-specific batch expansion, `$N` placeholders are inlined similarly:
 
 ```yaml
 args:
@@ -771,14 +795,13 @@ INSERT INTO users (email)
 SELECT unnest(string_to_array('alice@x.com\x1fbob@y.com\x1f...', chr(31)))
 ```
 
-The database never sees `$1`, it receives a fully formed query with the values baked in. This is used for:
+The database never sees `$1` or `__values__`, it receives a fully formed query with the values baked in. This is used for:
 
-- **`query_batch` / `exec_batch`** types (always inlined).
+- **`__values__`** token replacement (recommended).
+- **`query_batch` / `exec_batch`** types with `$N` placeholders (always inlined).
 - **Batch-expanded queries** using `gen_batch`, `batch`, or `ref_each` (in any section).
 
 Inlining lets you use `$N` as a universal placeholder syntax across all drivers (pgx, MySQL, Oracle, SQL Server) without worrying about driver-specific bind param formats. It also avoids a pgx-stdlib issue where numeric values are sent as DECIMAL, which CockroachDB can't mix with INT in arithmetic.
-
-Because the value is embedded in the SQL text, quoted placeholders like `'$1'` are common in batch patterns, the quotes become part of the final SQL string (e.g. `string_to_array('alice@x.com,...', ',')`).
 
 #### Bind params
 

@@ -22,7 +22,7 @@ up:
 
   - name: create_idx_ttlbench_inserted
     query: |-
-      CREATE INDEX IF NOT EXISTS idx_ttlbench_inserted
+      CREATE INDEX idx_ttlbench_inserted
       ON ttlbench (inserted_at)
 
 seed: []

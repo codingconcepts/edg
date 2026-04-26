@@ -41,6 +41,7 @@ var (
 	flagErrors      bool
 	flagRetries     int
 	flagPoolSize    int
+	flagNoWait      bool
 
 	version string
 )
@@ -83,6 +84,7 @@ func main() {
 	root.PersistentFlags().BoolVar(&flagErrors, "errors", false, "print worker errors to stderr (env: EDG_ERRORS)")
 	root.PersistentFlags().IntVar(&flagRetries, "retries", 0, "number of transaction retry attempts on error (env: EDG_RETRIES)")
 	root.PersistentFlags().IntVar(&flagPoolSize, "pool-size", 0, "maximum number of open database connections (0 = driver default) (env: EDG_POOL_SIZE)")
+	root.PersistentFlags().BoolVar(&flagNoWait, "no-wait", false, "ignore wait durations configured in workload queries (env: EDG_NO_WAIT)")
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		bindEnv(cmd, "url", "EDG_URL")
@@ -94,6 +96,7 @@ func main() {
 		bindEnv(cmd, "errors", "EDG_ERRORS")
 		bindEnv(cmd, "retries", "EDG_RETRIES")
 		bindEnv(cmd, "pool-size", "EDG_POOL_SIZE")
+		bindEnv(cmd, "no-wait", "EDG_NO_WAIT")
 
 		if cmd.Flags().Changed("rng-seed") {
 			random.Seed(flagRngSeed)

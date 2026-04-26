@@ -120,7 +120,7 @@ seed:
       - iter()
     query: |-
       INSERT INTO country (co_id, co_name)
-      VALUES (?, CONCAT('Country_', LPAD(CAST(? AS CHAR), 3, '0')))
+      VALUES ($1, CONCAT('Country_', LPAD(CAST($1 AS CHAR), 3, '0')))
 
   - name: populate_airport
     type: exec_batch
@@ -131,11 +131,11 @@ seed:
       - countries
     query: |-
       INSERT INTO airport (ap_id, ap_code, ap_name, ap_city, ap_co_id)
-      VALUES (?,
-        CONCAT(CHAR(65 + FLOOR((? - 1) / 676)), CHAR(65 + MOD(FLOOR((? - 1) / 26), 26)), CHAR(65 + MOD(? - 1, 26))),
-        CONCAT('Airport_', LPAD(CAST(? AS CHAR), 4, '0')),
-        CONCAT('City_', LPAD(CAST(? AS CHAR), 4, '0')),
-        ((? - 1) % ?) + 1)
+      VALUES ($1,
+        CONCAT(CHAR(65 + FLOOR(($1 - 1) / 676)), CHAR(65 + MOD(FLOOR(($1 - 1) / 26), 26)), CHAR(65 + MOD($1 - 1, 26))),
+        CONCAT('Airport_', LPAD(CAST($1 AS CHAR), 4, '0')),
+        CONCAT('City_', LPAD(CAST($1 AS CHAR), 4, '0')),
+        (($1 - 1) % $2) + 1)
 
   - name: populate_airline
     type: exec_batch
@@ -145,9 +145,9 @@ seed:
       - iter()
     query: |-
       INSERT INTO airline (al_id, al_iata_code, al_name)
-      VALUES (?,
-        CONCAT(CHAR(65 + (? - 1) DIV 26), CHAR(65 + (? - 1) % 26)),
-        CONCAT('Airline_', LPAD(CAST(? AS CHAR), 3, '0')))
+      VALUES ($1,
+        CONCAT(CHAR(65 + ($1 - 1) DIV 26), CHAR(65 + ($1 - 1) % 26)),
+        CONCAT('Airline_', LPAD(CAST($1 AS CHAR), 3, '0')))
 
   - name: populate_customer
     type: exec_batch
@@ -159,8 +159,8 @@ seed:
     query: |-
       INSERT INTO customer (c_id, c_base_ap_id, c_balance,
         c_sattr00, c_sattr01, c_iattr00, c_iattr01)
-      VALUES (?,
-        FLOOR(RAND() * ? + 1),
+      VALUES ($1,
+        FLOOR(RAND() * $2 + 1),
         0,
         SUBSTR(MD5(RAND()), 1, 16),
         SUBSTR(MD5(RAND()), 1, 16),
@@ -180,14 +180,14 @@ seed:
       INSERT INTO flight (f_id, f_al_id, f_depart_ap_id, f_arrive_ap_id,
         f_depart_time, f_arrive_time, f_seats_total, f_seats_left,
         f_base_price)
-      VALUES (?,
-        FLOOR(RAND() * ? + 1),
-        FLOOR(RAND() * ? + 1),
-        FLOOR(RAND() * ? + 1),
+      VALUES ($1,
+        FLOOR(RAND() * $3 + 1),
+        FLOOR(RAND() * $2 + 1),
+        FLOOR(RAND() * $2 + 1),
         DATE_ADD(NOW(), INTERVAL FLOOR(RAND() * 30) DAY),
         DATE_ADD(DATE_ADD(NOW(), INTERVAL FLOOR(RAND() * 30) DAY), INTERVAL 2 HOUR),
-        ?,
-        ?,
+        $4,
+        $4,
         ROUND(RAND() * 900 + 100, 2))
 
   - name: populate_reservation
@@ -200,7 +200,7 @@ seed:
       INSERT INTO reservation (r_c_id, r_f_id, r_seat, r_price,
         r_iattr00, r_iattr01)
       SELECT
-        FLOOR(RAND() * ? + 1),
+        FLOOR(RAND() * $4 + 1),
         fb.f_id,
         s.seq,
         ROUND(RAND() * 500 + 50, 2),
@@ -209,7 +209,7 @@ seed:
       FROM (
         SELECT f_id FROM flight
         ORDER BY f_id
-        LIMIT ? OFFSET ?
+        LIMIT $2 OFFSET $1
       ) fb
       CROSS JOIN (
         SELECT a.a + b.a * 10 + 1 AS seq
@@ -218,7 +218,7 @@ seed:
         CROSS JOIN (SELECT 0 AS a UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
               UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) b
         CROSS JOIN (SELECT 0 AS a UNION ALL SELECT 1) c
-        HAVING seq <= ?
+        HAVING seq <= $3
       ) s
 
   - name: update_seats_left
@@ -332,29 +332,50 @@ run:
 
   # Book a seat: decrement seats_left, insert reservation,
   # charge the customer.
-  - name: new_reservation
-    type: exec
-    args:
-      - ref_rand('fetch_customers').c_id
-      - ref_rand('fetch_flights').f_id
-      - gen('number:1,150')
-      - gen('number:50,1000')
-    query: |-
-      UPDATE flight SET f_seats_left = f_seats_left - 1
-      WHERE f_id = ? AND f_seats_left > 0;
-      INSERT INTO reservation (r_c_id, r_f_id, r_seat, r_price,
-        r_iattr00, r_iattr01)
-      VALUES (?, ?, ?, (SELECT f_base_price FROM flight WHERE f_id = ?) + ?, 0, 0);
-      UPDATE customer SET c_balance = c_balance + ?
-      WHERE c_id = ?
+  - transaction: new_reservation
+    locals:
+      c_id: ref_rand('fetch_customers').c_id
+      f_id: ref_rand('fetch_flights').f_id
+      seat: gen('number:1,150')
+      price: gen('number:50,1000')
+    queries:
+      - name: decr_seats
+        type: exec
+        args:
+          - local('f_id')
+        query: |-
+          UPDATE flight SET f_seats_left = f_seats_left - 1
+          WHERE f_id = ? AND f_seats_left > 0
+
+      - name: insert_reservation
+        type: exec
+        args:
+          - local('c_id')
+          - local('f_id')
+          - local('seat')
+          - local('f_id')
+          - local('price')
+        query: |-
+          INSERT INTO reservation (r_c_id, r_f_id, r_seat, r_price,
+            r_iattr00, r_iattr01)
+          VALUES (?, ?, ?, (SELECT f_base_price FROM flight WHERE f_id = ?) + ?, 0, 0)
+
+      - name: charge_customer
+        type: exec
+        args:
+          - local('price')
+          - local('c_id')
+        query: |-
+          UPDATE customer SET c_balance = c_balance + ?
+          WHERE c_id = ?
 
   # Update customer attributes.
   - name: update_customer
     type: exec
     args:
+      - gen('number:0,1000')
+      - gen('number:0,1000')
       - ref_rand('fetch_customers').c_id
-      - gen('number:0,1000')
-      - gen('number:0,1000')
     query: |-
       UPDATE customer SET c_iattr00 = ?, c_iattr01 = ?
       WHERE c_id = ?
@@ -363,22 +384,32 @@ run:
   - name: update_reservation
     type: exec
     args:
-      - ref_rand('fetch_reservations').r_id
       - gen('number:0,100')
+      - ref_rand('fetch_reservations').r_id
     query: |-
       UPDATE reservation SET r_iattr00 = ?
       WHERE r_id = ?
 
   # Cancel a reservation and release the seat.
-  - name: delete_reservation
-    type: exec
-    args:
-      - ref_rand('fetch_reservations').r_id
-      - ref_rand('fetch_reservations').r_f_id
-    query: |-
-      DELETE FROM reservation WHERE r_id = ?;
-      UPDATE flight SET f_seats_left = f_seats_left + 1
-      WHERE f_id = ?
+  - transaction: delete_reservation
+    locals:
+      r_id: ref_rand('fetch_reservations').r_id
+      f_id: ref_rand('fetch_reservations').r_f_id
+    queries:
+      - name: del_reservation
+        type: exec
+        args:
+          - local('r_id')
+        query: |-
+          DELETE FROM reservation WHERE r_id = ?
+
+      - name: incr_seats
+        type: exec
+        args:
+          - local('f_id')
+        query: |-
+          UPDATE flight SET f_seats_left = f_seats_left + 1
+          WHERE f_id = ?
 
 
 expectations:

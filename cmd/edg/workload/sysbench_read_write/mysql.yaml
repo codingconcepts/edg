@@ -44,7 +44,7 @@ seed:
       - regex('[a-zA-Z0-9]{60}')
     query: |-
       INSERT INTO sbtest1 (id, k, c, pad)
-      VALUES (?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4)
 
 deseed:
 
@@ -83,6 +83,7 @@ run:
     type: query
     args:
       - gen('number:1,' + string(records))
+      - gen('number:1,' + string(records))
     query: |-
       SELECT c FROM sbtest1
       WHERE id BETWEEN ? AND ? + 99
@@ -91,6 +92,7 @@ run:
   - name: range_sum
     type: query
     args:
+      - gen('number:1,' + string(records))
       - gen('number:1,' + string(records))
     query: |-
       SELECT SUM(k) FROM sbtest1
@@ -101,6 +103,7 @@ run:
     type: query
     args:
       - gen('number:1,' + string(records))
+      - gen('number:1,' + string(records))
     query: |-
       SELECT c FROM sbtest1
       WHERE id BETWEEN ? AND ? + 99
@@ -110,6 +113,7 @@ run:
   - name: range_distinct
     type: query
     args:
+      - gen('number:1,' + string(records))
       - gen('number:1,' + string(records))
     query: |-
       SELECT DISTINCT c FROM sbtest1
@@ -128,22 +132,35 @@ run:
   - name: update_non_index
     type: exec
     args:
-      - gen('number:1,' + string(records))
       - regex('[a-zA-Z0-9]{120}')
+      - gen('number:1,' + string(records))
     query: |-
       UPDATE sbtest1 SET c = ? WHERE id = ?
 
   # Delete then insert to maintain row count.
-  - name: delete_insert
-    type: exec
-    args:
-      - gen('number:1,' + string(records))
-      - gen('number:0,10000')
-      - regex('[a-zA-Z0-9]{120}')
-      - regex('[a-zA-Z0-9]{60}')
-    query: |-
-      DELETE FROM sbtest1 WHERE id = ?;
-      INSERT INTO sbtest1 (id, k, c, pad) VALUES (?, ?, ?, ?)
+  - transaction: delete_insert
+    locals:
+      rid: gen('number:1,' + string(records))
+      new_k: gen('number:0,10000')
+      new_c: regex('[a-zA-Z0-9]{120}')
+      new_pad: regex('[a-zA-Z0-9]{60}')
+    queries:
+      - name: delete_row
+        type: exec
+        args:
+          - local('rid')
+        query: |-
+          DELETE FROM sbtest1 WHERE id = ?
+
+      - name: insert_row
+        type: exec
+        args:
+          - local('rid')
+          - local('new_k')
+          - local('new_c')
+          - local('new_pad')
+        query: |-
+          INSERT INTO sbtest1 (id, k, c, pad) VALUES (?, ?, ?, ?)
 
 
 expectations:

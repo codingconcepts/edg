@@ -227,7 +227,7 @@ For example, `populate_order` references `customer_id` values from the `customer
 
 ## Batch query expansion
 
-Queries using `exec_batch` are expanded into individual rows in the output. The batch CSV-joining logic used for database execution is bypassed; instead, each row's expressions are evaluated independently, producing clean per-row data suitable for all output formats.
+Queries using `exec_batch` are expanded into individual rows in the output. The multi-row `VALUES` clause used for database execution (via `__values__`) is bypassed; instead, each row's expressions are evaluated independently, producing clean per-row data suitable for all output formats.
 
 ## Example config
 

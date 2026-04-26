@@ -291,6 +291,7 @@ type Worker struct {
 // BEGIN/COMMIT block.
 type Transaction struct {
 	Name    string            `json:"name" yaml:"transaction"`
+	Wait    Duration          `json:"wait" yaml:"wait"`
 	Locals  map[string]string `json:"locals" yaml:"locals"`
 	Queries []*Query          `json:"queries" yaml:"queries"`
 
