@@ -39,7 +39,7 @@ seed:
       INSERT INTO kv (k, v)
       SELECT
         $1 * $2 + LEVEL,
-        DBMS_CRYPTO.RANDOMBYTES($3)
+        UTL_RAW.CAST_TO_RAW(DBMS_RANDOM.STRING('x', $3))
       FROM DUAL
       CONNECT BY LEVEL <= $2
 

@@ -39,9 +39,7 @@ seed:
       - gen('firstname') + ' ' + gen('lastname')
     query: |-
       INSERT INTO orders (id, customer)
-      SELECT
-        unnest(string_to_array('$1', chr(31))::INT[]),
-        unnest(string_to_array('$2', chr(31)))
+      __values__
 
   - name: seed_samples
     type: exec_batch
@@ -55,12 +53,7 @@ seed:
       - seq_lognorm("order_id", 5.5, 0.5)
     query: |-
       INSERT INTO samples (uniform_val, zipf_val, norm_val, exp_val, lognorm_val)
-      SELECT
-        unnest(string_to_array('$1', chr(31))::INT[]),
-        unnest(string_to_array('$2', chr(31))::INT[]),
-        unnest(string_to_array('$3', chr(31))::INT[]),
-        unnest(string_to_array('$4', chr(31))::INT[]),
-        unnest(string_to_array('$5', chr(31))::INT[])
+      __values__
 
 deseed:
 

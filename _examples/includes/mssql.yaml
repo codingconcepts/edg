@@ -18,7 +18,7 @@ seed:
       - gen_batch(customers, batch_size, 'email')
     query: |-
       INSERT INTO customer (email)
-      SELECT value FROM STRING_SPLIT('$1', CHAR(31))
+      __values__
 
   - name: populate_account
     args:

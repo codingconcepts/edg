@@ -138,6 +138,7 @@ func main() {
 	startFrom := flag.String("start", "", "skip workloads before this one (by name)")
 	duration := flag.Duration("duration", 5*time.Second, "run duration per workload")
 	workers := flag.Int("workers", 1, "number of workers per workload")
+	clean := flag.Bool("clean", false, "run down before each workload to drop existing tables")
 	flag.Parse()
 
 	if *dbType == "" {
@@ -204,11 +205,36 @@ func main() {
 			break
 		}
 
+		if *clean {
+			slog.Info("cleaning workload", "name", name)
+			if err := runDown(cfg, name); err != nil {
+				log.Fatalf("cleaning workload %s failed: %v", name, err)
+			}
+		}
+
 		if err := runWorkload(cfg, name, *duration, *workers); err != nil {
 			log.Fatalf("workload %s failed: %v", name, err)
 		}
 		slog.Info("workload passed", "name", name)
 	}
+}
+
+func runDown(cfg dbConfig, name string) error {
+	url := cfg.url
+	if cfg.urlFunc != nil {
+		url = cfg.urlFunc(name)
+	}
+
+	cmd := exec.Command("go", "run", "./cmd/edg", "workload", name, "down",
+		"--driver", cfg.driver,
+		"--url", url,
+	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if len(cfg.env) > 0 {
+		cmd.Env = append(os.Environ(), cfg.env...)
+	}
+	return cmd.Run()
 }
 
 func runWorkload(cfg dbConfig, name string, duration time.Duration, workers int) error {

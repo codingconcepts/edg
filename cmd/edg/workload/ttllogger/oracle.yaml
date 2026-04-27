@@ -18,7 +18,7 @@ up:
         EXECUTE IMMEDIATE '
           CREATE TABLE events (
             id RAW(16) DEFAULT SYS_GUID() PRIMARY KEY,
-            level VARCHAR2(10) NOT NULL,
+            "LEVEL" VARCHAR2(10) NOT NULL,
             source VARCHAR2(50) NOT NULL,
             message VARCHAR2(4000) NOT NULL,
             created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
@@ -33,7 +33,7 @@ up:
     query: |-
       BEGIN
         EXECUTE IMMEDIATE '
-          CREATE INDEX idx_events_level_created ON events (level, created_at DESC)
+          CREATE INDEX idx_events_level_created ON events ("LEVEL", created_at DESC)
         ';
       EXCEPTION WHEN OTHERS THEN
         IF SQLCODE != -955 THEN RAISE; END IF;
@@ -81,13 +81,13 @@ run:
       - set_rand(['api','worker','scheduler','auth','billing'], [])
       - regex('[a-zA-Z0-9 ]{64,256}')
     query: |-
-      INSERT INTO events (level, source, message)
+      INSERT INTO events ("LEVEL", source, message)
       VALUES (:1, :2, :3)
 
   - name: read_recent
     type: query
     query: |-
-      SELECT id, level, source, message, created_at
+      SELECT id, "LEVEL", source, message, created_at
       FROM events
       ORDER BY created_at DESC
       FETCH FIRST 20 ROWS ONLY
@@ -99,7 +99,7 @@ run:
     query: |-
       SELECT id, source, message, created_at
       FROM events
-      WHERE level = :1
+      WHERE "LEVEL" = :1
         AND created_at > SYSTIMESTAMP - INTERVAL '5' MINUTE
       ORDER BY created_at DESC
       FETCH FIRST 20 ROWS ONLY

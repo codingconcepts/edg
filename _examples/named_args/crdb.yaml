@@ -33,11 +33,7 @@ seed:
       amount: uniform(1, 500)
     query: |-
       INSERT INTO named_args_order (email, region, city, amount)
-      SELECT
-        unnest(string_to_array('$1', chr(31))),
-        unnest(string_to_array('$2', chr(31))),
-        unnest(string_to_array('$3', chr(31))),
-        unnest(string_to_array('$4', chr(31))::DECIMAL[])
+      __values__
 
 deseed:
 

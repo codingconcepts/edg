@@ -46,11 +46,7 @@ seed:
       - json_obj('priority', set_rand(['low', 'medium', 'high'], [50, 35, 15]), 'retryable', true)
     query: |-
       INSERT INTO job (kind, payload)
-      SELECT vals.kind, vals.payload::JSONB
-      FROM unnest(
-        string_to_array('$1', __sep__),
-        string_to_array('$2', __sep__)
-      ) AS vals(kind, payload)
+      __values__
 
 init:
 

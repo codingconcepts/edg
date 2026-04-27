@@ -36,8 +36,7 @@ seed:
       - gen('email')
     query: |-
       INSERT INTO customer (email)
-      SELECT val
-      FROM UNNEST(SPLIT('$1', CODE_POINTS_TO_STRING([31]))) AS val
+      __values__
 
   - name: populate_account
     args:

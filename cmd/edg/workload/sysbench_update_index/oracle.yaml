@@ -50,7 +50,7 @@ seed:
       - regex('[a-zA-Z0-9]{60}')
     query: |-
       INSERT INTO sbtest1 (id, k, c, pad)
-      VALUES (:1, :2, :3, :4)
+      VALUES ($1, $2, $3, $4)
 
 deseed:
 
