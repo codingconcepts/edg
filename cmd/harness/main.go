@@ -51,6 +51,8 @@ type dbConfig struct {
 	checkFunc func() error
 }
 
+var dbOrder = []string{"crdb", "mysql", "oracle", "mssql", "spanner", "cassandra", "mongodb"}
+
 var databases = map[string]dbConfig{
 	"crdb": {
 		driver:    "pgx",
@@ -77,14 +79,11 @@ var databases = map[string]dbConfig{
 		checkFunc: checkSQL("oracle", "oracle://system:password@localhost:1521/defaultdb"),
 	},
 	"mssql": {
-		driver:  "mssql",
-		url:     "sqlserver://sa:P4ssw0rd@localhost:1433?database=master&encrypt=disable",
-		compose: "compose_mssql.yml",
-		cleanup: true,
-		urlFunc: func(workload string) string {
-			return fmt.Sprintf("sqlserver://sa:P4ssw0rd@localhost:1433?database=%s&encrypt=disable", workload)
-		},
-		checkFunc: checkSQL("mssql", "sqlserver://sa:P4ssw0rd@localhost:1433?database=master&encrypt=disable"),
+		driver:    "mssql",
+		url:       "sqlserver://sa:P4ssw0rd@localhost:1433?encrypt=disable",
+		compose:   "compose_mssql.yml",
+		cleanup:   true,
+		checkFunc: checkSQL("mssql", "sqlserver://sa:P4ssw0rd@localhost:1433?encrypt=disable"),
 	},
 	"spanner": {
 		driver:   "spanner",
@@ -131,35 +130,44 @@ func spannerInitCmds() [][]string {
 	return cmds
 }
 
+// Takes ~16m30s to complete.
 func main() {
 	log.SetFlags(0)
 
-	dbType := flag.String("db", "", "database type: crdb, mysql, oracle, mssql, spanner, cassandra, mongodb")
+	dbType := flag.String("db", "", "database type: crdb, mysql, oracle, mssql, spanner, cassandra, mongodb (default: all)")
 	startFrom := flag.String("start", "", "skip workloads before this one (by name)")
 	duration := flag.Duration("duration", 5*time.Second, "run duration per workload")
 	workers := flag.Int("workers", 1, "number of workers per workload")
 	clean := flag.Bool("clean", false, "run down before each workload to drop existing tables")
 	flag.Parse()
 
-	if *dbType == "" {
-		fmt.Fprintln(os.Stderr, "usage: harness -db <crdb|mysql|oracle|mssql|spanner|cassandra|mongodb>")
-		os.Exit(1)
+	dbs := dbOrder
+	if *dbType != "" {
+		if _, ok := databases[*dbType]; !ok {
+			fmt.Fprintf(os.Stderr, "unsupported database: %s\nvalid options: crdb, mysql, oracle, mssql, spanner, cassandra, mongodb\n", *dbType)
+			os.Exit(1)
+		}
+		dbs = []string{*dbType}
 	}
 
-	cfg, ok := databases[*dbType]
-	if !ok {
-		fmt.Fprintf(os.Stderr, "unsupported database: %s\nvalid options: crdb, mysql, oracle, mssql, spanner, cassandra, mongodb\n", *dbType)
-		os.Exit(1)
+	for _, db := range dbs {
+		if err := runDB(db, *startFrom, *duration, *workers, *clean); err != nil {
+			log.Fatalf("database %s failed: %v", db, err)
+		}
 	}
+}
+
+func runDB(dbType, startFrom string, duration time.Duration, workers int, clean bool) error {
+	cfg := databases[dbType]
 
 	composeFile, err := writeComposeFile(cfg.compose)
 	if err != nil {
-		log.Fatalf("writing compose file: %v", err)
+		return fmt.Errorf("writing compose file: %w", err)
 	}
 	defer os.Remove(composeFile)
 
 	if err := composeUp(composeFile); err != nil {
-		log.Fatalf("compose up: %v", err)
+		return fmt.Errorf("compose up: %w", err)
 	}
 
 	if cfg.cleanup {
@@ -173,28 +181,28 @@ func main() {
 		}
 	}
 
-	slog.Info("waiting for database to be ready")
+	slog.Info("waiting for database to be ready", "db", dbType)
 	waitForDB(cfg)
 
 	wl := workloads
-	if *startFrom != "" {
+	if startFrom != "" {
 		found := false
 		for i, name := range wl {
-			if name == *startFrom {
+			if name == startFrom {
 				wl = wl[i:]
 				found = true
 				break
 			}
 		}
 		if !found {
-			log.Fatalf("workload %q not found", *startFrom)
+			return fmt.Errorf("workload %q not found", startFrom)
 		}
 	}
 
-	slog.Info("running workloads", "count", len(wl), "db", *dbType)
+	slog.Info("running workloads", "count", len(wl), "db", dbType)
 
 	for _, name := range wl {
-		slog.Info("running workload", "name", name)
+		slog.Info("running workload", "name", name, "db", dbType)
 
 		for attempt := 1; ; attempt++ {
 			if err := cfg.checkFunc(); err != nil {
@@ -205,18 +213,20 @@ func main() {
 			break
 		}
 
-		if *clean {
+		if clean {
 			slog.Info("cleaning workload", "name", name)
 			if err := runDown(cfg, name); err != nil {
-				log.Fatalf("cleaning workload %s failed: %v", name, err)
+				return fmt.Errorf("cleaning workload %s: %w", name, err)
 			}
 		}
 
-		if err := runWorkload(cfg, name, *duration, *workers); err != nil {
-			log.Fatalf("workload %s failed: %v", name, err)
+		if err := runWorkload(cfg, name, duration, workers); err != nil {
+			return fmt.Errorf("workload %s: %w", name, err)
 		}
-		slog.Info("workload passed", "name", name)
+		slog.Info("workload passed", "name", name, "db", dbType)
 	}
+
+	return nil
 }
 
 func runDown(cfg dbConfig, name string) error {

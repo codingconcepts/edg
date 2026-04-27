@@ -41,6 +41,14 @@ deseed:
 
 down:
 
+  - name: drop_idx_events_level_created
+    type: exec
+    query: DROP INDEX IF EXISTS idx_events_level_created
+
+  - name: drop_idx_events_created
+    type: exec
+    query: DROP INDEX IF EXISTS idx_events_created
+
   - name: drop_events
     type: exec
     query: DROP TABLE IF EXISTS events

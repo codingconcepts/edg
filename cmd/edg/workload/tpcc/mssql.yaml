@@ -19,7 +19,7 @@
 #   - Delivery is simplified to process one district at a time
 #
 # Connection URL format:
-#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#   sqlserver://user:password@host:port?encrypt=disable
 #
 # Framework notes: Batch-inlined queries (ref_each in seed section)
 # use $1, $2 for string substitution by the framework before sending
@@ -317,12 +317,15 @@ seed:
           CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 6) AS INT)),
         'OE',
         CONCAT(
-          CHOOSE(CAST(FLOOR(CASE WHEN c <= 1000 THEN c - 1 ELSE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) END / 100) AS INT) + 1,
-            'BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'),
-          CHOOSE(CAST(FLOOR(CASE WHEN c <= 1000 THEN c - 1 ELSE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) END / 10) AS INT) % 10 + 1,
-            'BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING'),
-          CHOOSE(CAST(CASE WHEN c <= 1000 THEN c - 1 ELSE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) END % 10 AS INT) + 1,
-            'BAR','OUGHT','ABLE','PRI','PRES','ESE','ANTI','CALLY','ATION','EING')
+          CASE CAST(FLOOR(CASE WHEN c <= 1000 THEN c - 1 ELSE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) END / 100) AS INT) % 10
+            WHEN 0 THEN 'BAR' WHEN 1 THEN 'OUGHT' WHEN 2 THEN 'ABLE' WHEN 3 THEN 'PRI' WHEN 4 THEN 'PRES'
+            WHEN 5 THEN 'ESE' WHEN 6 THEN 'ANTI' WHEN 7 THEN 'CALLY' WHEN 8 THEN 'ATION' ELSE 'EING' END,
+          CASE CAST(FLOOR(CASE WHEN c <= 1000 THEN c - 1 ELSE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) END / 10) AS INT) % 10
+            WHEN 0 THEN 'BAR' WHEN 1 THEN 'OUGHT' WHEN 2 THEN 'ABLE' WHEN 3 THEN 'PRI' WHEN 4 THEN 'PRES'
+            WHEN 5 THEN 'ESE' WHEN 6 THEN 'ANTI' WHEN 7 THEN 'CALLY' WHEN 8 THEN 'ATION' ELSE 'EING' END,
+          CASE CAST(CASE WHEN c <= 1000 THEN c - 1 ELSE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) END % 10 AS INT)
+            WHEN 0 THEN 'BAR' WHEN 1 THEN 'OUGHT' WHEN 2 THEN 'ABLE' WHEN 3 THEN 'PRI' WHEN 4 THEN 'PRES'
+            WHEN 5 THEN 'ESE' WHEN 6 THEN 'ANTI' WHEN 7 THEN 'CALLY' WHEN 8 THEN 'ATION' ELSE 'EING' END
         ),
         SUBSTRING(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 1,
           CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10 + 10) AS INT)),

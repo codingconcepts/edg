@@ -388,7 +388,15 @@ seed:
 ```
 
 > [!NOTE]
-> Spanner does not support `TRUNCATE`. Use `DELETE FROM table WHERE TRUE` for deseed operations. Spanner also uses `INSERT OR UPDATE` for upserts instead of `ON CONFLICT`.
+> **Spanner limitations:**
+> - No `TRUNCATE` - use `DELETE FROM table WHERE TRUE` for deseed operations.
+> - `INSERT OR UPDATE` for upserts instead of `ON CONFLICT`.
+> - **Drop indexes before tables** - Spanner requires all indexes on a table to be dropped before the table itself. Add `DROP INDEX IF EXISTS idx_name` entries in the `down` section before the corresponding `DROP TABLE`.
+> - **No `RAND()`** - use `MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), N)` for random integers in range `[0, N)`.
+> - **No `CHR()`** - use `CODE_POINTS_TO_STRING([code_point])` instead.
+> - **No `UNNEST(...) AS v(col1, col2, ...)`** - Spanner does not support column aliasing on UNNEST. Use `__values__` for batch inserts, or `UNNEST(...) AS val WITH OFFSET` for single-column expansion.
+> - **Strict typing with bind params** - `gen('number:...')` returns float64, which Spanner rejects for INT64 columns when using bind params (`@pN`). Wrap in `int()`: `int(gen('number:1,100'))`.
+> - **String bind params** - if a value needs to be STRING for Spanner but the expression returns a number, use inlined `$1`/`'$1'` placeholders instead of `@pN` bind params.
 
 #### MongoDB
 

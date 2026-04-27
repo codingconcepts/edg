@@ -23,8 +23,11 @@ up:
 seed:
 
   - name: populate_customer
+    type: exec_batch
+    count: customers
+    size: batch_size
     args:
-      - gen_batch(customers, batch_size, 'email')
+      - gen('email')
     query: |-
       INSERT INTO customer (email)
       __values__

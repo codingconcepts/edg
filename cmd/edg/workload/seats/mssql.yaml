@@ -4,11 +4,11 @@
 # and reservations with contention on seat availability.
 #
 # Connection URL format:
-#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#   sqlserver://user:password@host:port?encrypt=disable
 #
 # Example:
 #   edg up --driver sqlserver --config cmd/edg/workload/seats/mssql.yaml \
-#     --url "sqlserver://sa:Password123!@localhost:1433?database=seats&encrypt=disable"
+#     --url "sqlserver://sa:Password123!@localhost:1433?encrypt=disable"
 
 globals:
   countries: int(coalesce(env_nil('COUNTRIES'), 50))
@@ -129,7 +129,7 @@ seed:
       - iter()
     query: |-
       INSERT INTO country (co_id, co_name)
-      VALUES (@p1, CONCAT('Country_', RIGHT('000' + CAST(@p1 AS VARCHAR), 3)))
+      VALUES ($1, CONCAT('Country_', RIGHT('000' + CAST($1 AS VARCHAR), 3)))
 
   - name: populate_airport
     type: exec_batch
@@ -140,11 +140,11 @@ seed:
       - countries
     query: |-
       INSERT INTO airport (ap_id, ap_code, ap_name, ap_city, ap_co_id)
-      VALUES (@p1,
-        CHAR(65 + ((@p1 - 1) / 676)) + CHAR(65 + ((@p1 - 1) / 26) % 26) + CHAR(65 + ((@p1 - 1) % 26)),
-        CONCAT('Airport_', RIGHT('0000' + CAST(@p1 AS VARCHAR), 4)),
-        CONCAT('City_', RIGHT('0000' + CAST(@p1 AS VARCHAR), 4)),
-        ((@p1 - 1) % @p2) + 1)
+      VALUES ($1,
+        CHAR(65 + (($1 - 1) / 676)) + CHAR(65 + (($1 - 1) / 26) % 26) + CHAR(65 + (($1 - 1) % 26)),
+        CONCAT('Airport_', RIGHT('0000' + CAST($1 AS VARCHAR), 4)),
+        CONCAT('City_', RIGHT('0000' + CAST($1 AS VARCHAR), 4)),
+        (($1 - 1) % $2) + 1)
 
   - name: populate_airline
     type: exec_batch
@@ -154,9 +154,9 @@ seed:
       - iter()
     query: |-
       INSERT INTO airline (al_id, al_iata_code, al_name)
-      VALUES (@p1,
-        CHAR(65 + (@p1 - 1) / 26) + CHAR(65 + (@p1 - 1) % 26),
-        CONCAT('Airline_', RIGHT('000' + CAST(@p1 AS VARCHAR), 3)))
+      VALUES ($1,
+        CHAR(65 + ($1 - 1) / 26) + CHAR(65 + ($1 - 1) % 26),
+        CONCAT('Airline_', RIGHT('000' + CAST($1 AS VARCHAR), 3)))
 
   - name: populate_customer
     type: exec_batch
@@ -168,8 +168,8 @@ seed:
     query: |-
       INSERT INTO customer (c_id, c_base_ap_id, c_balance,
         c_sattr00, c_sattr01, c_iattr00, c_iattr01)
-      VALUES (@p1,
-        FLOOR(RAND(CHECKSUM(NEWID())) * @p2 + 1),
+      VALUES ($1,
+        FLOOR(RAND(CHECKSUM(NEWID())) * $2 + 1),
         0,
         LEFT(CONVERT(VARCHAR(32), HASHBYTES('MD5', CAST(RAND(CHECKSUM(NEWID())) AS VARCHAR)), 2), 16),
         LEFT(CONVERT(VARCHAR(32), HASHBYTES('MD5', CAST(RAND(CHECKSUM(NEWID())) AS VARCHAR)), 2), 16),
@@ -189,14 +189,14 @@ seed:
       INSERT INTO flight (f_id, f_al_id, f_depart_ap_id, f_arrive_ap_id,
         f_depart_time, f_arrive_time, f_seats_total, f_seats_left,
         f_base_price)
-      VALUES (@p1,
-        FLOOR(RAND(CHECKSUM(NEWID())) * @p3 + 1),
-        FLOOR(RAND(CHECKSUM(NEWID())) * @p2 + 1),
-        FLOOR(RAND(CHECKSUM(NEWID())) * @p2 + 1),
+      VALUES ($1,
+        FLOOR(RAND(CHECKSUM(NEWID())) * $3 + 1),
+        FLOOR(RAND(CHECKSUM(NEWID())) * $2 + 1),
+        FLOOR(RAND(CHECKSUM(NEWID())) * $2 + 1),
         DATEADD(DAY, FLOOR(RAND(CHECKSUM(NEWID())) * 30), GETDATE()),
         DATEADD(HOUR, 2, DATEADD(DAY, FLOOR(RAND(CHECKSUM(NEWID())) * 30), GETDATE())),
-        @p4,
-        @p4,
+        $4,
+        $4,
         ROUND(RAND(CHECKSUM(NEWID())) * 900 + 100, 2))
 
   - name: populate_reservation
@@ -209,7 +209,7 @@ seed:
       INSERT INTO reservation (r_c_id, r_f_id, r_seat, r_price,
         r_iattr00, r_iattr01)
       SELECT
-        FLOOR(RAND(CHECKSUM(NEWID())) * @p4 + 1),
+        FLOOR(RAND(CHECKSUM(NEWID())) * $4 + 1),
         fb.f_id,
         s.n,
         ROUND(RAND(CHECKSUM(NEWID())) * 500 + 50, 2),
@@ -218,10 +218,10 @@ seed:
       FROM (
         SELECT f_id FROM flight
         ORDER BY f_id
-        OFFSET @p1 * @p2 ROWS FETCH NEXT @p2 ROWS ONLY
+        OFFSET $1 * $2 ROWS FETCH NEXT $2 ROWS ONLY
       ) fb
       CROSS JOIN (
-        SELECT TOP (@p3) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n
+        SELECT TOP ($3) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n
         FROM sys.objects a CROSS JOIN sys.objects b
       ) s
 

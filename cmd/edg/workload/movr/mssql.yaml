@@ -1,7 +1,7 @@
 # MovR Workload for SQL Server
 #
 # Connection URL format:
-#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#   sqlserver://user:password@host:port?encrypt=disable
 
 globals:
   num_users: int(coalesce(env_nil('NUM_USERS'), 100))
@@ -102,18 +102,23 @@ seed:
       )
       INSERT INTO users (city, name, address, credit_card)
       SELECT
-        CHOOSE(ABS(CHECKSUM(NEWID())) % 9 + 1,
-          'new york','boston','washington dc','seattle',
-          'san francisco','los angeles','chicago',
-          'detroit','minneapolis'),
+        c.city,
         LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 12),
         CONCAT(LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 20), ' St'),
         CONCAT(
-          RIGHT('0000' + CAST(ABS(CHECKSUM(NEWID())) % 10000 AS NVARCHAR), 4),
-          RIGHT('0000' + CAST(ABS(CHECKSUM(NEWID())) % 10000 AS NVARCHAR), 4),
-          RIGHT('0000' + CAST(ABS(CHECKSUM(NEWID())) % 10000 AS NVARCHAR), 4),
-          RIGHT('0000' + CAST(ABS(CHECKSUM(NEWID())) % 10000 AS NVARCHAR), 4))
+          RIGHT('0000' + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS INT) AS NVARCHAR), 4),
+          RIGHT('0000' + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS INT) AS NVARCHAR), 4),
+          RIGHT('0000' + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS INT) AS NVARCHAR), 4),
+          RIGHT('0000' + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS INT) AS NVARCHAR), 4))
       FROM seq
+      CROSS APPLY (
+        SELECT TOP 1 city FROM (
+          VALUES ('new york'),('boston'),('washington dc'),('seattle'),
+          ('san francisco'),('los angeles'),('chicago'),
+          ('detroit'),('minneapolis')
+        ) AS cities(city)
+        ORDER BY NEWID()
+      ) c
       OPTION (MAXRECURSION 10000)
 
   - name: populate_vehicles
@@ -138,8 +143,8 @@ seed:
         u.city, v.city, u.id, v.id,
         CONCAT(LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 20), ' Blvd'),
         CONCAT(LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 20), ' Rd'),
-        DATEADD(SECOND, -ABS(CHECKSUM(NEWID())) % (30 * 86400), SYSUTCDATETIME()),
-        DATEADD(SECOND, -ABS(CHECKSUM(NEWID())) % (15 * 86400), SYSUTCDATETIME()),
+        DATEADD(SECOND, -CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 30 * 86400) AS INT), SYSUTCDATETIME()),
+        DATEADD(SECOND, -CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 15 * 86400) AS INT), SYSUTCDATETIME()),
         CAST(ROUND(RAND(CHECKSUM(NEWID())) * 50 + 5, 2) AS DECIMAL(10,2))
       FROM (SELECT TOP($1) city, id FROM users ORDER BY NEWID()) u
       CROSS JOIN (SELECT TOP 1 city, id FROM vehicles ORDER BY NEWID()) v
@@ -155,8 +160,8 @@ seed:
       SELECT
         UPPER(LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), '-', ''), 8)),
         CONCAT('Promo ', s, ': save on your next ride'),
-        DATEADD(DAY, ABS(CHECKSUM(NEWID())) % 90 + 1, SYSUTCDATETIME()),
-        CONCAT('{"discount_pct":', ABS(CHECKSUM(NEWID())) % 30 + 5, '}')
+        DATEADD(DAY, CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 90) AS INT) + 1, SYSUTCDATETIME()),
+        CONCAT('{"discount_pct":', CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 30) AS INT) + 5, '}')
       FROM seq
       OPTION (MAXRECURSION 10000)
 

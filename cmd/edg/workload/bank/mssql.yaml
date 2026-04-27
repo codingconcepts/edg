@@ -1,11 +1,11 @@
 # Bank workload for SQL Server
 #
 # Connection URL format:
-#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#   sqlserver://user:password@host:port?encrypt=disable
 #
 # Example:
 #   edg up --driver sqlserver --config _examples/bank/sqlserver.yaml \
-#     --url "sqlserver://sa:Password123!@localhost:1433?database=bank&encrypt=disable"
+#     --url "sqlserver://sa:Password123!@localhost:1433?encrypt=disable"
 
 globals:
   customers: int(coalesce(env_nil('CUSTOMERS'), 1000))
@@ -35,8 +35,11 @@ up:
 seed:
 
   - name: populate_customer
+    type: exec_batch
+    count: customers
+    size: batch_size
     args:
-      - gen_batch(customers, batch_size, 'email')
+      - gen('email')
     query: |-
       INSERT INTO customer (email)
       __values__

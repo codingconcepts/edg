@@ -365,9 +365,9 @@ seed:
   - name: populate_order_line
     args:
       - ref_each('SELECT w_id FROM warehouse')
-      - batch(orders / ol_batch)
-      - orders / districts / ol_batch
-      - ol_batch
+      - batch(districts)
+      - 1
+      - orders / districts
     query: |-
       INSERT INTO order_line (ol_w_id, ol_d_id, ol_o_id, ol_number,
         ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount,
@@ -461,6 +461,14 @@ deseed:
     query: DELETE FROM item WHERE TRUE
 
 down:
+  - name: drop_idx_oorder_customer
+    type: exec
+    query: DROP INDEX IF EXISTS idx_oorder_customer
+
+  - name: drop_idx_customer_name
+    type: exec
+    query: DROP INDEX IF EXISTS idx_customer_name
+
   - name: drop_order_line
     type: exec
     query: DROP TABLE IF EXISTS order_line

@@ -4,7 +4,7 @@
 # includes a delete_expired operation to simulate TTL GC.
 #
 # Connection URL format:
-#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#   sqlserver://user:password@host:port?encrypt=disable
 
 globals:
   message_size: int(coalesce(env_nil('MESSAGE_SIZE'), 256))

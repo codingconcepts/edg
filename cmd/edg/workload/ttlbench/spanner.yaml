@@ -35,6 +35,10 @@ deseed:
 
 down:
 
+  - name: drop_idx_ttlbench_inserted
+    type: exec
+    query: DROP INDEX IF EXISTS idx_ttlbench_inserted
+
   - name: drop_ttlbench
     type: exec
     query: DROP TABLE IF EXISTS ttlbench

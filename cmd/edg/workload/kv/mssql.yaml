@@ -1,7 +1,7 @@
 # KV Workload for SQL Server
 #
 # Connection URL format:
-#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#   sqlserver://user:password@host:port?encrypt=disable
 
 globals:
   keys: int(coalesce(env_nil('KEYS'), 1000))

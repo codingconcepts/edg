@@ -96,6 +96,9 @@ docker compose -f cmd/harness/compose/compose_oracle.yml down
 
 ## Todos
 
+* Apply fixes made against the harness workloads to _examples
+* Add error_count expectation (in addition to renaming existing to error_rate)
+* Use table-drive tests in env_args_test TestGenerateBatchArgs_*
 * OS-aware download link
 * Unit tests for each file part
 * Ensure all batch queries are inserting at least 10 rows (some cassandra batches are 1 at a time)

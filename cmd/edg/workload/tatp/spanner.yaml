@@ -154,60 +154,7 @@ seed:
         byte2_1, byte2_2, byte2_3, byte2_4, byte2_5,
         byte2_6, byte2_7, byte2_8, byte2_9, byte2_10,
         msc_location, vlr_location)
-      SELECT
-        s_id, sub_nbr,
-        b1, b2, b3, b4, b5,
-        b6, b7, b8, b9, b10,
-        h1, h2, h3, h4, h5,
-        h6, h7, h8, h9, h10,
-        y1, y2, y3, y4, y5,
-        y6, y7, y8, y9, y10,
-        msc, vlr
-      FROM UNNEST(
-        SPLIT('$1', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$2', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$3', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$4', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$5', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$6', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$7', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$8', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$9', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$10', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$11', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$12', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$13', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$14', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$15', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$16', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$17', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$18', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$19', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$20', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$21', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$22', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$23', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$24', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$25', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$26', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$27', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$28', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$29', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$30', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$31', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$32', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$33', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$34', CODE_POINTS_TO_STRING([31]))
-      ) AS v(
-        s_id, sub_nbr,
-        b1, b2, b3, b4, b5,
-        b6, b7, b8, b9, b10,
-        h1, h2, h3, h4, h5,
-        h6, h7, h8, h9, h10,
-        y1, y2, y3, y4, y5,
-        y6, y7, y8, y9, y10,
-        msc, vlr
-      )
+      __values__
 
   - name: populate_access_info
     type: exec_batch
@@ -222,17 +169,7 @@ seed:
       - regex('[a-z]{5}')
     query: |-
       INSERT OR IGNORE INTO access_info (s_id, ai_type, data1, data2, data3, data4)
-      SELECT
-        CAST(v1 AS INT64), CAST(v2 AS INT64),
-        CAST(v3 AS INT64), CAST(v4 AS INT64), v5, v6
-      FROM UNNEST(
-        SPLIT('$1', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$2', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$3', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$4', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$5', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$6', CODE_POINTS_TO_STRING([31]))
-      ) AS v(v1, v2, v3, v4, v5, v6)
+      __values__
 
   - name: populate_special_facility
     type: exec_batch
@@ -248,18 +185,7 @@ seed:
     query: |-
       INSERT OR IGNORE INTO special_facility (s_id, sf_type, is_active,
         error_cntrl, data_a, data_b)
-      SELECT
-        CAST(v1 AS INT64), CAST(v2 AS INT64),
-        CAST(v3 AS INT64), CAST(v4 AS INT64),
-        CAST(v5 AS INT64), v6
-      FROM UNNEST(
-        SPLIT('$1', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$2', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$3', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$4', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$5', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$6', CODE_POINTS_TO_STRING([31]))
-      ) AS v(v1, v2, v3, v4, v5, v6)
+      __values__
 
   - name: populate_call_forwarding
     type: exec_batch
@@ -268,23 +194,13 @@ seed:
     args:
       - seq(1, 1)
       - gen('number:1,4')
-      - gen('number:0,2')
-      - gen('number:1,8')
-      - template('%015d', gen('number:1,999999999'))
+      - gen('number:0,2') * 8
+      - arg(2) + gen('number:1,8')
+      - template('%015d', int(gen('number:1,999999999')))
     query: |-
       INSERT OR IGNORE INTO call_forwarding (s_id, sf_type, start_time,
         end_time, numberx)
-      SELECT
-        CAST(v1 AS INT64), CAST(v2 AS INT64),
-        CAST(v3 AS INT64) * 8,
-        CAST(v3 AS INT64) * 8 + CAST(v4 AS INT64), v5
-      FROM UNNEST(
-        SPLIT('$1', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$2', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$3', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$4', CODE_POINTS_TO_STRING([31])),
-        SPLIT('$5', CODE_POINTS_TO_STRING([31]))
-      ) AS v(v1, v2, v3, v4, v5)
+      __values__
 
 deseed:
 
@@ -356,9 +272,9 @@ run:
     type: query
     args:
       - ref_rand('fetch_subscribers').s_id
-      - gen('number:1,4')
-      - gen('number:0,23')
-      - gen('number:1,24')
+      - int(gen('number:1,4'))
+      - int(gen('number:0,23'))
+      - int(gen('number:1,24'))
     query: |-
       SELECT cf.numberx
       FROM special_facility sf
@@ -373,7 +289,7 @@ run:
     type: query
     args:
       - ref_rand('fetch_subscribers').s_id
-      - gen('number:1,4')
+      - int(gen('number:1,4'))
     query: |-
       SELECT data1, data2, data3, data4
       FROM access_info
@@ -384,7 +300,7 @@ run:
     type: exec
     args:
       - ref_rand('fetch_subscribers').s_id
-      - gen('number:0,1')
+      - int(gen('number:0,1'))
     query: |-
       UPDATE subscriber SET bit_1 = @p2
       WHERE s_id = @p1
@@ -394,20 +310,20 @@ run:
     type: exec
     args:
       - ref_rand('fetch_subscribers').sub_nbr
-      - gen('number:0,65535')
+      - int(gen('number:0,65535'))
     query: |-
-      UPDATE subscriber SET vlr_location = @p2
-      WHERE sub_nbr = @p1
+      UPDATE subscriber SET vlr_location = $2
+      WHERE sub_nbr = '$1'
 
   # Insert a new call forwarding rule.
   - name: insert_call_forwarding
     type: exec
     args:
       - ref_rand('fetch_subscribers').s_id
-      - gen('number:1,4')
-      - gen('number:0,23')
-      - gen('number:1,24')
-      - template('%015d', gen('number:1,999999999'))
+      - int(gen('number:1,4'))
+      - int(gen('number:0,23'))
+      - int(gen('number:1,24'))
+      - template('%015d', int(gen('number:1,999999999')))
     query: |-
       INSERT OR IGNORE INTO call_forwarding (s_id, sf_type, start_time,
         end_time, numberx)
@@ -418,8 +334,8 @@ run:
     type: exec
     args:
       - ref_rand('fetch_subscribers').s_id
-      - gen('number:1,4')
-      - gen('number:0,23')
+      - int(gen('number:1,4'))
+      - int(gen('number:0,23'))
     query: |-
       DELETE FROM call_forwarding
       WHERE s_id = @p1 AND sf_type = @p2

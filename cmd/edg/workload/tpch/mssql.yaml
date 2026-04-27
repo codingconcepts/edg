@@ -1,7 +1,7 @@
 # TPC-H Workload for SQL Server
 #
 # Connection URL format:
-#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#   sqlserver://user:password@host:port?encrypt=disable
 
 globals:
   scale_factor: int(coalesce(env_nil('SCALE_FACTOR'), 1))
@@ -159,11 +159,11 @@ seed:
       SELECT s,
         CONCAT('Supplier#', RIGHT(REPLICATE('0', 9) + CAST(s AS VARCHAR), 9)),
         LEFT(REPLACE(CONVERT(VARCHAR(36), NEWID()), '-', ''), 25),
-        ABS(CHECKSUM(NEWID())) % 25,
-        CONCAT(RIGHT('00' + CAST(ABS(CHECKSUM(NEWID())) % 90 + 10 AS VARCHAR), 2), '-',
-          RIGHT('000' + CAST(ABS(CHECKSUM(NEWID())) % 1000 AS VARCHAR), 3), '-',
-          RIGHT('000' + CAST(ABS(CHECKSUM(NEWID())) % 1000 AS VARCHAR), 3), '-',
-          RIGHT('0000' + CAST(ABS(CHECKSUM(NEWID())) % 10000 AS VARCHAR), 4)),
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 25) AS INT),
+        CONCAT(RIGHT('00' + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 90) AS INT) + 10 AS VARCHAR), 2), '-',
+          RIGHT('000' + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) AS VARCHAR), 3), '-',
+          RIGHT('000' + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) AS VARCHAR), 3), '-',
+          RIGHT('0000' + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS INT) AS VARCHAR), 4)),
         CAST(ROUND(RAND(CHECKSUM(NEWID())) * 10000 - 1000, 2) AS DECIMAL(15,2)),
         LEFT(REPLACE(CONVERT(VARCHAR(36), NEWID()), '-', ''), 30)
       FROM seq
@@ -182,10 +182,10 @@ seed:
       SELECT $1 * $2 + s,
         LEFT(CONCAT(REPLACE(CONVERT(VARCHAR(36), NEWID()), '-', ''),
           REPLACE(CONVERT(VARCHAR(36), NEWID()), '-', '')), 40),
-        CONCAT('Manufacturer#', ABS(CHECKSUM(NEWID())) % 5 + 1),
-        CONCAT('Brand#', ABS(CHECKSUM(NEWID())) % 5 + 1, ABS(CHECKSUM(NEWID())) % 5 + 1),
+        CONCAT('Manufacturer#', CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 5) AS INT) + 1),
+        CONCAT('Brand#', CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 5) AS INT) + 1, CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 5) AS INT) + 1),
         'STANDARD',
-        ABS(CHECKSUM(NEWID())) % 50 + 1,
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 50) AS INT) + 1,
         'SM CASE',
         CAST(ROUND((90000 + ($1 * $2 + s) / 10.0 + RAND(CHECKSUM(NEWID())) * 100) / 100, 2) AS DECIMAL(15,2)),
         LEFT(REPLACE(CONVERT(VARCHAR(36), NEWID()), '-', ''), 15)
@@ -205,14 +205,16 @@ seed:
       SELECT $1 * $2 + s,
         CONCAT('Customer#', RIGHT(REPLICATE('0', 9) + CAST($1 * $2 + s AS VARCHAR), 9)),
         LEFT(REPLACE(CONVERT(VARCHAR(36), NEWID()), '-', ''), 25),
-        ABS(CHECKSUM(NEWID())) % 25,
-        CONCAT(RIGHT('00' + CAST(ABS(CHECKSUM(NEWID())) % 90 + 10 AS VARCHAR), 2), '-',
-          RIGHT('000' + CAST(ABS(CHECKSUM(NEWID())) % 1000 AS VARCHAR), 3), '-',
-          RIGHT('000' + CAST(ABS(CHECKSUM(NEWID())) % 1000 AS VARCHAR), 3), '-',
-          RIGHT('0000' + CAST(ABS(CHECKSUM(NEWID())) % 10000 AS VARCHAR), 4)),
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 25) AS INT),
+        CONCAT(RIGHT('00' + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 90) AS INT) + 10 AS VARCHAR), 2), '-',
+          RIGHT('000' + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) AS VARCHAR), 3), '-',
+          RIGHT('000' + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) AS VARCHAR), 3), '-',
+          RIGHT('0000' + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 10000) AS INT) AS VARCHAR), 4)),
         CAST(ROUND(RAND(CHECKSUM(NEWID())) * 10000 - 1000, 2) AS DECIMAL(15,2)),
-        CHOOSE(ABS(CHECKSUM(NEWID())) % 5 + 1,
-          'AUTOMOBILE','BUILDING','FURNITURE','MACHINERY','HOUSEHOLD'),
+        CASE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 5) AS INT) % 5
+          WHEN 0 THEN 'AUTOMOBILE' WHEN 1 THEN 'BUILDING'
+          WHEN 2 THEN 'FURNITURE' WHEN 3 THEN 'MACHINERY'
+          ELSE 'HOUSEHOLD' END,
         LEFT(REPLACE(CONVERT(VARCHAR(36), NEWID()), '-', ''), 40)
       FROM seq
       OPTION (MAXRECURSION 10000)
@@ -230,13 +232,15 @@ seed:
         o_totalprice, o_orderdate, o_orderpriority, o_clerk,
         o_shippriority, o_comment)
       SELECT $1 * $2 + s,
-        ABS(CHECKSUM(NEWID())) % $3 + 1,
-        CHOOSE(ABS(CHECKSUM(NEWID())) % 3 + 1, 'O', 'F', 'P'),
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * $3) AS INT) + 1,
+        CASE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 3) AS INT) % 3
+          WHEN 0 THEN 'O' WHEN 1 THEN 'F' ELSE 'P' END,
         CAST(ROUND(RAND(CHECKSUM(NEWID())) * 400000 + 1000, 2) AS DECIMAL(15,2)),
-        DATEADD(DAY, ABS(CHECKSUM(NEWID())) % 2557, '1992-01-01'),
-        CHOOSE(ABS(CHECKSUM(NEWID())) % 5 + 1,
-          '1-URGENT','2-HIGH','3-MEDIUM','4-NOT SPECIFIED','5-LOW'),
-        CONCAT('Clerk#', RIGHT(REPLICATE('0', 9) + CAST(ABS(CHECKSUM(NEWID())) % 1000 + 1 AS VARCHAR), 9)),
+        DATEADD(DAY, CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 2557) AS INT), '1992-01-01'),
+        CASE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 5) AS INT) % 5
+          WHEN 0 THEN '1-URGENT' WHEN 1 THEN '2-HIGH' WHEN 2 THEN '3-MEDIUM'
+          WHEN 3 THEN '4-NOT SPECIFIED' ELSE '5-LOW' END,
+        CONCAT('Clerk#', RIGHT(REPLICATE('0', 9) + CAST(CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 1000) AS INT) + 1 AS VARCHAR), 9)),
         0,
         LEFT(REPLACE(CONVERT(VARCHAR(36), NEWID()), '-', ''), 30)
       FROM seq
@@ -254,22 +258,27 @@ seed:
         l_linestatus, l_shipdate, l_commitdate, l_receiptdate,
         l_shipinstruct, l_shipmode, l_comment)
       SELECT o.o_orderkey,
-        ABS(CHECKSUM(NEWID())) % $3 + 1,
-        ABS(CHECKSUM(NEWID())) % $4 + 1,
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * $3) AS INT) + 1,
+        CAST(FLOOR(RAND(CHECKSUM(NEWID())) * $4) AS INT) + 1,
         1,
         CAST(ROUND(RAND(CHECKSUM(NEWID())) * 50 + 1, 2) AS DECIMAL(15,2)),
         CAST(ROUND(RAND(CHECKSUM(NEWID())) * 90000 + 1000, 2) AS DECIMAL(15,2)),
         CAST(ROUND(RAND(CHECKSUM(NEWID())) * 0.10, 2) AS DECIMAL(15,2)),
         CAST(ROUND(RAND(CHECKSUM(NEWID())) * 0.08, 2) AS DECIMAL(15,2)),
-        CHOOSE(ABS(CHECKSUM(NEWID())) % 3 + 1, 'R', 'A', 'N'),
-        CHOOSE(ABS(CHECKSUM(NEWID())) % 2 + 1, 'O', 'F'),
-        DATEADD(DAY, ABS(CHECKSUM(NEWID())) % 120 + 1, o.o_orderdate),
-        DATEADD(DAY, ABS(CHECKSUM(NEWID())) % 90 + 1, o.o_orderdate),
-        DATEADD(DAY, ABS(CHECKSUM(NEWID())) % 150 + 1, o.o_orderdate),
-        CHOOSE(ABS(CHECKSUM(NEWID())) % 4 + 1,
-          'DELIVER IN PERSON','COLLECT COD','NONE','TAKE BACK RETURN'),
-        CHOOSE(ABS(CHECKSUM(NEWID())) % 7 + 1,
-          'REG AIR','AIR','RAIL','SHIP','TRUCK','MAIL','FOB'),
+        CASE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 3) AS INT) % 3
+          WHEN 0 THEN 'R' WHEN 1 THEN 'A' ELSE 'N' END,
+        CASE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 2) AS INT) % 2
+          WHEN 0 THEN 'O' ELSE 'F' END,
+        DATEADD(DAY, CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 120) AS INT) + 1, o.o_orderdate),
+        DATEADD(DAY, CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 90) AS INT) + 1, o.o_orderdate),
+        DATEADD(DAY, CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 150) AS INT) + 1, o.o_orderdate),
+        CASE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 4) AS INT) % 4
+          WHEN 0 THEN 'DELIVER IN PERSON' WHEN 1 THEN 'COLLECT COD'
+          WHEN 2 THEN 'NONE' ELSE 'TAKE BACK RETURN' END,
+        CASE CAST(FLOOR(RAND(CHECKSUM(NEWID())) * 7) AS INT) % 7
+          WHEN 0 THEN 'REG AIR' WHEN 1 THEN 'AIR' WHEN 2 THEN 'RAIL'
+          WHEN 3 THEN 'SHIP' WHEN 4 THEN 'TRUCK' WHEN 5 THEN 'MAIL'
+          ELSE 'FOB' END,
         LEFT(REPLACE(CONVERT(VARCHAR(36), NEWID()), '-', ''), 20)
       FROM orders o
       WHERE o.o_orderkey > $1 * $2

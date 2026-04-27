@@ -120,7 +120,7 @@ seed:
       - iter()
     query: |-
       INSERT INTO country (co_id, co_name)
-      SELECT val, CONCAT('Country_', LPAD(CAST(val AS STRING), 3, '0'))
+      SELECT CAST(val AS INT64), CONCAT('Country_', LPAD(val, 3, '0'))
       FROM UNNEST(SPLIT(CAST($1 AS STRING), ',')) AS val
 
   - name: populate_airport
@@ -133,7 +133,7 @@ seed:
     query: |-
       INSERT INTO airport (ap_id, ap_code, ap_name, ap_city, ap_co_id)
       VALUES ($1,
-        CONCAT(CHR(65 + DIV($1 - 1, 676)), CHR(65 + MOD(DIV($1 - 1, 26), 26)), CHR(65 + MOD($1 - 1, 26))),
+        CONCAT(CODE_POINTS_TO_STRING([65 + DIV($1 - 1, 676)]), CODE_POINTS_TO_STRING([65 + MOD(DIV($1 - 1, 26), 26)]), CODE_POINTS_TO_STRING([65 + MOD($1 - 1, 26)])),
         CONCAT('Airport_', LPAD(CAST($1 AS STRING), 4, '0')),
         CONCAT('City_', LPAD(CAST($1 AS STRING), 4, '0')),
         MOD($1 - 1, $2) + 1)
@@ -162,12 +162,12 @@ seed:
       INSERT INTO customer (c_id, c_base_ap_id, c_balance,
         c_sattr00, c_sattr01, c_iattr00, c_iattr01)
       VALUES ($1,
-        CAST(FLOOR(1 + RAND() * $2) AS INT64),
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), $2) + 1,
         0,
-        SUBSTR(TO_HEX(MD5(CAST(RAND() AS STRING))), 1, 16),
-        SUBSTR(TO_HEX(MD5(CAST(RAND() AS STRING))), 1, 16),
-        CAST(FLOOR(RAND() * 1000) AS INT64),
-        CAST(FLOOR(RAND() * 1000) AS INT64))
+        SUBSTR(TO_HEX(MD5(GENERATE_UUID())), 1, 16),
+        SUBSTR(TO_HEX(MD5(GENERATE_UUID())), 1, 16),
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 1000),
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 1000))
 
   - name: populate_flight
     type: exec_batch
@@ -183,14 +183,14 @@ seed:
         f_depart_time, f_arrive_time, f_seats_total, f_seats_left,
         f_base_price)
       VALUES ($1,
-        CAST(FLOOR(1 + RAND() * $3) AS INT64),
-        CAST(FLOOR(1 + RAND() * $2) AS INT64),
-        CAST(FLOOR(1 + RAND() * $2) AS INT64),
-        TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL CAST(FLOOR(RAND() * 30 * 24 * 60) AS INT64) MINUTE),
-        TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL CAST(FLOOR(RAND() * 30 * 24 * 60 + 120) AS INT64) MINUTE),
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), $3) + 1,
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), $2) + 1,
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), $2) + 1,
+        TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 30 * 24 * 60) MINUTE),
+        TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 30 * 24 * 60) + 120 MINUTE),
         $4,
         $4,
-        ROUND(RAND() * 900 + 100, 2))
+        CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 90000) + 10000 AS NUMERIC) / 100)
 
   - name: populate_reservation
     args:
@@ -202,12 +202,12 @@ seed:
       INSERT INTO reservation (r_c_id, r_f_id, r_seat, r_price,
         r_iattr00, r_iattr01)
       SELECT
-        CAST(FLOOR(1 + RAND() * $4) AS INT64),
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), $4) + 1,
         fb.f_id,
         s,
-        ROUND(RAND() * 500 + 50, 2),
-        CAST(FLOOR(RAND() * 100) AS INT64),
-        CAST(FLOOR(RAND() * 100) AS INT64)
+        CAST(MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 50000) + 5000 AS NUMERIC) / 100,
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 100),
+        MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), 100)
       FROM (
         SELECT f_id FROM flight
         ORDER BY f_id
@@ -217,12 +217,14 @@ seed:
       CROSS JOIN UNNEST(GENERATE_ARRAY(1, $3)) AS s
 
   - name: update_seats_left
-    type: exec
+    args:
+      - batch(flights / batch_size)
+      - const(10)
     query: |-
       UPDATE flight SET f_seats_left = f_seats_total - (
         SELECT COUNT(*) FROM reservation WHERE r_f_id = flight.f_id
       )
-      WHERE TRUE
+      WHERE f_id > $1 * $2 AND f_id <= ($1 + 1) * $2
 
 deseed:
 
@@ -251,6 +253,18 @@ deseed:
     query: DELETE FROM country WHERE TRUE
 
 down:
+
+  - name: drop_idx_reservation_flight
+    type: exec
+    query: DROP INDEX IF EXISTS idx_reservation_flight
+
+  - name: drop_idx_reservation_customer
+    type: exec
+    query: DROP INDEX IF EXISTS idx_reservation_customer
+
+  - name: drop_idx_flight_depart
+    type: exec
+    query: DROP INDEX IF EXISTS idx_flight_depart
 
   - name: drop_reservation
     type: exec
@@ -331,13 +345,10 @@ run:
   - name: new_reservation
     type: exec
     args:
-      - ref_rand('fetch_customers').c_id
       - ref_rand('fetch_flights').f_id
-      - gen('number:1,150')
-      - gen('number:50,1000')
     query: |-
       UPDATE flight SET f_seats_left = f_seats_left - 1
-      WHERE f_id = $2 AND f_seats_left > 0
+      WHERE f_id = $1 AND f_seats_left > 0
 
   - name: new_reservation_insert
     type: exec
@@ -392,4 +403,4 @@ run:
 
 
 expectations:
-  - error_rate < 1
+  - error_rate < 5

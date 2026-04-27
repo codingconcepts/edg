@@ -6,11 +6,11 @@
 # amplification and secondary index maintenance overhead.
 #
 # Connection URL format:
-#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#   sqlserver://user:password@host:port?encrypt=disable
 #
 # Example:
 #   edg up --driver sqlserver --config mssql.yaml \
-#     --url "sqlserver://sa:Password123!@localhost:1433?database=sysbench&encrypt=disable"
+#     --url "sqlserver://sa:Password123!@localhost:1433?encrypt=disable"
 
 globals:
   records: int(coalesce(env_nil('RECORDS'), 1000))
@@ -46,7 +46,7 @@ seed:
       - regex('[a-zA-Z0-9]{60}')
     query: |-
       INSERT INTO sbtest1 (id, k, c, pad)
-      VALUES (@p1, @p2, @p3, @p4)
+      VALUES ($1, $2, $3, $4)
 
 deseed:
 

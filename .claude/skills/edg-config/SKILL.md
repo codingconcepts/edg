@@ -156,7 +156,7 @@ A complete edg YAML config with all applicable sections:
 - Use `batch(n)` for sequential indices
 - Use `iter()` for a 1-based row counter within batch queries (resets per query)
 - Use `uniq("expression")` to retry a generator until a unique value is produced (e.g., `uniq("gen('airlineairportiata')")` for unique IATA codes). Defaults to 100 retries; override with `uniq("expression", 500)`
-- **`__values__` token**: Use `__values__` in the query to generate a multi-row `VALUES` clause instead of driver-specific batch expansion (`unnest`/`JSON_TABLE`/`OPENJSON`). Produces `VALUES (v1, v2), (v3, v4), ...` - one INSERT per batch. Works with pgx, mysql, mssql, spanner, dsql. For Oracle, use `__values__(table(col1, col2))` to generate `INSERT ALL INTO table (cols) VALUES (...) ... SELECT 1 FROM DUAL`. Does not work with MongoDB or Cassandra. Also supports upsert (`ON CONFLICT`/`ON DUPLICATE KEY`/`MERGE`) and update via CTE
+- **`__values__` token (recommended)**: Use `__values__` in the query to generate a multi-row `VALUES` clause instead of driver-specific batch expansion (`unnest`/`JSON_TABLE`/`OPENJSON`). Produces `VALUES (v1, v2), (v3, v4), ...` - one INSERT per batch. Works with pgx, mysql, mssql, spanner, dsql. For Oracle, use `__values__(table(col1, col2))` to generate `INSERT ALL INTO table (cols) VALUES (...) ... SELECT 1 FROM DUAL`. Does not work with MongoDB or Cassandra. Also supports upsert (`ON CONFLICT`/`ON DUPLICATE KEY`/`MERGE`) and update via CTE. **Do not use `gen_batch()` with `__values__`** - `gen_batch` returns pre-joined `RawSQL` strings designed for the old batch expansion patterns and will produce unquoted values. Use per-row expressions like `gen('email')` instead
 
 ### Transactions
 - Group related `run` queries into an explicit `BEGIN/COMMIT` block using the `transaction` key
@@ -461,6 +461,26 @@ Apply these patterns based on the target driver.
 - **Random functions**: `DBMS_RANDOM.VALUE()` for floats, `DBMS_RANDOM.STRING()` for strings
 - **Pagination**: `FETCH FIRST :1 ROWS ONLY`
 - **Random ordering**: `ORDER BY DBMS_RANDOM.VALUE`
+
+### spanner (Google Cloud Spanner)
+
+- **Types**: `INT64`, `FLOAT64`, `NUMERIC`, `STRING(n)`, `BOOL`, `TIMESTAMP`, `BYTES(n)`
+- **UUIDs**: Use `STRING(36)` with `DEFAULT (GENERATE_UUID())`
+- **Strings**: `STRING(n)` - always specify max length
+- **Timestamps**: `TIMESTAMP` with `DEFAULT (CURRENT_TIMESTAMP())`
+- **No `RAND()`**: Use `MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), N)` for random integers
+- **No `CHR()`**: Use `CODE_POINTS_TO_STRING([code_point])` instead
+- **No `TRUNCATE`**: Use `DELETE FROM table WHERE TRUE` for deseed
+- **No `UNNEST(...) AS v(col1, col2)`**: Column aliasing on UNNEST is unsupported. Use `__values__` instead
+- **Drop indexes before tables**: Spanner requires `DROP INDEX IF EXISTS idx` before `DROP TABLE IF EXISTS t` in the `down` section
+- **Strict typing with bind params**: `gen('number:...')` returns float64, which Spanner rejects for INT64 columns when using native bind params (`@pN`). Wrap in `int()`: `int(gen('number:1,100'))`
+- **String bind params**: If a ref value needs STRING type for Spanner bind params, use `template('%v', value)` or inlined `'$1'` placeholders instead of `@pN`
+- **Batch expansion**: Use `__values__` (recommended) or `UNNEST(SPLIT('$1', CODE_POINTS_TO_STRING([31]))) AS val`
+- **Random ordering**: `TABLESAMPLE RESERVOIR (N ROWS)` or `ORDER BY FARM_FINGERPRINT(GENERATE_UUID())`
+- **Upsert**: `INSERT OR UPDATE INTO t (...) VALUES (...)`
+- **Ignore duplicates**: `INSERT OR IGNORE INTO t (...) VALUES (...)`
+- **Pagination**: `LIMIT @p1 OFFSET @p2`
+- **DDL safety**: `CREATE TABLE IF NOT EXISTS`, `DROP TABLE IF EXISTS`
 
 ### dsql (Aurora DSQL)
 

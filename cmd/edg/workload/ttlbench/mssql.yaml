@@ -5,7 +5,7 @@
 # ones to simulate TTL GC pressure.
 #
 # Connection URL format:
-#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#   sqlserver://user:password@host:port?encrypt=disable
 
 globals:
   payload_size: int(coalesce(env_nil('PAYLOAD_SIZE'), 256))

@@ -66,16 +66,30 @@ Apply the following transformations based on the source and target driver. edg h
 | mongodb | Not applicable; batch uses `exec_batch` with per-document `{"insert": ...}` commands |
 | cassandra | Not applicable; batch uses `exec_batch` with CQL `INSERT` statements (unlogged batch internally) |
 
-### Multi-Row VALUES (`__values__` token)
+### Multi-Row VALUES (`__values__` token) - Recommended
 
-As an alternative to driver-specific batch expansion, use `__values__` to generate a standard multi-row `VALUES` clause. This works the same across pgx, mysql, mssql, spanner, and dsql - no driver-specific SQL needed:
+Prefer `__values__` over driver-specific batch expansion. It generates a standard multi-row `VALUES` clause and works the same across pgx, mysql, mssql, spanner, and dsql - no driver-specific SQL needed:
 
 ```yaml
-query: |-
-  INSERT INTO t (name, email) __values__
+- name: seed_users
+  type: exec_batch
+  count: 1000
+  size: 100
+  args:
+    - gen('email')
+  query: |-
+    INSERT INTO t (email) __values__
 ```
 
 When migrating between SQL drivers (pgx, mysql, mssql, spanner, dsql), `__values__` queries need no changes. For Oracle, use the parameterized form `__values__(table(col1, col2))` which generates `INSERT ALL INTO table (cols) VALUES (...) ... SELECT 1 FROM DUAL`. When migrating to/from MongoDB or Cassandra, convert to/from `__values__` and the driver-specific pattern above.
+
+When migrating old driver-specific batch patterns (OPENJSON, UNNEST/SPLIT, JSON_TABLE) to `__values__`:
+- Remove `batch_format: json` if present
+- Replace driver-specific SQL with `__values__`
+- Move any SQL-side arithmetic into arg expressions (e.g., `CAST(v3 AS INT) * 8` becomes `gen('number:0,2') * 8` in args)
+- Use `arg(N)` to share computed values across args in the same row
+
+> **Warning**: Do not use `gen_batch()` with `__values__`. `gen_batch` returns pre-joined `RawSQL` strings designed for the old batch expansion patterns. Use `type: exec_batch` with per-row expressions like `gen('email')` instead.
 
 ### Upsert / Merge
 
@@ -103,6 +117,7 @@ When migrating between SQL drivers (pgx, mysql, mssql, spanner, dsql), `__values
 | mysql | `ORDER BY RAND()` |
 | mssql | `ORDER BY NEWID()` |
 | oracle | `ORDER BY DBMS_RANDOM.VALUE` |
+| spanner | `TABLESAMPLE RESERVOIR (N ROWS)` or `ORDER BY FARM_FINGERPRINT(GENERATE_UUID())` |
 
 ### Categorical Selection (in SQL)
 
@@ -121,8 +136,21 @@ When migrating between SQL drivers (pgx, mysql, mssql, spanner, dsql), `__values
 | mysql | `DELETE FROM t` | `DROP TABLE IF EXISTS t` |
 | mssql | `DELETE FROM t` | `IF OBJECT_ID('t', 'U') IS NOT NULL DROP TABLE t` |
 | oracle | `TRUNCATE TABLE t` | `DROP TABLE t CASCADE CONSTRAINTS PURGE` |
+| spanner | `DELETE FROM t WHERE TRUE` | `DROP TABLE IF EXISTS t` (must drop indexes first) |
 | mongodb | `{"delete": "t", "deletes": [{"q": {}, "limit": 0}]}` | `{"drop": "t"}` |
 | cassandra | `TRUNCATE ks.t` | `DROP TABLE IF EXISTS ks.t` |
+
+### Spanner-Specific Notes
+
+When migrating configs to Spanner:
+- **Drop indexes before tables**: Spanner requires all indexes on a table to be dropped before the table itself. Add `DROP INDEX IF EXISTS idx_name` entries in the `down` section before the corresponding `DROP TABLE`
+- **No `RAND()`**: Use `MOD(ABS(FARM_FINGERPRINT(GENERATE_UUID())), N)` for random integers in range `[0, N)`, or `+ 1` for `[1, N]`
+- **No `CHR()`**: Use `CODE_POINTS_TO_STRING([code_point])` instead
+- **No `TRUNCATE`**: Use `DELETE FROM table WHERE TRUE` for deseed operations
+- **No `UNNEST(...) AS v(col1, col2, ...)`**: Spanner does not support column aliasing on UNNEST. Use `__values__` instead, or `UNNEST(...) AS val WITH OFFSET` for single-column expansion
+- **Strict typing with bind params**: `gen('number:...')` returns float64, which Spanner rejects for INT64 columns when using bind params (`@pN`). Wrap in `int()`: `int(gen('number:1,100'))`
+- **String bind params**: If a `ref_rand` value needs to be STRING for Spanner, use `template('%v', value)` to force string type, or use `$1`/`'$1'` inlined placeholders instead of `@pN`
+- **Use `INSERT OR IGNORE` or `INSERT OR UPDATE`** instead of `ON CONFLICT`
 
 ### MongoDB-Specific Notes
 

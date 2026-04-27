@@ -23,7 +23,7 @@
 #   - Updates modify field0 only.
 #
 # Connection URL format:
-#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#   sqlserver://user:password@host:port?encrypt=disable
 
 globals:
   records: int(coalesce(env_nil('RECORDS'), 1000))

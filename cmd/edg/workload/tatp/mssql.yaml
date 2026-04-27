@@ -20,7 +20,7 @@
 #   delete_call_forwarding - Remove a forwarding rule (2%)
 #
 # Connection URL format:
-#   sqlserver://user:password@host:port?database=database&encrypt=disable
+#   sqlserver://user:password@host:port?encrypt=disable
 
 globals:
   subscribers: int(coalesce(env_nil('SUBSCRIBERS'), 1000))
@@ -111,7 +111,6 @@ seed:
 
   - name: populate_subscriber
     type: exec_batch
-    batch_format: json
     count: subscribers
     size: batch_size
     args:
@@ -158,53 +157,10 @@ seed:
         byte2_1, byte2_2, byte2_3, byte2_4, byte2_5,
         byte2_6, byte2_7, byte2_8, byte2_9, byte2_10,
         msc_location, vlr_location)
-      SELECT
-        j1.value, j2.value,
-        j3.value, j4.value, j5.value, j6.value, j7.value,
-        j8.value, j9.value, j10.value, j11.value, j12.value,
-        j13.value, j14.value, j15.value, j16.value, j17.value,
-        j18.value, j19.value, j20.value, j21.value, j22.value,
-        j23.value, j24.value, j25.value, j26.value, j27.value,
-        j28.value, j29.value, j30.value, j31.value, j32.value,
-        j33.value, j34.value
-      FROM OPENJSON('$1') j1
-      JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
-      JOIN OPENJSON('$3') j3 ON j1.[key] = j3.[key]
-      JOIN OPENJSON('$4') j4 ON j1.[key] = j4.[key]
-      JOIN OPENJSON('$5') j5 ON j1.[key] = j5.[key]
-      JOIN OPENJSON('$6') j6 ON j1.[key] = j6.[key]
-      JOIN OPENJSON('$7') j7 ON j1.[key] = j7.[key]
-      JOIN OPENJSON('$8') j8 ON j1.[key] = j8.[key]
-      JOIN OPENJSON('$9') j9 ON j1.[key] = j9.[key]
-      JOIN OPENJSON('$10') j10 ON j1.[key] = j10.[key]
-      JOIN OPENJSON('$11') j11 ON j1.[key] = j11.[key]
-      JOIN OPENJSON('$12') j12 ON j1.[key] = j12.[key]
-      JOIN OPENJSON('$13') j13 ON j1.[key] = j13.[key]
-      JOIN OPENJSON('$14') j14 ON j1.[key] = j14.[key]
-      JOIN OPENJSON('$15') j15 ON j1.[key] = j15.[key]
-      JOIN OPENJSON('$16') j16 ON j1.[key] = j16.[key]
-      JOIN OPENJSON('$17') j17 ON j1.[key] = j17.[key]
-      JOIN OPENJSON('$18') j18 ON j1.[key] = j18.[key]
-      JOIN OPENJSON('$19') j19 ON j1.[key] = j19.[key]
-      JOIN OPENJSON('$20') j20 ON j1.[key] = j20.[key]
-      JOIN OPENJSON('$21') j21 ON j1.[key] = j21.[key]
-      JOIN OPENJSON('$22') j22 ON j1.[key] = j22.[key]
-      JOIN OPENJSON('$23') j23 ON j1.[key] = j23.[key]
-      JOIN OPENJSON('$24') j24 ON j1.[key] = j24.[key]
-      JOIN OPENJSON('$25') j25 ON j1.[key] = j25.[key]
-      JOIN OPENJSON('$26') j26 ON j1.[key] = j26.[key]
-      JOIN OPENJSON('$27') j27 ON j1.[key] = j27.[key]
-      JOIN OPENJSON('$28') j28 ON j1.[key] = j28.[key]
-      JOIN OPENJSON('$29') j29 ON j1.[key] = j29.[key]
-      JOIN OPENJSON('$30') j30 ON j1.[key] = j30.[key]
-      JOIN OPENJSON('$31') j31 ON j1.[key] = j31.[key]
-      JOIN OPENJSON('$32') j32 ON j1.[key] = j32.[key]
-      JOIN OPENJSON('$33') j33 ON j1.[key] = j33.[key]
-      JOIN OPENJSON('$34') j34 ON j1.[key] = j34.[key]
+      __values__
 
   - name: populate_access_info
     type: exec_batch
-    batch_format: json
     count: subscribers
     size: batch_size
     args:
@@ -216,21 +172,10 @@ seed:
       - regex('[a-z]{5}')
     query: |-
       INSERT INTO access_info (s_id, ai_type, data1, data2, data3, data4)
-      SELECT j1.value, j2.value, j3.value, j4.value, j5.value, j6.value
-      FROM OPENJSON('$1') j1
-      JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
-      JOIN OPENJSON('$3') j3 ON j1.[key] = j3.[key]
-      JOIN OPENJSON('$4') j4 ON j1.[key] = j4.[key]
-      JOIN OPENJSON('$5') j5 ON j1.[key] = j5.[key]
-      JOIN OPENJSON('$6') j6 ON j1.[key] = j6.[key]
-      WHERE NOT EXISTS (
-        SELECT 1 FROM access_info
-        WHERE s_id = CAST(j1.value AS INT) AND ai_type = CAST(j2.value AS INT)
-      )
+      __values__
 
   - name: populate_special_facility
     type: exec_batch
-    batch_format: json
     count: subscribers
     size: batch_size
     args:
@@ -243,45 +188,22 @@ seed:
     query: |-
       INSERT INTO special_facility (s_id, sf_type, is_active,
         error_cntrl, data_a, data_b)
-      SELECT j1.value, j2.value, j3.value, j4.value, j5.value, j6.value
-      FROM OPENJSON('$1') j1
-      JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
-      JOIN OPENJSON('$3') j3 ON j1.[key] = j3.[key]
-      JOIN OPENJSON('$4') j4 ON j1.[key] = j4.[key]
-      JOIN OPENJSON('$5') j5 ON j1.[key] = j5.[key]
-      JOIN OPENJSON('$6') j6 ON j1.[key] = j6.[key]
-      WHERE NOT EXISTS (
-        SELECT 1 FROM special_facility
-        WHERE s_id = CAST(j1.value AS INT) AND sf_type = CAST(j2.value AS INT)
-      )
+      __values__
 
   - name: populate_call_forwarding
     type: exec_batch
-    batch_format: json
     count: subscribers
     size: batch_size
     args:
       - seq(1, 1)
       - gen('number:1,4')
-      - gen('number:0,2')
-      - gen('number:1,8')
-      - template('%015d', gen('number:1,999999999'))
+      - gen('number:0,2') * 8
+      - arg(2) + gen('number:1,8')
+      - template('%015d', int(gen('number:1,999999999')))
     query: |-
       INSERT INTO call_forwarding (s_id, sf_type, start_time,
         end_time, numberx)
-      SELECT j1.value, j2.value, CAST(j3.value AS INT) * 8,
-        CAST(j3.value AS INT) * 8 + CAST(j4.value AS INT), j5.value
-      FROM OPENJSON('$1') j1
-      JOIN OPENJSON('$2') j2 ON j1.[key] = j2.[key]
-      JOIN OPENJSON('$3') j3 ON j1.[key] = j3.[key]
-      JOIN OPENJSON('$4') j4 ON j1.[key] = j4.[key]
-      JOIN OPENJSON('$5') j5 ON j1.[key] = j5.[key]
-      WHERE NOT EXISTS (
-        SELECT 1 FROM call_forwarding
-        WHERE s_id = CAST(j1.value AS INT)
-          AND sf_type = CAST(j2.value AS INT)
-          AND start_time = CAST(j3.value AS INT) * 8
-      )
+      __values__
 
 deseed:
 
@@ -400,7 +322,7 @@ run:
       - gen('number:1,4')
       - gen('number:0,23')
       - gen('number:1,24')
-      - template('%015d', gen('number:1,999999999'))
+      - template('%015d', int(gen('number:1,999999999')))
     query: |-
       INSERT INTO call_forwarding (s_id, sf_type, start_time,
         end_time, numberx)
